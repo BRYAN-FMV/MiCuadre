@@ -21,25 +21,28 @@ const getSupabaseUrl = (): string => {
   return '';
 };
 
-const isValidJwt = (key: string | null | undefined): boolean => {
-  return typeof key === 'string' && key.trim().startsWith('eyJ');
+const isValidKey = (key: string | null | undefined): boolean => {
+  if (typeof key !== 'string') return false;
+  const k = key.trim();
+  if (!k || k === 'placeholder-anon-key' || k.includes('tu-llave-anon')) return false;
+  return k.startsWith('eyJ') || k.startsWith('sb_publishable_') || k.startsWith('sb_secret_') || k.length > 20;
 };
 
 // Search any key in environment variables or localStorage matching SUPABASE_KEY
 const getSupabaseAnonKey = (): string => {
   const local = localStorage.getItem('micuadre_supabase_anon_key');
-  if (local && isValidJwt(local)) return local;
-  if (local && !isValidJwt(local)) {
+  if (local && isValidKey(local)) return local;
+  if (local && !isValidKey(local)) {
     localStorage.removeItem('micuadre_supabase_anon_key');
   }
 
   const env = import.meta.env as Record<string, string | undefined>;
 
-  if (isValidJwt(env.VITE_SUPABASE_ANON_KEY)) return env.VITE_SUPABASE_ANON_KEY!;
-  if (isValidJwt(env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) return env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (isValidJwt(env.NEXT_SUPABASE_ANON_KEY)) return env.NEXT_SUPABASE_ANON_KEY!;
+  if (isValidKey(env.VITE_SUPABASE_ANON_KEY)) return env.VITE_SUPABASE_ANON_KEY!;
+  if (isValidKey(env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) return env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  if (isValidKey(env.NEXT_SUPABASE_ANON_KEY)) return env.NEXT_SUPABASE_ANON_KEY!;
 
-  const matchedKey = Object.keys(env).find(k => isValidJwt(env[k]));
+  const matchedKey = Object.keys(env).find(k => isValidKey(env[k]));
   if (matchedKey && env[matchedKey]) {
     return env[matchedKey]!;
   }
