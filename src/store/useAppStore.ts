@@ -411,7 +411,7 @@ export const useAppStore = create<AppState>()(
       addProduct: (productData) => set((state) => {
         const newProduct: Product = {
           ...productData,
-          id: `prod-${Date.now()}`,
+          id: generateUUID(),
           tenantId: state.tenant.id
         };
 
