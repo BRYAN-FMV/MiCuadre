@@ -47,21 +47,25 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- 2. Strict Tenant-Isolated Policies
+DROP POLICY IF EXISTS "Strict Tenant Isolation Products" ON products;
 CREATE POLICY "Strict Tenant Isolation Products" ON products
     FOR ALL
     USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
     WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
 
+DROP POLICY IF EXISTS "Strict Tenant Isolation Sales" ON sales;
 CREATE POLICY "Strict Tenant Isolation Sales" ON sales
     FOR ALL
     USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
     WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
 
+DROP POLICY IF EXISTS "Strict Tenant Isolation Profiles" ON profiles;
 CREATE POLICY "Strict Tenant Isolation Profiles" ON profiles
     FOR ALL
     USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
     WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
 
+DROP POLICY IF EXISTS "Strict Tenant Isolation Cash Shifts" ON cash_shifts;
 CREATE POLICY "Strict Tenant Isolation Cash Shifts" ON cash_shifts
     FOR ALL
     USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
@@ -70,6 +74,8 @@ CREATE POLICY "Strict Tenant Isolation Cash Shifts" ON cash_shifts
 -- 3. Tenants Policy: Allow public read so incognito visitors and users can search for their store by name or link
 DROP POLICY IF EXISTS "Allow public read tenants" ON tenants;
 CREATE POLICY "Allow public read tenants" ON tenants FOR SELECT USING (true);
+
 DROP POLICY IF EXISTS "Allow public insert tenants" ON tenants;
 CREATE POLICY "Allow public insert tenants" ON tenants FOR INSERT WITH CHECK (true);
+
 
