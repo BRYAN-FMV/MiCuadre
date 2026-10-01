@@ -1332,7 +1332,6 @@ export const useAppStore = create<AppState>()(
   name: 'micuadre_app_state',
   storage: createJSONStorage(() => localStorage),
   partialize: (state) => ({
-    isAuthenticated: state.isAuthenticated,
     tenant: state.tenant,
     tenants: state.tenants,
     currentUser: state.currentUser,

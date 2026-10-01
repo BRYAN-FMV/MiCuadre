@@ -53,9 +53,19 @@ export const App: React.FC = () => {
 
       setIsAdminRoute(isAdmin);
       if (!hasStore && (window.location.pathname === '/' || window.location.pathname === '/index.html') && !isAdmin) {
+        useAppStore.setState({ isAuthenticated: false });
         setShowLanding(true);
       }
     };
+
+    // Ensure root URL without params always starts at Landing Page unauthenticated
+    const paramsOnStart = new URLSearchParams(window.location.search);
+    const hasStoreOnStart = paramsOnStart.has('comercio') || paramsOnStart.has('tienda') || paramsOnStart.has('store') || paramsOnStart.has('id');
+    if (!hasStoreOnStart && (window.location.pathname === '/' || window.location.pathname === '/index.html')) {
+      useAppStore.setState({ isAuthenticated: false });
+      setShowLanding(true);
+    }
+
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
