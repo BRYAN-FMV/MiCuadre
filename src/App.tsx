@@ -34,7 +34,7 @@ export const App: React.FC = () => {
 
   // Determine if landing page should be shown (root path '/' with no store param)
   const urlParamsOnLoad = new URLSearchParams(window.location.search);
-  const hasStoreParamOnLoad = urlParamsOnLoad.has('tienda') || urlParamsOnLoad.has('store') || urlParamsOnLoad.has('id');
+  const hasStoreParamOnLoad = urlParamsOnLoad.has('comercio') || urlParamsOnLoad.has('tienda') || urlParamsOnLoad.has('store') || urlParamsOnLoad.has('id');
   const [showLanding, setShowLanding] = useState(!hasStoreParamOnLoad && (window.location.pathname === '/' || window.location.pathname === '/index.html'));
 
   // Dedicated Route State for /admin URL
@@ -47,7 +47,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
-      const hasStore = params.has('tienda') || params.has('store') || params.has('id');
+      const hasStore = params.has('comercio') || params.has('tienda') || params.has('store') || params.has('id');
       const isAdmin = window.location.pathname.endsWith('/admin') || window.location.search.includes('admin=true') || window.location.hash === '#admin';
 
       setIsAdminRoute(isAdmin);
@@ -59,10 +59,10 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 1. Synchronize URL tenant parameter (?tienda=slug or /slug) on startup
+  // 1. Synchronize URL tenant parameter (?comercio=slug, ?tienda=slug or /slug) on startup
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const rawSlug = urlParams.get('tienda') || urlParams.get('store');
+    const rawSlug = urlParams.get('comercio') || urlParams.get('tienda') || urlParams.get('store');
 
     if (rawSlug) {
       setShowLanding(false);

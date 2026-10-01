@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Tenant } from '../../types';
 import {
   Store, ShoppingBag, Receipt, Calendar, Printer, Lock, Users,
   ArrowRight, Search, Sparkles, Building2, ChevronRight, X, ShieldAlert,
-  CheckCircle2, AlertCircle, HelpCircle, FileText, ChevronDown, Award, Star
+  CheckCircle2, AlertCircle, HelpCircle, FileText, ChevronDown, Star
 } from 'lucide-react';
 import { fetchTenantsFromSupabase } from '../../lib/supabaseService';
+import { toast } from 'sonner';
 
 interface LandingViewProps {
   onSelectStore: (tenant: Tenant) => void;
@@ -14,31 +15,47 @@ interface LandingViewProps {
 }
 
 export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnterDemo }) => {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
+  const [storeInput, setStoreInput] = useState('');
   const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetchTenantsFromSupabase().then(cloudTenants => {
-      const localTenants = useAppStore.getState().tenants || [];
-      const combined = [...(cloudTenants || [])];
-      for (const lt of localTenants) {
-        if (!combined.some(ct => ct.id === lt.id)) {
-          combined.push(lt);
-        }
-      }
-      setTenants(combined);
-    });
-  }, []);
-
-  const filteredTenants = tenants.filter(t =>
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t.rtn && t.rtn.includes(searchQuery))
-  );
 
   const toggleFaq = (index: number) => {
     setActiveFaqIndex(activeFaqIndex === index ? null : index);
+  };
+
+  const handleAccessStoreSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!storeInput.trim()) {
+      toast.error('Ingresa el nombre o código de tu comercio');
+      return;
+    }
+
+    const cleanInput = storeInput.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    fetchTenantsFromSupabase().then(cloudTenants => {
+      const localTenants = useAppStore.getState().tenants || [];
+      const allTenants = [...(cloudTenants || [])];
+      for (const lt of localTenants) {
+        if (!allTenants.some(ct => ct.id === lt.id)) {
+          allTenants.push(lt);
+        }
+      }
+
+      const matched = allTenants.find(t =>
+        t.id === storeInput.trim() ||
+        t.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanInput) ||
+        t.name.toLowerCase().includes(storeInput.trim().toLowerCase())
+      );
+
+      if (matched) {
+        setIsAccessModalOpen(false);
+        const slug = matched.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        window.history.pushState({}, '', `/?comercio=${slug}`);
+        onSelectStore(matched);
+      } else {
+        toast.error(`No se encontró el comercio "${storeInput}". Verifica el nombre o enlace proporcionado por tu administrador.`);
+      }
+    });
   };
 
   return (
@@ -69,7 +86,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
             </button>
 
             <button
-              onClick={() => setIsSearchModalOpen(true)}
+              onClick={() => setIsAccessModalOpen(true)}
               style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '0.6rem 1.25rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 800, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)' }}
             >
               <Store size={16} />
@@ -91,13 +108,13 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
         </h1>
 
         <p style={{ fontSize: '1.15rem', color: '#475569', lineHeight: 1.6, marginBottom: '2.5rem', maxWidth: '760px', margin: '0 auto 2.5rem auto' }}>
-          Di adiós a los descuadres de dinero en caja, cuadernos de fiados perdidos y preocupaciones con el CAI del SAR. Factura rápido, controla tu stock e imprime en papel térmico de 58mm.
+          Di adiós a los descuadres de dinero en caja, cuadernos de fiados perdidos y preocupaciones con el CAI del SAR. Factura rápido, controla tu stock e imprime tus comprobantes de venta.
         </p>
 
         {/* Action CTAs */}
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
           <button
-            onClick={() => setIsSearchModalOpen(true)}
+            onClick={() => setIsAccessModalOpen(true)}
             style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '0.95rem 2.2rem', borderRadius: '12px', fontSize: '1.05rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.65rem', boxShadow: '0 12px 24px rgba(5, 150, 105, 0.3)' }}
           >
             <Store size={20} />
@@ -123,7 +140,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
             <CheckCircle2 size={17} style={{ color: '#059669' }} /> Cierres Ciegos de Caja
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-            <CheckCircle2 size={17} style={{ color: '#059669' }} /> Impresión Térmica 58mm / 80mm
+            <CheckCircle2 size={17} style={{ color: '#059669' }} /> Impresión Térmica & Gaveta
           </span>
         </div>
       </section>
@@ -141,7 +158,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#334155', fontWeight: 800, fontSize: '0.95rem' }}>
             <Printer size={20} style={{ color: '#0284c7' }} />
-            <span>Formato Térmico 58mm + Gaveta RJ11</span>
+            <span>Impresión Térmica + Gaveta RJ11</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#334155', fontWeight: 800, fontSize: '0.95rem' }}>
             <Lock size={20} style={{ color: '#d97706' }} />
@@ -252,7 +269,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
                 </div>
                 <div>
                   <h4 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Factura Térmica en 3 segundos</h4>
-                  <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>Imprime en papel de 58mm o 80mm y abre el cajón monedero automáticamente.</p>
+                  <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>Imprime tus comprobantes de venta y abre el cajón monedero automáticamente.</p>
                 </div>
               </div>
             </div>
@@ -323,9 +340,9 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
             <div style={{ background: '#e0f2fe', width: '44px', height: '44px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7', marginBottom: '1.25rem' }}>
               <Printer size={22} />
             </div>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.4rem' }}>Impresión Térmica 58mm / 80mm</h3>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.4rem' }}>Impresión Térmica & Gaveta Monedero</h3>
             <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.55 }}>
-              Plantilla estilizada ACOSA en tamaño compacto de 48mm de impresión con apertura automática de cajón monedero RJ11.
+              Facturación comercial y fiscal optimizada para impresoras térmicas con apertura automática de cajón monedero.
             </p>
           </div>
 
@@ -388,9 +405,9 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               <div style={{ background: '#ecfdf5', border: '2px solid #059669', width: '50px', height: '50px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.25rem', color: '#059669', margin: '0 auto 1.25rem auto' }}>
                 1
               </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>Accedes a tu comercio</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>Accedes con tu enlace exclusivo</h3>
               <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                Tu comercio es configurado con su nombre y RTN. Ingresas con tu usuario y PIN de 4 dígitos.
+                Tu comercio cuenta con un enlace personalizado (ej: micuadre.app/?comercio=tu-negocio) configurado por tu administrador.
               </p>
             </div>
 
@@ -398,9 +415,9 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               <div style={{ background: '#ecfdf5', border: '2px solid #059669', width: '50px', height: '50px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.25rem', color: '#059669', margin: '0 auto 1.25rem auto' }}>
                 2
               </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>Cargas tu catálogo</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>Ingresas con tu PIN</h3>
               <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                Agregas o importas tus productos con su código de barras, precios al detalle/mayoreo y stock inicial.
+                Cada usuario o cajero selecciona su perfil e ingresa su clave PIN de 4 dígitos de forma segura.
               </p>
             </div>
 
@@ -410,7 +427,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>¡Facturas e imprimes!</h3>
               <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                Realizas tus ventas en segundos, emites tu factura fiscal e imprimes en tu impresora térmica de 58mm.
+                Realizas tus ventas en segundos, emites tu factura e imprimes en tu impresora térmica.
               </p>
             </div>
 
@@ -449,7 +466,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               <Star size={18} fill="#f59e0b" /><Star size={18} fill="#f59e0b" /><Star size={18} fill="#f59e0b" /><Star size={18} fill="#f59e0b" /><Star size={18} fill="#f59e0b" />
             </div>
             <p style={{ color: '#334155', fontSize: '0.95rem', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '1.25rem' }}>
-              "El formato de factura en papel térmico de 58mm sale impecable y la gaveta monedero abre automáticamente al cobrar. 100% recomendado."
+              "El formato de factura térmica impreso sale impecable y la gaveta monedero abre automáticamente al cobrar. 100% recomendado."
             </p>
             <div>
               <h4 style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a', margin: 0 }}>Carlos Mendoza</h4>
@@ -476,20 +493,20 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
             
             {[
               {
-                q: '¿Cómo obtengo mi comercio en MiCuadre?',
-                a: 'El administrador de MiCuadre habilita tu comercio en la plataforma, registra tus datos fiscales (RTN, Rango CAI) y te entrega tus credenciales con PIN de acceso listos para usar.'
+                q: '¿Cómo ingreso a mi comercio?',
+                a: 'Cada comercio cuenta con un enlace exclusivo de acceso (ejemplo: micuadre.app/?comercio=tu-negocio) proporcionado por el administrador. También puedes escribir el nombre de tu negocio en la opción "Ingresar a mi Comercio".'
               },
               {
                 q: '¿Necesito una computadora costosa o un servidor?',
                 a: 'No. MiCuadre funciona directamente en cualquier navegador web desde tu computadora de escritorio, laptop o tablet sin instalar programas pesados.'
               },
               {
-                q: '¿Es compatible con mi impresora térmica de 58mm y gaveta monedero?',
-                a: 'Sí, es 100% compatible con impresoras térmicas de 58mm y 80mm. Imprime la factura comercial fiscal alineada y activa el pulso RJ11 para abrir el cajón monedero.'
+                q: '¿Es compatible con mi impresora térmica y gaveta monedero?',
+                a: 'Sí, es 100% compatible con impresoras térmicas estándar. Imprime la factura comercial o fiscal y activa el pulso RJ11 para abrir el cajón monedero automáticamente.'
               },
               {
-                q: '¿Mis datos están seguros y separados de otros negocios?',
-                a: 'Totalmente. Cada comercio opera de manera aislada (Multi-Tenant) mediante filtrado estricto por tenant_id tanto en la aplicación como en la base de datos PostgreSQL.'
+                q: '¿Mis datos están seguros y protegidos?',
+                a: 'Totalmente. Cada comercio opera de manera privada y aislada (Multi-Tenant) mediante filtrado estricto por tenant_id. Nadie más tiene acceso a la información de tu negocio.'
               }
             ].map((item, idx) => (
               <div
@@ -525,7 +542,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
 
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1rem' }}>
             <button
-              onClick={() => setIsSearchModalOpen(true)}
+              onClick={() => setIsAccessModalOpen(true)}
               style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '0.95rem 2.2rem', borderRadius: '12px', fontSize: '1.05rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.65rem', boxShadow: '0 10px 25px rgba(5, 150, 105, 0.35)' }}
             >
               <Store size={20} />
@@ -563,54 +580,48 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
         </p>
       </footer>
 
-      {/* MODAL: Ingresar a mi Comercio */}
-      {isSearchModalOpen && (
+      {/* MODAL PRIVADO: Ingresar a mi Comercio (Sin lista pública de comercios) */}
+      {isAccessModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', zIndex: 50 }}>
-          <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '20px', width: '100%', maxWidth: '480px', padding: '1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+          <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '20px', width: '100%', maxWidth: '440px', padding: '1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
                 <Store size={22} style={{ color: '#059669' }} />
-                <span>Selecciona tu Comercio</span>
+                <span>Acceso a tu Comercio</span>
               </h3>
-              <button onClick={() => setIsSearchModalOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+              <button onClick={() => setIsAccessModalOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
-              <input
-                type="text"
-                placeholder="Escribe el nombre de tu comercio o RTN..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#0f172a', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '10px', fontSize: '0.95rem', outline: 'none' }}
-                autoFocus
-              />
-              <Search size={18} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            </div>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+              Ingresa el nombre o enlace de tu comercio proporcionado por tu administrador para acceder a tu panel de inicio de sesión.
+            </p>
 
-            <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {filteredTenants.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#64748b', padding: '1.5rem 0', fontSize: '0.9rem' }}>No se encontraron comercios con ese nombre.</p>
-              ) : (
-                filteredTenants.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      setIsSearchModalOpen(false);
-                      onSelectStore(t);
-                    }}
-                    style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.9rem 1rem', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.15s' }}
-                  >
-                    <div>
-                      <h4 style={{ color: '#0f172a', fontWeight: 800, fontSize: '0.95rem', margin: 0 }}>{t.name}</h4>
-                      {t.rtn && <p style={{ color: '#64748b', fontSize: '0.75rem', margin: '0.2rem 0 0 0' }}>RTN: {t.rtn}</p>}
-                    </div>
-                    <ChevronRight size={18} style={{ color: '#059669' }} />
-                  </button>
-                ))
-              )}
-            </div>
+            <form onSubmit={handleAccessStoreSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: '#334155', fontWeight: 700, marginBottom: '0.4rem' }}>
+                  Nombre o Código de tu Comercio
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej. Pulpería San José"
+                  value={storeInput}
+                  onChange={(e) => setStoreInput(e.target.value)}
+                  style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#0f172a', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.95rem', outline: 'none', fontWeight: 600 }}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '0.85rem', borderRadius: '10px', fontSize: '0.98rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginTop: '0.25rem' }}
+              >
+                <span>Ir a mi Comercio</span>
+                <ArrowRight size={18} />
+              </button>
+            </form>
           </div>
         </div>
       )}
