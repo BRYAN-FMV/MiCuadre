@@ -560,6 +560,149 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* =========================================================
+   UI/UX PRO MAX - RESPONSIVE & TOUCH UTILITIES
+   ========================================================= */
+
+/* 1. Mobile Bottom Navigation Bar (< 640px) */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 58px;
+    background: #ffffff;
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+    z-index: 990;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 0.25rem;
+  }
+
+  .mobile-bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    flex: 1;
+    height: 100%;
+    min-height: 44px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .mobile-bottom-nav-item:hover,
+  .mobile-bottom-nav-item.active {
+    color: var(--accent-primary);
+  }
+
+  .mobile-bottom-nav-item.active .icon-wrapper {
+    background: #f0fdf4;
+    border-radius: 8px;
+    padding: 2px 8px;
+  }
+
+  .mobile-bottom-nav-item .icon-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-cart-badge {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    background: var(--accent-danger);
+    color: #ffffff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    border-radius: 9999px;
+    padding: 1px 5px;
+    min-width: 16px;
+    text-align: center;
+    line-height: 1;
+  }
+
+  /* Add padding bottom to main container when mobile bottom nav is active */
+  .main-content {
+    padding-bottom: 60px !important;
+  }
+}
+
+/* 2. Responsive Table Container (Horizontal Scroll & Touch Friendly) */
+.table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.table-responsive-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* 3. Responsive Touch Targets (Priority 2 UX Guideline - Min 44px height) */
+@media (max-width: 768px) {
+  .btn, 
+  .input-control, 
+  select.input-control, 
+  button.nav-item {
+    min-height: 44px !important;
+  }
+
+  /* Touch Spacing - Minimum 8px Gap */
+  .btn-group,
+  .flex-gap-responsive {
+    gap: 0.5rem !important;
+  }
+}
+
+/* 4. Adaptive Grid Systems (Mobile 1 col -> Tablet 2 col -> Desktop 3-4 col) */
+.grid-responsive-cards {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .grid-responsive-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid-responsive-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .grid-responsive-cards {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+
 /* Printable Ticket Styling (Flexible 100% fill with automatic 138% scale for POS roll) */
 @media print {
   @page {

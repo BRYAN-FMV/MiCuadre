@@ -25,6 +25,7 @@ import {
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
 
 export const App: React.FC = () => {
   const activeTab = useAppStore(state => state.activeTab);
@@ -272,6 +273,9 @@ export const App: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (UI/UX Pro Max Guideline) */}
+      <MobileBottomNav />
 
       {/* Cash Shift Modal */}
       <CashShiftModal />
