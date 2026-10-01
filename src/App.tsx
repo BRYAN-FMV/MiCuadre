@@ -140,7 +140,7 @@ export const App: React.FC = () => {
         useAppStore.setState(state => ({ profiles: [adminProfile!, ...state.profiles] }));
       }
 
-      useAppStore.getState().setCurrentUser(adminProfile);
+      useAppStore.setState({ currentUser: adminProfile, isAuthenticated: false });
     }
   }, [tenant?.id, currentUser?.tenantId]);
 
