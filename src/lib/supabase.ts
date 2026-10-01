@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
+const DEFAULT_SUPABASE_URL = 'https://xmlftmdbclucpdgfihme.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtbGZ0bWRiY2x1Y3BkZ2ZpaG1lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NjU1NjAsImV4cCI6MjEwNTM0MTU2MH0.NpnkVHTc0kup323ttpxnM6al-mCX9xkh4PKOi2Ru9fc';
+
 // Search any key in environment variables or localStorage matching SUPABASE_URL
 const getSupabaseUrl = (): string => {
   const local = localStorage.getItem('micuadre_supabase_url');
@@ -18,7 +21,7 @@ const getSupabaseUrl = (): string => {
     return env[matchedKey]!;
   }
 
-  return '';
+  return DEFAULT_SUPABASE_URL;
 };
 
 const isValidKey = (key: string | null | undefined): boolean => {
@@ -47,7 +50,7 @@ const getSupabaseAnonKey = (): string => {
     return env[matchedKey]!;
   }
 
-  return '';
+  return DEFAULT_SUPABASE_ANON_KEY;
 };
 
 export const getSupabaseClient = () => {
