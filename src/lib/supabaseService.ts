@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
-import { isValidUUID } from './security';
+import { isValidUUID, normalizeSlug } from './security';
 
 /**
  * Seed initial sample products and tenant to Supabase when database is empty
@@ -114,7 +114,10 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
   if (!isSupabaseConfigured()) return [];
 
   const { data, error } = await supabase.from('tenants').select('*');
-  if (error || !data) return [];
+  if (error || !data) {
+    if (error) console.warn('Supabase fetch tenants info:', error.message);
+    return [];
+  }
 
   return data.map((t: any) => ({
     id: t.id,
@@ -128,6 +131,35 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
     allowNegativeStock: t.allow_negative_stock,
     currencySymbol: t.currency_symbol || 'L.'
   }));
+}
+
+/**
+ * Finds a tenant in Supabase or local store by name, RTN, UUID or slug with accent normalization
+ */
+export async function findTenantInSupabase(searchTerm: string): Promise<Tenant | null> {
+  if (!searchTerm || !searchTerm.trim()) return null;
+
+  const cloudTenants = await fetchTenantsFromSupabase();
+  const localTenants = (window as any).__micuadre_local_tenants || [];
+  const allTenants = [...cloudTenants];
+
+  for (const lt of localTenants) {
+    if (!allTenants.some(ct => ct.id === lt.id)) {
+      allTenants.push(lt);
+    }
+  }
+
+  const cleanSearch = normalizeSlug(searchTerm);
+
+  const matched = allTenants.find(t =>
+    t.id === searchTerm.trim() ||
+    normalizeSlug(t.name) === cleanSearch ||
+    normalizeSlug(t.name).includes(cleanSearch) ||
+    cleanSearch.includes(normalizeSlug(t.name)) ||
+    (t.rtn && normalizeSlug(t.rtn).includes(cleanSearch))
+  );
+
+  return matched || null;
 }
 
 /**

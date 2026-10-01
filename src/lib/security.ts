@@ -74,3 +74,16 @@ export async function verifyPinCode(inputPin: string, storedPinHash: string): Pr
   const hashedInput = await hashPinCode(inputPin);
   return hashedInput.toLowerCase() === storedPinHash.toLowerCase();
 }
+
+/**
+ * Normalizes strings by stripping diacritics/accents (e.g. í -> i, ñ -> n) and special characters
+ * for bulletproof URL slug and store search matching
+ */
+export function normalizeSlug(str: string | null | undefined): string {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}

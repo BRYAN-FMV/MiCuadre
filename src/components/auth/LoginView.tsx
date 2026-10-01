@@ -3,8 +3,8 @@ import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { ArrowRight, Store, ShieldAlert, Lock, User, Building2 } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
-import { fetchTenantsFromSupabase, fetchProfilesFromSupabase } from '../../lib/supabaseService';
-import { verifyPinCode } from '../../lib/security';
+import { findTenantInSupabase, fetchProfilesFromSupabase } from '../../lib/supabaseService';
+import { verifyPinCode, normalizeSlug } from '../../lib/security';
 
 interface LoginViewProps {
   onBackToLanding?: () => void;
@@ -41,24 +41,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
     setIsLoading(true);
 
     try {
-      // 1. Search matching tenant by name, RTN or slug
-      const cloudTenants = await fetchTenantsFromSupabase();
-      const localTenants = useAppStore.getState().tenants || [];
-      const allTenants = [...(cloudTenants || [])];
-      for (const lt of localTenants) {
-        if (!allTenants.some(ct => ct.id === lt.id)) {
-          allTenants.push(lt);
-        }
-      }
-
-      const cleanStoreInput = storeInput.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-
-      const matchedTenant = allTenants.find(t =>
-        t.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanStoreInput) ||
-        t.name.toLowerCase().includes(storeInput.trim().toLowerCase()) ||
-        (t.rtn && t.rtn.includes(storeInput.trim())) ||
-        t.id === tenant.id
-      ) || tenant;
+      // 1. Search matching tenant by name, RTN, ID or slug with accent normalization
+      const matchedTenant = (await findTenantInSupabase(storeInput)) || tenant;
 
       // Update active tenant in store
       useAppStore.setState({ tenant: matchedTenant });
@@ -79,11 +63,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
 
       const availableProfiles = tenantProfiles.length > 0 ? tenantProfiles : [defaultAdminProfile];
 
-      // 3. Find matching user profile by name or role input
-      const cleanUserInput = userInput.trim().toLowerCase();
+      // 3. Find matching user profile by name or role input with accent normalization
+      const cleanUserInput = normalizeSlug(userInput);
       let matchedProfile = availableProfiles.find(p =>
-        p.fullName.toLowerCase().includes(cleanUserInput) ||
-        p.role.toLowerCase() === cleanUserInput
+        normalizeSlug(p.fullName).includes(cleanUserInput) ||
+        normalizeSlug(p.role).includes(cleanUserInput)
       );
 
       if (!matchedProfile) {

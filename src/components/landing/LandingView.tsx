@@ -6,7 +6,8 @@ import {
   ArrowRight, Search, Sparkles, Building2, ChevronRight, X, ShieldAlert,
   CheckCircle2, AlertCircle, FileText, ChevronDown, Check, Zap, Shield, Layers
 } from 'lucide-react';
-import { fetchTenantsFromSupabase } from '../../lib/supabaseService';
+import { fetchTenantsFromSupabase, findTenantInSupabase } from '../../lib/supabaseService';
+import { normalizeSlug } from '../../lib/security';
 import { toast } from 'sonner';
 
 interface LandingViewProps {
@@ -23,39 +24,23 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
     setActiveFaqIndex(activeFaqIndex === index ? null : index);
   };
 
-  const handleAccessStoreSubmit = (e: React.FormEvent) => {
+  const handleAccessStoreSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeInput.trim()) {
       toast.error('Ingresa el nombre o código de tu comercio');
       return;
     }
 
-    const cleanInput = storeInput.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const matched = await findTenantInSupabase(storeInput);
 
-    fetchTenantsFromSupabase().then(cloudTenants => {
-      const localTenants = useAppStore.getState().tenants || [];
-      const allTenants = [...(cloudTenants || [])];
-      for (const lt of localTenants) {
-        if (!allTenants.some(ct => ct.id === lt.id)) {
-          allTenants.push(lt);
-        }
-      }
-
-      const matched = allTenants.find(t =>
-        t.id === storeInput.trim() ||
-        t.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanInput) ||
-        t.name.toLowerCase().includes(storeInput.trim().toLowerCase())
-      );
-
-      if (matched) {
-        setIsAccessModalOpen(false);
-        const slug = matched.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-        window.history.pushState({}, '', `/?comercio=${slug}`);
-        onSelectStore(matched);
-      } else {
-        toast.error(`No se encontró el comercio "${storeInput}". Verifica el nombre o enlace proporcionado por tu administrador.`);
-      }
-    });
+    if (matched) {
+      setIsAccessModalOpen(false);
+      const slug = normalizeSlug(matched.name);
+      window.history.pushState({}, '', `/?comercio=${slug}`);
+      onSelectStore(matched);
+    } else {
+      toast.error(`No se encontró el comercio "${storeInput}". Verifica el nombre o enlace proporcionado por tu administrador.`);
+    }
   };
 
   return (
