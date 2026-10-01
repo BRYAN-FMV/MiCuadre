@@ -115,7 +115,7 @@ export const PosContainer: React.FC = () => {
 
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      const match = products.find((p: Product) => p.barcode === searchTerm || p.sku.toLowerCase() === searchTerm.toLowerCase());
+      const match = tenantProducts.find((p: Product) => (p.barcode === searchTerm || p.sku.toLowerCase() === searchTerm.toLowerCase()) && p.isActive);
       if (match) {
         addToCart({ product: match });
         toast.success(`+ ${match.name}`);

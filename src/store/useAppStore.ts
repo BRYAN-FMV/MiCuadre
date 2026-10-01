@@ -478,6 +478,16 @@ export const useAppStore = create<AppState>()(
 
 
   addToCart: ({ product, service, staffId, quantity = 1 }) => set((state) => {
+    // SECURITY GUARD: Strict Multi-tenant Isolation for Cart Additions
+    if (product && product.tenantId && product.tenantId !== state.tenant.id) {
+      console.warn(`[SECURITY GUARD] Bloqueado intento de agregar producto de otro comercio (${product.tenantId}) al carrito de (${state.tenant.id})`);
+      return state;
+    }
+    if (service && service.tenantId && service.tenantId !== state.tenant.id) {
+      console.warn(`[SECURITY GUARD] Bloqueado intento de agregar servicio de otro comercio (${service.tenantId}) al carrito de (${state.tenant.id})`);
+      return state;
+    }
+
     const existingIndex = state.cartLines.findIndex(line =>
       product ? line.productId === product.id : (service ? line.serviceId === service.id : false)
     );
