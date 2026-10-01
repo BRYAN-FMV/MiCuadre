@@ -803,12 +803,15 @@ export const PosContainer: React.FC = () => {
               <button className="btn btn-secondary" onClick={() => setIsHeldOrdersModalOpen(false)}>Cerrar</button>
             </div>
 
-            {heldOrders.length === 0 ? (
-              <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>No hay órdenes retenidas.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: '350px', overflowY: 'auto' }}>
-                {heldOrders.map((order: HeldOrder) => {
-                  const orderTotal = order.lines.reduce((a, b) => a + b.total, 0);
+            {(() => {
+              const tenantHeldOrders = heldOrders.filter((o: HeldOrder) => !o.tenantId || o.tenantId === tenant.id);
+              if (tenantHeldOrders.length === 0) {
+                return <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>No hay órdenes retenidas para este comercio.</p>;
+              }
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: '350px', overflowY: 'auto' }}>
+                  {tenantHeldOrders.map((order: HeldOrder) => {
+                    const orderTotal = order.lines.reduce((a, b) => a + b.total, 0);
                   return (
                     <div key={order.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
@@ -843,7 +846,8 @@ export const PosContainer: React.FC = () => {
                   );
                 })}
               </div>
-            )}
+            );
+          })()}
           </div>
         </div>
       )}

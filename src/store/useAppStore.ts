@@ -19,6 +19,7 @@ import { processPosSaleSupabase, closeCashShiftSupabase } from '../lib/supabaseS
 
 export interface HeldOrder {
   id: string;
+  tenantId?: string;
   customerName: string;
   customerRtn?: string;
   lines: CartLine[];
@@ -621,6 +622,7 @@ export const useAppStore = create<AppState>()(
 
     const newHeldOrder: HeldOrder = {
       id: `hold-${Date.now()}`,
+      tenantId: state.tenant.id,
       customerName: state.cartCustomer.name,
       customerRtn: state.cartCustomer.rtn,
       lines: [...state.cartLines],
@@ -635,7 +637,7 @@ export const useAppStore = create<AppState>()(
   }),
 
   restoreHeldCart: (heldOrderId) => set((state) => {
-    const targetOrder = state.heldOrders.find(o => o.id === heldOrderId);
+    const targetOrder = state.heldOrders.find(o => o.id === heldOrderId && (!o.tenantId || o.tenantId === state.tenant.id));
     if (!targetOrder) return state;
 
     return {
