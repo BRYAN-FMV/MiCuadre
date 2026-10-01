@@ -15,9 +15,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const setCurrentUser = useAppStore(state => state.setCurrentUser);
   const tenant = useAppStore(state => state.tenant);
 
-  // Form input states (Private authentication - no public dropdowns)
+  // Form input states
   const [storeInput, setStoreInput] = useState<string>(tenant?.name || '');
-  const [userInput, setUserInput] = useState<string>('Administrador');
+  const [availableProfiles, setAvailableProfiles] = useState<UserProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -26,6 +27,60 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       setStoreInput(tenant.name);
     }
   }, [tenant?.id, tenant?.name]);
+
+  // Dynamically load profiles for the typed store name or RTN
+  useEffect(() => {
+    let isMounted = true;
+    const loadStoreProfiles = async () => {
+      if (!storeInput.trim()) {
+        setAvailableProfiles([]);
+        return;
+      }
+      const matched = await findTenantInSupabase(storeInput);
+      if (!isMounted) return;
+
+      if (matched) {
+        const liveProfiles = await fetchProfilesFromSupabase(matched.id);
+        const localProfiles = profiles.filter(p => p.tenantId === matched.id);
+        let tenantProfiles = (liveProfiles && liveProfiles.length > 0) ? liveProfiles : localProfiles;
+
+        let adminProfile = tenantProfiles.find(p => p.role === 'ADMIN');
+        if (!adminProfile) {
+          adminProfile = {
+            id: `admin-${matched.id}`,
+            tenantId: matched.id,
+            fullName: `${matched.name} (Administrador)`,
+            role: 'ADMIN' as const,
+            pinCode: '1234',
+            isActive: true
+          };
+          tenantProfiles = [adminProfile, ...tenantProfiles];
+        }
+
+        setAvailableProfiles(tenantProfiles);
+        if (!selectedProfileId || !tenantProfiles.some(p => p.id === selectedProfileId)) {
+          setSelectedProfileId(adminProfile.id);
+        }
+      } else {
+        const defaultAdmin: UserProfile = {
+          id: `admin-${tenant.id}`,
+          tenantId: tenant.id,
+          fullName: 'Administrador General',
+          role: 'ADMIN' as const,
+          pinCode: '1234',
+          isActive: true
+        };
+        setAvailableProfiles([defaultAdmin]);
+        setSelectedProfileId(defaultAdmin.id);
+      }
+    };
+
+    const timer = setTimeout(loadStoreProfiles, 300);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [storeInput, tenant.id, profiles, selectedProfileId]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +112,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       const localProfiles = profiles.filter(p => p.tenantId === matchedTenant.id);
       let tenantProfiles = (liveProfiles && liveProfiles.length > 0) ? liveProfiles : localProfiles;
 
-      // Always ensure an ADMIN profile is present for the store
       let adminProfile = tenantProfiles.find(p => p.role === 'ADMIN');
       if (!adminProfile) {
         adminProfile = {
@@ -71,38 +125,27 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
         tenantProfiles = [adminProfile, ...tenantProfiles];
       }
 
-      // 3. Find matching user profile by name or role input
-      const cleanUserInput = normalizeSlug(userInput);
-      let matchedProfile: UserProfile | undefined;
-
-      if (cleanUserInput.includes('admin') || cleanUserInput === 'administrador') {
-        matchedProfile = adminProfile;
-      } else {
-        matchedProfile = tenantProfiles.find(p =>
-          normalizeSlug(p.fullName).includes(cleanUserInput) ||
-          normalizeSlug(p.role) === cleanUserInput
-        );
-      }
-
-      if (!matchedProfile) {
-        matchedProfile = adminProfile;
+      // 3. Select target profile from dropdown selection
+      let selectedProfile = tenantProfiles.find(p => p.id === selectedProfileId);
+      if (!selectedProfile) {
+        selectedProfile = adminProfile;
       }
 
       // 4. Verify password / PIN code securely
-      const isMatch = await verifyPinCode(passwordInput, matchedProfile.pinCode || '1234');
+      const isMatch = await verifyPinCode(passwordInput, selectedProfile.pinCode || '1234');
       if (!isMatch) {
-        toast.error('Comercio, usuario o contraseña incorrectos.');
+        toast.error('Contraseña o PIN de acceso incorrecto.');
         setIsLoading(false);
         return;
       }
 
       // Ensure profile is in store profiles list
-      if (!profiles.some(p => p.id === matchedProfile!.id)) {
-        useAppStore.setState(state => ({ profiles: [matchedProfile!, ...state.profiles] }));
+      if (!profiles.some(p => p.id === selectedProfile!.id)) {
+        useAppStore.setState(state => ({ profiles: [selectedProfile!, ...state.profiles] }));
       }
 
-      setCurrentUser(matchedProfile);
-      toast.success(`Bienvenido a ${matchedTenant.name}, ${matchedProfile.fullName}`);
+      setCurrentUser(selectedProfile);
+      toast.success(`Bienvenido a ${matchedTenant.name}, ${selectedProfile.fullName}`);
       useAppStore.setState({ isAuthenticated: true, isDevMode: false });
     } catch (err) {
       console.error('Error al iniciar sesión:', err);
@@ -145,17 +188,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
           <div className="form-group">
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
               <User size={16} style={{ color: '#059669' }} />
-              <span>Usuario / Nombre de Perfil</span>
+              <span>Usuario / Perfil de Acceso</span>
             </label>
-            <input
-              type="text"
+            <select
               className="input-control"
-              placeholder="Ej. Administrador, Juan, Cajero 1"
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem' }}
+              value={selectedProfileId}
+              onChange={(e) => setSelectedProfileId(e.target.value)}
+              style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem', width: '100%', background: '#ffffff', cursor: 'pointer' }}
               required
-            />
+            >
+              {availableProfiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.fullName} ({p.role === 'ADMIN' ? 'Administrador' : p.role === 'CAJERO' ? 'Cajero' : p.role === 'BODEGUERO' ? 'Bodeguero' : 'Personal'})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group">
