@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { ArrowRight, Store, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Store, ShieldAlert, Lock, User, Building2 } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
 import { fetchTenantsFromSupabase, fetchProfilesFromSupabase } from '../../lib/supabaseService';
-
-import { verifyPinCode, generateUUID } from '../../lib/security';
+import { verifyPinCode } from '../../lib/security';
 
 interface LoginViewProps {
   onBackToLanding?: () => void;
@@ -16,14 +15,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const setCurrentUser = useAppStore(state => state.setCurrentUser);
   const tenant = useAppStore(state => state.tenant);
 
-  const [activeTenant, setActiveTenant] = useState<Tenant>(tenant);
+  // Form input states (Private authentication - no public dropdowns)
+  const [storeInput, setStoreInput] = useState<string>(tenant?.name || '');
+  const [userInput, setUserInput] = useState<string>('Administrador');
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Auto-detect store from URL (?tienda=slug) or load active tenant
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlSlug = urlParams.get('tienda') || window.location.pathname.replace('/', '').trim();
+    if (tenant?.name) {
+      setStoreInput(tenant.name);
+    }
+  }, [tenant?.id, tenant?.name]);
 
-    fetchTenantsFromSupabase().then(cloudTenants => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!storeInput.trim()) {
+      toast.error('Ingresa el nombre o RTN de tu comercio');
+      return;
+    }
+    if (!passwordInput.trim()) {
+      toast.error('Ingresa tu contraseña de acceso');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // 1. Search matching tenant by name, RTN or slug
+      const cloudTenants = await fetchTenantsFromSupabase();
       const localTenants = useAppStore.getState().tenants || [];
       const allTenants = [...(cloudTenants || [])];
       for (const lt of localTenants) {
@@ -32,165 +51,144 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
         }
       }
 
-      if (allTenants.length > 0) {
-        let target = allTenants.find(t => t.id === useAppStore.getState().tenant.id) || allTenants[0];
+      const cleanStoreInput = storeInput.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        if (urlSlug && urlSlug !== '/') {
-          const cleanSlug = urlSlug.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const matched = allTenants.find(t =>
-            t.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanSlug) ||
-            t.name.toLowerCase().includes(urlSlug.toLowerCase()) ||
-            t.id === urlSlug
-          );
+      const matchedTenant = allTenants.find(t =>
+        t.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanStoreInput) ||
+        t.name.toLowerCase().includes(storeInput.trim().toLowerCase()) ||
+        (t.rtn && t.rtn.includes(storeInput.trim())) ||
+        t.id === tenant.id
+      ) || tenant;
 
-          if (matched) {
-            target = matched;
-          } else {
-            // Auto-create tenant for specified URL slug if not found
-            const formattedName = urlSlug.charAt(0).toUpperCase() + urlSlug.slice(1);
-            const newSlugTenant: Tenant = {
-              id: generateUUID(),
-              name: formattedName,
-              businessType: 'RETAIL',
-              isFiscalEnabled: true,
-              allowNegativeStock: false,
-              currencySymbol: 'L.'
-            };
-            useAppStore.getState().addTenant(newSlugTenant);
-            target = newSlugTenant;
-          }
-        }
+      // Update active tenant in store
+      useAppStore.setState({ tenant: matchedTenant });
 
-        setActiveTenant(target);
-        useAppStore.setState({ tenant: target });
+      // 2. Fetch profiles for this tenant
+      const liveProfiles = await fetchProfilesFromSupabase(matchedTenant.id);
+      const localProfiles = profiles.filter(p => p.tenantId === matchedTenant.id);
+      const tenantProfiles = (liveProfiles && liveProfiles.length > 0) ? liveProfiles : localProfiles;
 
-        // Load profiles for this specific store
-        fetchProfilesFromSupabase(target.id).then(liveProfiles => {
-          if (liveProfiles && liveProfiles.length > 0) {
-            useAppStore.setState(state => {
-              const other = state.profiles.filter(p => p.tenantId !== target.id);
-              return { profiles: [...liveProfiles, ...other] };
-            });
-          }
-        });
+      const defaultAdminProfile: UserProfile = {
+        id: `admin-${matchedTenant.id}`,
+        tenantId: matchedTenant.id,
+        fullName: `${matchedTenant.name} (Administrador)`,
+        role: 'ADMIN' as const,
+        pinCode: '1234',
+        isActive: true
+      };
+
+      const availableProfiles = tenantProfiles.length > 0 ? tenantProfiles : [defaultAdminProfile];
+
+      // 3. Find matching user profile by name or role input
+      const cleanUserInput = userInput.trim().toLowerCase();
+      let matchedProfile = availableProfiles.find(p =>
+        p.fullName.toLowerCase().includes(cleanUserInput) ||
+        p.role.toLowerCase() === cleanUserInput
+      );
+
+      if (!matchedProfile) {
+        matchedProfile = availableProfiles.find(p => p.role === 'ADMIN') || availableProfiles[0];
       }
-    });
-  }, []);
 
-  // Filter profiles strictly for active tenant and guarantee an ADMIN profile
-  const tenantProfiles = profiles.filter(p => p.tenantId === activeTenant.id && (p.isActive ?? true));
-  const hasAdmin = tenantProfiles.some(p => p.role === 'ADMIN');
+      // 4. Verify password / PIN code securely
+      const isMatch = await verifyPinCode(passwordInput, matchedProfile.pinCode || '1234');
+      if (!isMatch) {
+        toast.error('Comercio, usuario o contraseña incorrectos.');
+        setIsLoading(false);
+        return;
+      }
 
-  const defaultAdminProfile: UserProfile = {
-    id: `admin-${activeTenant.id}`,
-    tenantId: activeTenant.id,
-    fullName: `${activeTenant.name} (Administrador)`,
-    role: 'ADMIN' as const,
-    pinCode: '1234',
-    isActive: true
-  };
+      // Ensure profile is in store profiles list
+      if (!profiles.some(p => p.id === matchedProfile!.id)) {
+        useAppStore.setState(state => ({ profiles: [matchedProfile!, ...state.profiles] }));
+      }
 
-  const displayProfiles = hasAdmin
-    ? tenantProfiles
-    : [defaultAdminProfile, ...tenantProfiles];
-
-  const [selectedProfileId, setSelectedProfileId] = useState(displayProfiles[0]?.id || '');
-  const [pinInput, setPinInput] = useState('');
-
-  // Keep selectedProfileId in sync with displayProfiles
-  useEffect(() => {
-    if (displayProfiles.length > 0 && !displayProfiles.some(p => p.id === selectedProfileId)) {
-      setSelectedProfileId(displayProfiles[0].id);
+      setCurrentUser(matchedProfile);
+      toast.success(`Bienvenido a ${matchedTenant.name}, ${matchedProfile.fullName}`);
+      useAppStore.setState({ isAuthenticated: true, isDevMode: false });
+    } catch (err) {
+      console.error('Error al iniciar sesión:', err);
+      toast.error('Error al verificar credenciales. Intenta de nuevo.');
+    } finally {
+      setIsLoading(false);
     }
-  }, [activeTenant.id, displayProfiles]);
-
-  const handlePinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const profile = displayProfiles.find((p: UserProfile) => p.id === selectedProfileId)
-      || displayProfiles[0];
-
-    if (!profile) {
-      toast.error('Selecciona un usuario');
-      return;
-    }
-
-    const isMatch = await verifyPinCode(pinInput, profile.pinCode || '1234');
-    if (!isMatch) {
-      toast.error('PIN incorrecto. Intenta de nuevo.');
-      setPinInput('');
-      return;
-    }
-
-    // Ensure profile exists in store profiles list
-    if (!profiles.some(p => p.id === profile.id)) {
-      useAppStore.setState(state => ({ profiles: [profile, ...state.profiles] }));
-    }
-
-    setCurrentUser(profile);
-    toast.success(`Bienvenido a ${activeTenant.name}, ${profile.fullName}`);
-    useAppStore.setState({ isAuthenticated: true, isDevMode: false });
   };
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '2rem', background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '2rem', background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)' }}>
 
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <img src="/MiCuadre-logo.png" alt="MiCuadre Logo" style={{ width: '80px', height: '80px', objectFit: 'contain', margin: '0 auto 0.5rem auto' }} />
-          <h2 style={{ fontSize: '1.6rem', color: '#0f172a', fontWeight: 800 }}>MiCuadre</h2>
-          <p style={{ fontSize: '0.85rem', color: '#64748b' }}>Sistema POS, Inventario & Calendario Financiero</p>
+          <img src="/MiCuadre-logo.png" alt="MiCuadre Logo" style={{ width: '75px', height: '75px', objectFit: 'contain', margin: '0 auto 0.5rem auto' }} />
+          <h2 style={{ fontSize: '1.5rem', color: '#0f172a', fontWeight: 900, letterSpacing: '-0.02em' }}>MiCuadre<span style={{ color: '#059669' }}>.app</span></h2>
+          <p style={{ fontSize: '0.84rem', color: '#64748b' }}>Inicio de Sesión Seguro</p>
         </div>
 
-        {/* Active Store Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '0.65rem 1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
-          <Store size={18} style={{ color: '#10b981' }} />
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: '0.7rem', color: '#047857', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comercio Activo</p>
-            <h3 style={{ fontSize: '1.05rem', color: '#064e3b', fontWeight: 800, margin: 0 }}>{activeTenant.name}</h3>
-          </div>
-        </div>
-
-        {/* PIN Login Form */}
-        <form onSubmit={handlePinSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* Secure Private Login Form */}
+        <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
 
           <div className="form-group">
-            <label className="form-label">Selecciona tu Usuario / Empleado</label>
-            <select
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+              <Building2 size={16} style={{ color: '#059669' }} />
+              <span>Comercio / Nombre del Negocio</span>
+            </label>
+            <input
+              type="text"
               className="input-control"
-              value={selectedProfileId}
-              onChange={(e) => setSelectedProfileId(e.target.value)}
-              style={{ fontSize: '1rem', fontWeight: 600 }}
-            >
-              {displayProfiles.map((p: UserProfile) => (
-                <option key={p.id} value={p.id}>{p.fullName} ({p.role})</option>
-              ))}
-            </select>
+              placeholder="Ej. Pulpería San José o RTN"
+              value={storeInput}
+              onChange={(e) => setStoreInput(e.target.value)}
+              style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem' }}
+              required
+            />
           </div>
 
           <div className="form-group">
-            <label className="form-label">PIN de Acceso (4 dígitos)</label>
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+              <User size={16} style={{ color: '#059669' }} />
+              <span>Usuario / Nombre de Perfil</span>
+            </label>
+            <input
+              type="text"
+              className="input-control"
+              placeholder="Ej. Administrador, Juan, Cajero 1"
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem' }}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+              <Lock size={16} style={{ color: '#059669' }} />
+              <span>Contraseña de Acceso</span>
+            </label>
             <input
               type="password"
-              maxLength={4}
               className="input-control"
-              placeholder="****"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              style={{ fontSize: '1.5rem', letterSpacing: '0.5em', textAlign: 'center' }}
+              placeholder="Ingresa tu contraseña"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              style={{ fontSize: '1rem', padding: '0.75rem' }}
               autoFocus
               required
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem', fontSize: '1rem', marginTop: '0.5rem', fontWeight: 700 }}>
-            <span>Entrar al Sistema</span>
-            <ArrowRight size={18} />
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="btn btn-primary"
+            style={{ padding: '0.85rem', fontSize: '1rem', marginTop: '0.5rem', fontWeight: 800, background: '#059669', borderColor: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+          >
+            <span>{isLoading ? 'Verificando...' : 'Entrar al Sistema'}</span>
+            {!isLoading && <ArrowRight size={18} />}
           </button>
 
-          {/* SaaS SuperAdmin Portal & Landing Links */}
-          <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+          {/* Navigation Links */}
+          <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.65rem', alignItems: 'center' }}>
             {onBackToLanding && (
               <button
                 type="button"
@@ -198,7 +196,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
                   window.history.pushState({}, '', '/');
                   onBackToLanding();
                 }}
-                style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#10b981', cursor: 'pointer', fontWeight: 700 }}
+                style={{ background: 'none', border: 'none', fontSize: '0.82rem', color: '#059669', cursor: 'pointer', fontWeight: 700 }}
               >
                 ← Ir a la Página Principal (micuadre.app)
               </button>
@@ -217,6 +215,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
               <span>Acceso Administrador de Plataforma SaaS (/admin)</span>
             </a>
           </div>
+
         </form>
 
       </div>
