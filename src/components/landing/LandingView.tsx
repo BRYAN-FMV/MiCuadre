@@ -505,20 +505,6 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       {/* 10. FOOTER */}
       <footer style={{ borderTop: '1px solid #e2e8f0', background: '#ffffff', padding: '2.25rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.86rem' }}>
         <p>© {new Date().getFullYear()} MiCuadre.app — Sistema POS & Gestión Comercial en Honduras.</p>
-        <p style={{ marginTop: '0.65rem' }}>
-          <a
-            href="?admin=true"
-            onClick={(e) => {
-              e.preventDefault();
-              window.history.pushState({}, '', '/admin');
-              window.dispatchEvent(new Event('popstate'));
-            }}
-            style={{ color: '#059669', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <ShieldAlert size={15} />
-            <span>Acceso Administrador de Plataforma SaaS (/admin)</span>
-          </a>
-        </p>
       </footer>
 
       {/* MODAL PRIVADO: Ingresar a mi Comercio (UI/UX Pro Max) */}
