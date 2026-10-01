@@ -151,12 +151,11 @@ export async function findTenantInSupabase(searchTerm: string): Promise<Tenant |
 
   const cleanSearch = normalizeSlug(searchTerm);
 
+  // Strict matching: Exact UUID, exact normalized store name, or exact RTN
   const matched = allTenants.find(t =>
-    t.id === searchTerm.trim() ||
+    t.id.trim() === searchTerm.trim() ||
     normalizeSlug(t.name) === cleanSearch ||
-    normalizeSlug(t.name).includes(cleanSearch) ||
-    cleanSearch.includes(normalizeSlug(t.name)) ||
-    (t.rtn && normalizeSlug(t.rtn).includes(cleanSearch))
+    (t.rtn && normalizeSlug(t.rtn) === cleanSearch)
   );
 
   return matched || null;

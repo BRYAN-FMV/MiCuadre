@@ -41,8 +41,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
     setIsLoading(true);
 
     try {
-      // 1. Search matching tenant by name, RTN, ID or slug with accent normalization
-      const matchedTenant = (await findTenantInSupabase(storeInput)) || tenant;
+      // 1. Strict Search matching tenant by exact name, RTN, ID or slug
+      const matchedTenant = await findTenantInSupabase(storeInput);
+      if (!matchedTenant) {
+        toast.error(`No se encontró el comercio "${storeInput}". Verifica el nombre o RTN ingresado.`);
+        setIsLoading(false);
+        return;
+      }
 
       // Update active tenant in store
       useAppStore.setState({ tenant: matchedTenant });
@@ -50,28 +55,37 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       // 2. Fetch profiles for this tenant
       const liveProfiles = await fetchProfilesFromSupabase(matchedTenant.id);
       const localProfiles = profiles.filter(p => p.tenantId === matchedTenant.id);
-      const tenantProfiles = (liveProfiles && liveProfiles.length > 0) ? liveProfiles : localProfiles;
+      let tenantProfiles = (liveProfiles && liveProfiles.length > 0) ? liveProfiles : localProfiles;
 
-      const defaultAdminProfile: UserProfile = {
-        id: `admin-${matchedTenant.id}`,
-        tenantId: matchedTenant.id,
-        fullName: `${matchedTenant.name} (Administrador)`,
-        role: 'ADMIN' as const,
-        pinCode: '1234',
-        isActive: true
-      };
+      // Always ensure an ADMIN profile is present for the store
+      let adminProfile = tenantProfiles.find(p => p.role === 'ADMIN');
+      if (!adminProfile) {
+        adminProfile = {
+          id: `admin-${matchedTenant.id}`,
+          tenantId: matchedTenant.id,
+          fullName: `${matchedTenant.name} (Administrador)`,
+          role: 'ADMIN' as const,
+          pinCode: '1234',
+          isActive: true
+        };
+        tenantProfiles = [adminProfile, ...tenantProfiles];
+      }
 
-      const availableProfiles = tenantProfiles.length > 0 ? tenantProfiles : [defaultAdminProfile];
-
-      // 3. Find matching user profile by name or role input with accent normalization
+      // 3. Find matching user profile by name or role input
       const cleanUserInput = normalizeSlug(userInput);
-      let matchedProfile = availableProfiles.find(p =>
-        normalizeSlug(p.fullName).includes(cleanUserInput) ||
-        normalizeSlug(p.role).includes(cleanUserInput)
-      );
+      let matchedProfile: UserProfile | undefined;
+
+      if (cleanUserInput.includes('admin') || cleanUserInput === 'administrador') {
+        matchedProfile = adminProfile;
+      } else {
+        matchedProfile = tenantProfiles.find(p =>
+          normalizeSlug(p.fullName).includes(cleanUserInput) ||
+          normalizeSlug(p.role) === cleanUserInput
+        );
+      }
 
       if (!matchedProfile) {
-        matchedProfile = availableProfiles.find(p => p.role === 'ADMIN') || availableProfiles[0];
+        matchedProfile = adminProfile;
       }
 
       // 4. Verify password / PIN code securely
