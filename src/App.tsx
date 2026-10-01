@@ -24,11 +24,18 @@ import {
   fetchTenantsFromSupabase
 } from './lib/supabaseService';
 
+import { LandingView } from './components/landing/LandingView';
+
 export const App: React.FC = () => {
   const activeTab = useAppStore(state => state.activeTab);
   const isAuthenticated = useAppStore(state => state.isAuthenticated);
   const tenant = useAppStore(state => state.tenant);
   const currentUser = useAppStore(state => state.currentUser);
+
+  // Determine if landing page should be shown (root path '/' with no store param)
+  const urlParamsOnLoad = new URLSearchParams(window.location.search);
+  const hasStoreParamOnLoad = urlParamsOnLoad.has('tienda') || urlParamsOnLoad.has('store') || urlParamsOnLoad.has('id');
+  const [showLanding, setShowLanding] = useState(!hasStoreParamOnLoad && (window.location.pathname === '/' || window.location.pathname === '/index.html'));
 
   // Dedicated Route State for /admin URL
   const [isAdminRoute, setIsAdminRoute] = useState(
@@ -39,11 +46,14 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const handlePopState = () => {
-      setIsAdminRoute(
-        window.location.pathname.endsWith('/admin') ||
-        window.location.search.includes('admin=true') ||
-        window.location.hash === '#admin'
-      );
+      const params = new URLSearchParams(window.location.search);
+      const hasStore = params.has('tienda') || params.has('store') || params.has('id');
+      const isAdmin = window.location.pathname.endsWith('/admin') || window.location.search.includes('admin=true') || window.location.hash === '#admin';
+
+      setIsAdminRoute(isAdmin);
+      if (!hasStore && (window.location.pathname === '/' || window.location.pathname === '/index.html') && !isAdmin) {
+        setShowLanding(true);
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -52,9 +62,10 @@ export const App: React.FC = () => {
   // 1. Synchronize URL tenant parameter (?tienda=slug or /slug) on startup
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const rawSlug = urlParams.get('tienda') || window.location.pathname.replace('/', '').trim();
+    const rawSlug = urlParams.get('tienda') || urlParams.get('store');
 
-    if (rawSlug && rawSlug !== '/' && rawSlug !== 'index.html' && rawSlug !== 'admin') {
+    if (rawSlug) {
+      setShowLanding(false);
       const cleanSlug = rawSlug.toLowerCase().replace(/[^a-z0-9]/g, '');
 
       fetchTenantsFromSupabase().then(cloudTenants => {
@@ -186,10 +197,29 @@ export const App: React.FC = () => {
   }
 
   if (!isAuthenticated) {
+    if (showLanding) {
+      return (
+        <>
+          <Toaster position="top-right" theme="light" richColors closeButton />
+          <LandingView
+            onSelectStore={(selectedTenant) => {
+              useAppStore.setState({ tenant: selectedTenant });
+              setShowLanding(false);
+            }}
+            onEnterDemo={() => {
+              const demoTenant = useAppStore.getState().tenants?.find(t => t.id === '00000000-0000-0000-0000-000000000001') || useAppStore.getState().tenant;
+              useAppStore.setState({ tenant: demoTenant });
+              setShowLanding(false);
+            }}
+          />
+        </>
+      );
+    }
+
     return (
       <>
         <Toaster position="top-right" theme="light" richColors closeButton />
-        <LoginView />
+        <LoginView onBackToLanding={() => setShowLanding(true)} />
       </>
     );
   }

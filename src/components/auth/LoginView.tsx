@@ -7,7 +7,11 @@ import { fetchTenantsFromSupabase, fetchProfilesFromSupabase } from '../../lib/s
 
 import { verifyPinCode, generateUUID } from '../../lib/security';
 
-export const LoginView: React.FC = () => {
+interface LoginViewProps {
+  onBackToLanding?: () => void;
+}
+
+export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const profiles = useAppStore(state => state.profiles);
   const setCurrentUser = useAppStore(state => state.setCurrentUser);
   const tenant = useAppStore(state => state.tenant);
@@ -185,8 +189,21 @@ export const LoginView: React.FC = () => {
             <ArrowRight size={18} />
           </button>
 
-          {/* SaaS SuperAdmin Portal Direct Link */}
-          <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+          {/* SaaS SuperAdmin Portal & Landing Links */}
+          <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+            {onBackToLanding && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/');
+                  onBackToLanding();
+                }}
+                style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#10b981', cursor: 'pointer', fontWeight: 700 }}
+              >
+                ← Ir a la Página Principal (micuadre.app)
+              </button>
+            )}
+
             <a
               href="?admin=true"
               onClick={(e) => {
