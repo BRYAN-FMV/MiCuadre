@@ -48,23 +48,23 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       
       {/* 1. Header / Navigation Bar (UI/UX Pro Max) */}
       <nav style={{ borderBottom: '1px solid #e2e8f0', background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-        <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0.85rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            <img src="/MiCuadre-logo.png" alt="MiCuadre Logo" style={{ width: '44px', height: '44px', objectFit: 'contain' }} />
+        <div className="landing-nav-container">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <img src="/MiCuadre-logo.png" alt="MiCuadre Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
             <div>
-              <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em' }}>
+              <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1 }}>
                 MiCuadre<span style={{ color: '#059669' }}>.app</span>
               </span>
-              <span style={{ display: 'block', fontSize: '0.66rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em' }}>
+              <span className="landing-brand-sub">
                 SISTEMA POS & CONTROL COMERCIAL HONDURAS
               </span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button
               onClick={onEnterDemo}
-              style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '0.6rem 1.1rem', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.45rem', transition: 'all 0.2s' }}
+              className="landing-btn-demo"
             >
               <Building2 size={16} style={{ color: '#059669' }} />
               <span>Ver Demo</span>
@@ -72,35 +72,35 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
 
             <button
               onClick={() => setIsAccessModalOpen(true)}
-              style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '0.65rem 1.35rem', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 16px rgba(5, 150, 105, 0.3)', transition: 'all 0.2s' }}
+              className="landing-btn-store"
             >
               <Store size={17} />
-              <span>Ingresar a mi Comercio</span>
+              <span>Ingresar<span className="btn-text-responsive-hide"> a mi Comercio</span></span>
             </button>
           </div>
         </div>
       </nav>
 
       {/* 2. HERO SECTION (UI/UX Pro Max Above the fold) */}
-      <section style={{ padding: '4.75rem 1.5rem 4rem 1.5rem', textAlign: 'center', maxWidth: '960px', margin: '0 auto' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.55rem', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '0.45rem 1.1rem', borderRadius: '50px', fontSize: '0.85rem', color: '#047857', fontWeight: 700, marginBottom: '1.75rem', boxShadow: '0 2px 10px rgba(16, 185, 129, 0.1)' }}>
-          <Sparkles size={16} />
+      <section className="landing-hero-section">
+        <div className="landing-hero-badge">
+          <Sparkles size={16} style={{ flexShrink: 0 }} />
           <span>Solución integral para pulperías, mercaditos, ferreterías y servicios en Honduras</span>
         </div>
 
-        <h1 style={{ fontSize: '3.1rem', fontWeight: 900, lineHeight: 1.14, color: '#0f172a', marginBottom: '1.35rem', letterSpacing: '-0.04em' }}>
+        <h1 className="landing-hero-title">
           El punto de venta e inventario que hace que tu negocio <span style={{ color: '#059669', borderBottom: '3px solid #10b981' }}>cuadre al centavo</span>
         </h1>
 
-        <p style={{ fontSize: '1.18rem', color: '#475569', lineHeight: 1.62, marginBottom: '2.5rem', maxWidth: '780px', margin: '0 auto 2.5rem auto' }}>
+        <p style={{ fontSize: 'clamp(1rem, 2vw, 1.18rem)', color: '#475569', lineHeight: 1.62, marginBottom: '2rem', maxWidth: '780px', margin: '0 auto 2rem auto' }}>
           Elimina los descuadres de dinero en caja, cuadernos de fiados extraviados y preocupaciones con el CAI del SAR. Factura rápido, controla tu stock e imprime tus comprobantes de venta de forma segura.
         </p>
 
         {/* Action CTAs */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1rem', marginBottom: '2.75rem' }}>
+        <div className="landing-hero-cta-group">
           <button
             onClick={() => setIsAccessModalOpen(true)}
-            style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '1rem 2.4rem', borderRadius: '12px', fontSize: '1.08rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.7rem', boxShadow: '0 12px 28px rgba(5, 150, 105, 0.35)', transition: 'all 0.2s' }}
+            className="landing-cta-btn-main"
           >
             <Store size={21} />
             <span>Ingresar a mi Comercio</span>
@@ -109,7 +109,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
 
           <button
             onClick={onEnterDemo}
-            style={{ background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', padding: '1rem 2.2rem', borderRadius: '12px', fontSize: '1.08rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.7rem', boxShadow: '0 4px 14px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}
+            className="landing-cta-btn-secondary"
           >
             <Building2 size={21} style={{ color: '#059669' }} />
             <span>Probar Comercio Demo</span>
@@ -117,7 +117,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
         </div>
 
         {/* Value Badges */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1.5rem', color: '#475569', fontSize: '0.9rem', fontWeight: 700 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1.25rem', color: '#475569', fontSize: '0.88rem', fontWeight: 700 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
             <CheckCircle2 size={18} style={{ color: '#059669' }} /> Cumplimiento Fiscal SAR 100%
           </span>
@@ -157,17 +157,17 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 4. PROBLEM / AGITATION SECTION (UI/UX Pro Max) */}
-      <section style={{ padding: '4.75rem 1.5rem', maxWidth: '1140px', margin: '0 auto' }}>
+      <section className="landing-section-padding" style={{ maxWidth: '1140px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '3.25rem' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             LOS RETOS DEL DÍA A DÍA
           </span>
-          <h2 style={{ fontSize: '2.2rem', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', letterSpacing: '-0.03em' }}>
+          <h2 style={{ fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', letterSpacing: '-0.03em' }}>
             ¿Te identificas con alguno de estos dolores de cabeza?
           </h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+        <div className="landing-grid-cards-4">
           
           <div style={{ background: '#ffffff', border: '1px solid #fecdd3', borderRadius: '16px', padding: '1.85rem', boxShadow: '0 4px 20px rgba(225, 29, 72, 0.05)', transition: 'all 0.2s' }}>
             <div style={{ background: '#ffe4e6', width: '46px', height: '46px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e11d48', marginBottom: '1.1rem' }}>
@@ -213,14 +213,14 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 5. SOLUTION SECTION (UI/UX Pro Max) */}
-      <section style={{ background: '#ffffff', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', padding: '4.75rem 1.5rem' }}>
-        <div style={{ maxWidth: '1140px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '3.5rem', alignItems: 'center' }}>
+      <section className="landing-section-padding" style={{ background: '#ffffff', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
+        <div className="landing-solution-grid">
           
           <div>
             <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               LA SOLUCIÓN DEFINITIVA
             </span>
-            <h2 style={{ fontSize: '2.3rem', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', marginBottom: '1.25rem', lineHeight: 1.18, letterSpacing: '-0.03em' }}>
+            <h2 style={{ fontSize: 'clamp(1.6rem, 3.8vw, 2.3rem)', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', marginBottom: '1.25rem', lineHeight: 1.18, letterSpacing: '-0.03em' }}>
               MiCuadre ordena tu negocio y te devuelve la tranquilidad
             </h2>
             <p style={{ color: '#475569', fontSize: '1.02rem', lineHeight: 1.6, marginBottom: '2rem' }}>
@@ -261,7 +261,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
           </div>
 
           {/* Interactive Metric Preview Card (UI/UX Pro Max) */}
-          <div style={{ background: '#0f172a', borderRadius: '24px', padding: '2.25rem', color: '#ffffff', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)', border: '1px solid #1e293b' }}>
+          <div style={{ background: '#0f172a', borderRadius: '24px', padding: '1.75rem', color: '#ffffff', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)', border: '1px solid #1e293b' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '1.25rem', borderBottom: '1px solid #334155' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <img src="/MiCuadre-logo.png" alt="Logo" style={{ width: '36px', height: '36px' }} />
@@ -274,7 +274,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               <p style={{ fontSize: '0.82rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>Resumen de Ventas de Hoy</p>
               <h3 style={{ fontSize: '2.5rem', fontWeight: 900, color: '#34d399', margin: '0.25rem 0 1.25rem 0', letterSpacing: '-0.02em' }}>L. 8,450.00</h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="grid-2-responsive">
                 <div style={{ background: '#1e293b', padding: '1.1rem', borderRadius: '12px', border: '1px solid #334155' }}>
                   <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0, fontWeight: 600 }}>Estado de Caja</p>
                   <p style={{ fontSize: '1rem', fontWeight: 800, color: '#ffffff', margin: '0.25rem 0 0 0' }}>Cuadrada 100%</p>
@@ -299,17 +299,17 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 6. FEATURES & BENEFITS SECTION (UI/UX Pro Max Grid) */}
-      <section style={{ padding: '4.75rem 1.5rem', maxWidth: '1140px', margin: '0 auto' }}>
+      <section className="landing-section-padding" style={{ maxWidth: '1140px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '3.25rem' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             CARACTERÍSTICAS Y BENEFICIOS
           </span>
-          <h2 style={{ fontSize: '2.2rem', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', letterSpacing: '-0.03em' }}>
+          <h2 style={{ fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', letterSpacing: '-0.03em' }}>
             Todo lo necesario para hacer crecer tu comercio
           </h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.85rem' }}>
+        <div className="landing-grid-cards-3">
 
           <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '1.85rem', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', transition: 'all 0.2s' }}>
             <div style={{ background: '#ecfdf5', width: '46px', height: '46px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', marginBottom: '1.25rem' }}>
@@ -375,16 +375,16 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 7. HOW IT WORKS SECTION (3 Steps) */}
-      <section style={{ background: '#ffffff', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', padding: '4.75rem 1.5rem', textAlign: 'center' }}>
+      <section className="landing-section-padding" style={{ background: '#ffffff', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', textAlign: 'center' }}>
         <div style={{ maxWidth: '940px', margin: '0 auto' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             PASO A PASO
           </span>
-          <h2 style={{ fontSize: '2.2rem', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', marginBottom: '3.25rem', letterSpacing: '-0.03em' }}>
+          <h2 style={{ fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', marginBottom: '2.5rem', letterSpacing: '-0.03em' }}>
             ¿Cómo empiezas a usar MiCuadre?
           </h2>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: '2rem' }}>
             
             <div style={{ position: 'relative' }}>
               <div style={{ background: '#ecfdf5', border: '2px solid #059669', width: '54px', height: '54px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.3rem', color: '#059669', margin: '0 auto 1.35rem auto', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.2)' }}>
@@ -421,12 +421,12 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 8. OBJECTION HANDLING / FAQ (UI/UX Pro Max Accordion) */}
-      <section style={{ padding: '4.75rem 1.5rem', maxWidth: '840px', margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: '3.25rem' }}>
+      <section className="landing-section-padding" style={{ maxWidth: '840px', margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             PREGUNTAS FRECUENTES
           </span>
-          <h2 style={{ fontSize: '2.2rem', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', letterSpacing: '-0.03em' }}>
+          <h2 style={{ fontSize: 'clamp(1.5rem, 3.5vw, 2.2rem)', fontWeight: 900, color: '#0f172a', marginTop: '0.35rem', letterSpacing: '-0.03em' }}>
             Resolvemos tus dudas
           </h2>
         </div>
@@ -456,9 +456,9 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               onClick={() => toggleFaq(idx)}
               style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.35rem', cursor: 'pointer', background: activeFaqIndex === idx ? '#ffffff' : '#ffffff', boxShadow: activeFaqIndex === idx ? '0 10px 25px rgba(0,0,0,0.04)' : '0 2px 8px rgba(0,0,0,0.02)', transition: 'all 0.2s' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h4 style={{ fontSize: '1.08rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>{item.q}</h4>
-                <ChevronDown size={19} style={{ color: '#059669', transform: activeFaqIndex === idx ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <h4 style={{ fontSize: '1.02rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>{item.q}</h4>
+                <ChevronDown size={19} style={{ color: '#059669', transform: activeFaqIndex === idx ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }} />
               </div>
               {activeFaqIndex === idx && (
                 <p style={{ marginTop: '0.85rem', color: '#475569', fontSize: '0.94rem', lineHeight: 1.6, borderTop: '1px solid #e2e8f0', paddingTop: '0.85rem' }}>
@@ -472,19 +472,19 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 9. HIGH-IMPACT FINAL CTA SECTION (UI/UX Pro Max) */}
-      <section style={{ padding: '5.25rem 1.5rem', textAlign: 'center', background: '#0f172a', color: '#ffffff' }}>
+      <section className="landing-section-padding" style={{ textAlign: 'center', background: '#0f172a', color: '#ffffff' }}>
         <div style={{ maxWidth: '820px', margin: '0 auto' }}>
-          <h2 style={{ fontSize: '2.6rem', fontWeight: 900, marginBottom: '1.15rem', letterSpacing: '-0.035em' }}>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 4vw, 2.6rem)', fontWeight: 900, marginBottom: '1.15rem', letterSpacing: '-0.035em' }}>
             Empieza a cuadrar tu negocio hoy mismo
           </h2>
-          <p style={{ fontSize: '1.15rem', color: '#94a3b8', marginBottom: '2.75rem', maxWidth: '680px', margin: '0 auto 2.75rem auto', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 'clamp(0.95rem, 2vw, 1.15rem)', color: '#94a3b8', marginBottom: '2.25rem', maxWidth: '680px', margin: '0 auto 2.25rem auto', lineHeight: 1.6 }}>
             Únete a los comerciantes en Honduras que ya tienen el control absoluto de sus ventas, caja e inventarios.
           </p>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1.15rem' }}>
+          <div className="landing-hero-cta-group">
             <button
               onClick={() => setIsAccessModalOpen(true)}
-              style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '1rem 2.4rem', borderRadius: '12px', fontSize: '1.08rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.7rem', boxShadow: '0 12px 28px rgba(5, 150, 105, 0.4)', transition: 'all 0.2s' }}
+              className="landing-cta-btn-main"
             >
               <Store size={21} />
               <span>Ingresar a mi Comercio</span>
@@ -493,7 +493,8 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
 
             <button
               onClick={onEnterDemo}
-              style={{ background: '#1e293b', color: '#ffffff', border: '1px solid #334155', padding: '1rem 2.2rem', borderRadius: '12px', fontSize: '1.08rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.7rem', transition: 'all 0.2s' }}
+              className="landing-cta-btn-secondary"
+              style={{ background: '#1e293b', color: '#ffffff', borderColor: '#334155' }}
             >
               <Building2 size={21} style={{ color: '#34d399' }} />
               <span>Ver Demo en Vivo</span>
@@ -503,17 +504,17 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 10. FOOTER */}
-      <footer style={{ borderTop: '1px solid #e2e8f0', background: '#ffffff', padding: '2.25rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.86rem' }}>
+      <footer style={{ borderTop: '1px solid #e2e8f0', background: '#ffffff', padding: '1.75rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.86rem' }}>
         <p>© {new Date().getFullYear()} MiCuadre.app — Sistema POS & Gestión Comercial en Honduras.</p>
       </footer>
 
       {/* MODAL PRIVADO: Ingresar a mi Comercio (UI/UX Pro Max) */}
       {isAccessModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', zIndex: 50 }}>
-          <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '22px', width: '100%', maxWidth: '450px', padding: '2rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.35rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.55rem', margin: 0 }}>
-                <Store size={23} style={{ color: '#059669' }} />
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 50 }}>
+          <div className="modal-content" style={{ maxWidth: '450px', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.15rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.55rem', margin: 0 }}>
+                <Store size={22} style={{ color: '#059669' }} />
                 <span>Acceso a tu Comercio</span>
               </h3>
               <button onClick={() => setIsAccessModalOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.2rem' }}>
@@ -521,7 +522,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               </button>
             </div>
 
-            <p style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '1.35rem', lineHeight: 1.55 }}>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: '1.25rem', lineHeight: 1.55 }}>
               Ingresa el nombre o enlace de tu comercio proporcionado por tu administrador para acceder a tu panel de inicio de sesión.
             </p>
 
@@ -543,7 +544,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
 
               <button
                 type="submit"
-                style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '0.9rem', borderRadius: '12px', fontSize: '1rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.55rem', marginTop: '0.25rem', boxShadow: '0 4px 16px rgba(5, 150, 105, 0.35)' }}
+                style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '0.85rem', borderRadius: '12px', fontSize: '1rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.55rem', marginTop: '0.25rem', boxShadow: '0 4px 16px rgba(5, 150, 105, 0.35)' }}
               >
                 <span>Ir a mi Comercio</span>
                 <ArrowRight size={19} />
