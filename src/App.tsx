@@ -86,14 +86,7 @@ export const App: React.FC = () => {
           );
 
           if (matched) {
-            const currentStoreTenant = useAppStore.getState().tenant;
-            if (currentStoreTenant.id !== matched.id) {
-              useAppStore.setState({ tenant: matched });
-              const currentProfile = useAppStore.getState().currentUser;
-              if (currentProfile.tenantId !== matched.id) {
-                useAppStore.setState({ isAuthenticated: false });
-              }
-            }
+            useAppStore.setState({ tenant: matched, isAuthenticated: false });
           }
         }
       });
@@ -130,7 +123,7 @@ export const App: React.FC = () => {
 
   // Ensure tenant profile consistency and admin profile availability
   useEffect(() => {
-    if (tenant?.id && currentUser?.tenantId !== tenant.id) {
+    if (tenant?.id && currentUser && currentUser.tenantId !== tenant.id) {
       const allProfiles = useAppStore.getState().profiles;
       const tenantProfiles = allProfiles.filter(p => p.tenantId === tenant.id);
 
@@ -204,12 +197,12 @@ export const App: React.FC = () => {
           <Toaster position="top-right" theme="light" richColors closeButton />
           <LandingView
             onSelectStore={(selectedTenant) => {
-              useAppStore.setState({ tenant: selectedTenant });
+              useAppStore.setState({ tenant: selectedTenant, isAuthenticated: false });
               setShowLanding(false);
             }}
             onEnterDemo={() => {
               const demoTenant = useAppStore.getState().tenants?.find(t => t.id === '00000000-0000-0000-0000-000000000001') || useAppStore.getState().tenant;
-              useAppStore.setState({ tenant: demoTenant });
+              useAppStore.setState({ tenant: demoTenant, isAuthenticated: false });
               setShowLanding(false);
             }}
           />

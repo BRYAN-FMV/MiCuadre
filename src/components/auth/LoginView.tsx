@@ -233,8 +233,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
           </button>
 
           {/* Navigation Links */}
-          <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.65rem', alignItems: 'center' }}>
-            {onBackToLanding && (
+          {onBackToLanding && (
+            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center' }}>
               <button
                 type="button"
                 onClick={() => {
@@ -245,21 +245,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
               >
                 ← Ir a la Página Principal (micuadre.app)
               </button>
-            )}
-
-            <a
-              href="?admin=true"
-              onClick={(e) => {
-                e.preventDefault();
-                window.history.pushState({}, '', '/admin');
-                window.dispatchEvent(new Event('popstate'));
-              }}
-              style={{ fontSize: '0.78rem', color: '#64748b', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
-            >
-              <ShieldAlert size={14} style={{ color: '#0f172a' }} />
-              <span>Acceso Administrador de Plataforma SaaS (/admin)</span>
-            </a>
-          </div>
+            </div>
+          )}
 
         </form>
 
