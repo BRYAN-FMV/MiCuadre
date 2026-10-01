@@ -492,23 +492,32 @@ export const PosContainer: React.FC = () => {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
                   <button
                     onClick={() => updateCartLineQty(index, line.quantity - 1)}
-                    style={{ width: '22px', height: '22px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}
+                    style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 800, fontSize: '1rem' }}
+                    title="Disminuir cantidad"
                   >
                     -
                   </button>
-                  <span style={{ fontWeight: 700, fontSize: '0.85rem', width: '20px', textAlign: 'center' }}>{line.quantity}</span>
+                  <span style={{ fontWeight: 800, fontSize: '0.9rem', width: '24px', textAlign: 'center', color: '#0f172a' }}>{line.quantity}</span>
                   <button
                     onClick={() => updateCartLineQty(index, line.quantity + 1)}
-                    style={{ width: '22px', height: '22px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}
+                    style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 800, fontSize: '1rem' }}
+                    title="Aumentar cantidad"
                   >
                     +
                   </button>
+                  <button
+                    onClick={() => removeCartLine(index)}
+                    style={{ width: '28px', height: '28px', borderRadius: '6px', border: 'none', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginLeft: '0.2rem' }}
+                    title="Eliminar producto del carrito"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
 
-                <div style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                <div style={{ textAlign: 'right', fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
                   {formatCurrency(line.total, tenant.currencySymbol)}
                 </div>
               </div>
@@ -990,11 +999,35 @@ export const PosContainer: React.FC = () => {
                   placeholder="0.00"
                   value={cashTendered}
                   onChange={(e) => setCashTendered(e.target.value)}
-                  style={{ fontSize: '1.3rem', fontWeight: 700, textAlign: 'center' }}
+                  style={{ fontSize: '1.3rem', fontWeight: 800, textAlign: 'center' }}
                   autoFocus
                 />
+
+                {/* Quick Cash Tender Buttons */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.35rem', marginTop: '0.4rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setCashTendered(netPayableTotal.toFixed(2))}
+                    style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', fontWeight: 800, color: '#059669', borderColor: '#a7f3d0' }}
+                  >
+                    Exacto
+                  </button>
+                  {[50, 100, 200, 500].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setCashTendered(amt.toString())}
+                      style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', fontWeight: 700 }}
+                    >
+                      L. {amt}
+                    </button>
+                  ))}
+                </div>
+
                 {tenderedAmount > 0 && (
-                  <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-primary)' }}>
+                  <div style={{ marginTop: '0.65rem', padding: '0.6rem 0.85rem', background: changeDue >= 0 ? '#f0fdf4' : '#fee2e2', border: `1px solid ${changeDue >= 0 ? '#bbf7d0' : '#fca5a5'}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.1rem', color: changeDue >= 0 ? '#047857' : '#dc2626' }}>
                     <span>CAMBIO / VUELTO:</span>
                     <span>{formatCurrency(changeDue, tenant.currencySymbol)}</span>
                   </div>
