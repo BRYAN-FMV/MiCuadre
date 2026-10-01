@@ -1129,9 +1129,13 @@ export const useAppStore = create<AppState>()(
 
   sendAppointmentToPos: (app) => {
     const state = get();
+    if (app.tenantId && app.tenantId !== state.tenant.id) {
+      console.warn(`[SECURITY GUARD] Bloqueado intento de enviar cita de otro comercio (${app.tenantId}) al POS`);
+      return;
+    }
     if (app.items && app.items.length > 0) {
       app.items.forEach(item => {
-        const service = state.services.find(s => s.id === item.serviceId);
+        const service = state.services.find(s => s.id === item.serviceId && s.tenantId === state.tenant.id);
         if (service) {
           state.addToCart({ service, staffId: item.staffId });
         }
@@ -1140,7 +1144,7 @@ export const useAppStore = create<AppState>()(
       state.updateAppointmentStatus(app.id, 'IN_PROGRESS');
       state.setActiveTab('pos');
     } else {
-      const service = state.services.find(s => s.id === app.serviceId);
+      const service = state.services.find(s => s.id === app.serviceId && s.tenantId === state.tenant.id);
       if (service) {
         state.addToCart({ service, staffId: app.staffId });
         state.setCartCustomer({ name: app.customerName, rtn: undefined });
