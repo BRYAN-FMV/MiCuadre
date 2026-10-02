@@ -15,7 +15,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 export interface HeldOrder {
@@ -385,7 +385,7 @@ export const useAppStore = create<AppState>()(
       addFiscalRange: (rangeData) => set((state) => {
         const newRange: FiscalRange = {
           ...rangeData,
-          id: `fiscal-range-${Date.now()}`,
+          id: generateUUID(),
           tenantId: state.tenant.id,
           isDefault: rangeData.isDefault || (state.fiscalRanges || []).length === 0
         };
@@ -397,6 +397,10 @@ export const useAppStore = create<AppState>()(
 
         const activeSelectedId = newRange.isDefault ? newRange.id : (state.selectedFiscalRangeId || newRange.id);
         const activeRange = updatedRanges.find(r => r.id === activeSelectedId) || newRange;
+
+        if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+          saveFiscalRangeToSupabase(newRange).catch(err => console.warn('Supabase save fiscal range info:', err));
+        }
 
         return {
           fiscalRanges: updatedRanges,
@@ -417,15 +421,22 @@ export const useAppStore = create<AppState>()(
           updateData = idOrRange;
         }
 
+        let updatedTarget: FiscalRange | null = null;
+
         let updatedRanges = (state.fiscalRanges || [state.fiscalRange]).map(r => {
           if (r.id === targetId) {
-            return { ...r, ...updateData };
+            updatedTarget = { ...r, ...updateData };
+            return updatedTarget;
           }
           if (updateData.isDefault) {
             return { ...r, isDefault: false };
           }
           return r;
         });
+
+        if (updatedTarget && isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+          saveFiscalRangeToSupabase(updatedTarget).catch(err => console.warn('Supabase update fiscal range info:', err));
+        }
 
         const activeSelectedId = state.selectedFiscalRangeId || state.fiscalRange.id;
         const activeRange = updatedRanges.find(r => r.id === activeSelectedId) || updatedRanges[0];
@@ -444,6 +455,10 @@ export const useAppStore = create<AppState>()(
         const updated = current.filter(r => r.id !== id);
         const nextSelectedId = state.selectedFiscalRangeId === id ? updated[0].id : state.selectedFiscalRangeId;
         const activeRange = updated.find(r => r.id === nextSelectedId) || updated[0];
+
+        if (isSupabaseConfigured() && isValidUUID(id)) {
+          deleteFiscalRangeSupabase(id).catch(err => console.warn('Supabase delete fiscal range info:', err));
+        }
 
         return {
           fiscalRanges: updated,

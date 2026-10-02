@@ -3,7 +3,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { ArrowRight, Store, ShieldAlert, Lock, User, Building2 } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
-import { findTenantInSupabase, fetchProfilesFromSupabase } from '../../lib/supabaseService';
+import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase } from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
 
 interface LoginViewProps {
@@ -59,6 +59,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
           };
           tenantProfiles = [adminProfile, ...tenantProfiles];
         }
+
+        fetchFiscalRangesFromSupabase(matched.id).then(liveRanges => {
+          if (liveRanges && liveRanges.length > 0) {
+            useAppStore.setState(state => {
+              const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== matched.id);
+              const updated = [...liveRanges, ...otherRanges];
+              const defaultRange = liveRanges.find(r => r.isDefault) || liveRanges[0];
+              return {
+                fiscalRanges: updated,
+                selectedFiscalRangeId: defaultRange.id,
+                fiscalRange: defaultRange
+              };
+            });
+          }
+        });
 
         setAvailableProfiles(tenantProfiles);
         if (!selectedProfileId || !tenantProfiles.some(p => p.id === selectedProfileId)) {

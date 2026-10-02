@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
-import { isValidUUID, normalizeSlug } from './security';
+import { isValidUUID, normalizeSlug, generateUUID } from './security';
 
 /**
  * Seed initial sample products and tenant to Supabase when database is empty
@@ -829,22 +829,60 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
       .eq('tenant_id', tenantId)
       .eq('is_active', true);
 
-    if (error || !data || data.length === 0) return null;
+    if (!error && data && data.length > 0) {
+      return data.map((r: any) => ({
+        id: r.id,
+        tenantId: r.tenant_id,
+        name: r.name || 'Caja Registradora',
+        cai: r.cai || '',
+        prefix: r.prefix || '000-001-01-',
+        rangeStart: Number(r.range_start || 1),
+        rangeEnd: Number(r.range_end || 10000),
+        currentNumber: Number(r.current_number || 0),
+        deadline: r.deadline || '2026-12-31',
+        documentType: (r.document_type === '04' ? '04' : '01') as '01' | '04',
+        isActive: r.is_active ?? true,
+        isDefault: r.is_default ?? false
+      }));
+    }
 
-    return data.map((r: any) => ({
-      id: r.id,
-      tenantId: r.tenant_id,
-      name: r.name || 'Caja Registradora',
-      cai: r.cai || '',
-      prefix: r.prefix || '000-001-01-',
-      rangeStart: Number(r.range_start || 1),
-      rangeEnd: Number(r.range_end || 10000),
-      currentNumber: Number(r.current_number || 0),
-      deadline: r.deadline || '2026-12-31',
-      documentType: (r.document_type === '04' ? '04' : '01') as '01' | '04',
-      isActive: r.is_active ?? true,
-      isDefault: r.is_default ?? false
-    }));
+    // Auto-seed initial Cajas to Supabase for this tenant if none exist yet
+    const defaultCajas: FiscalRange[] = [
+      {
+        id: generateUUID(),
+        tenantId,
+        name: 'Caja 1 - Principal',
+        cai: 'E83910-149BF1-9243E9-913210-9182C1-02',
+        prefix: '000-001-01-',
+        rangeStart: 1,
+        rangeEnd: 5000,
+        currentNumber: 1,
+        deadline: '2026-12-31',
+        documentType: '01',
+        isActive: true,
+        isDefault: true
+      },
+      {
+        id: generateUUID(),
+        tenantId,
+        name: 'Caja 2 - Expreso',
+        cai: 'F94021-250CF2-0354F0-024321-0293D2-03',
+        prefix: '000-002-01-',
+        rangeStart: 1,
+        rangeEnd: 5000,
+        currentNumber: 1,
+        deadline: '2026-12-31',
+        documentType: '01',
+        isActive: true,
+        isDefault: false
+      }
+    ];
+
+    for (const range of defaultCajas) {
+      await saveFiscalRangeToSupabase(range);
+    }
+
+    return defaultCajas;
   } catch (err) {
     console.warn('Error fetching fiscal_ranges from Supabase:', err);
     return null;
@@ -879,6 +917,19 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
   } catch (err) {
     console.warn('Error saving fiscal range to Supabase:', err);
     return null;
+  }
+}
+
+/**
+ * Delete Fiscal Range / Caja in Supabase
+ */
+export async function deleteFiscalRangeSupabase(id: string) {
+  if (!isSupabaseConfigured() || !isValidUUID(id)) return null;
+  try {
+    const { error } = await supabase.from('fiscal_ranges').delete().eq('id', id);
+    if (error) console.warn('Error deleting fiscal range from Supabase:', error.message);
+  } catch (err) {
+    console.warn('Error deleting fiscal range:', err);
   }
 }
 
