@@ -173,11 +173,17 @@ export const CashShiftModal: React.FC = () => {
                   {((fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id).length > 0
                     ? (fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id)
                     : (fiscalRange ? [fiscalRange] : [])
-                  ).map(r => (
-                    <option key={r.id} value={r.id}>
-                      {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
-                    </option>
-                  ))}
+                  ).map(r => {
+                    const shiftHistoryList = useAppStore.getState().shiftHistory || [];
+                    const openShiftsForTenant = shiftHistoryList.filter(s => s.tenantId === tenant.id && s.status === 'OPEN');
+                    const occupiedShift = openShiftsForTenant.find(s => (s.fiscalRangeId === r.id || s.cajaName === r.name) && s.status === 'OPEN');
+                    return (
+                      <option key={r.id} value={r.id} disabled={!!occupiedShift && occupiedShift.userId !== currentUser?.id}>
+                        {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
+                        {occupiedShift ? ` 🔒 (OCUPADA por ${occupiedShift.userName})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -221,6 +227,20 @@ export const CashShiftModal: React.FC = () => {
                   Abrir Caja Registradora
                 </button>
               </div>
+
+              {currentUser?.role === 'ADMIN' && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    useAppStore.setState({ isShiftModalOpen: false, activeTab: 'reports' });
+                    toast.info('Continuando en MODO VISTA (Administración & Reportes - Sin Caja)');
+                  }}
+                  style={{ marginTop: '0.85rem', width: '100%', background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700, fontSize: '0.84rem' }}
+                >
+                  👁️ MODO VISTA (Solo Administración / Reportes - Sin Abrir Caja)
+                </button>
+              )}
             </form>
           </div>
         )}

@@ -163,6 +163,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       }
 
       setCurrentUser(selectedProfile);
+      
+      // Admin Modo Vista handling
+      if (selectedFiscalRangeId === 'VIEW_MODE_ADMIN' && selectedProfile.role === 'ADMIN') {
+        toast.success(`Bienvenido a ${matchedTenant.name} en MODO VISTA (Solo Reportes & Administración)`);
+        useAppStore.setState({ 
+          isAuthenticated: true, 
+          isDevMode: false,
+          cartLines: [],
+          cartCustomer: { name: 'Consumidor Final' },
+          isShiftModalOpen: false,
+          activeShift: null,
+          activeTab: 'reports'
+        });
+        return;
+      }
+
+      // Check if chosen terminal/caja is currently occupied on another device
+      const shiftHistory = useAppStore.getState().shiftHistory || [];
+      const openShiftsForTenant = shiftHistory.filter(s => s.tenantId === matchedTenant.id && s.status === 'OPEN');
+      const targetCaja = (fiscalRanges || []).find(r => r.id === selectedFiscalRangeId);
+      const occupiedShift = openShiftsForTenant.find(s => (s.fiscalRangeId === targetCaja?.id || s.cajaName === targetCaja?.name) && s.status === 'OPEN');
+
+      if (occupiedShift && occupiedShift.userId !== selectedProfile.id) {
+        toast.error(`La terminal "${targetCaja?.name || 'Caja'}" ya está siendo operada en otro dispositivo por ${occupiedShift.userName}. Selecciona una caja disponible o ingresa en Modo Vista.`);
+        setIsLoading(false);
+        return;
+      }
+
       toast.success(`Bienvenido a ${matchedTenant.name}, ${selectedProfile.fullName}`);
       
       const currentActiveShift = useAppStore.getState().activeShift;
@@ -183,6 +211,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       setIsLoading(false);
     }
   };
+
+  const currentSelectedProfile = availableProfiles.find(p => p.id === selectedProfileId);
+  const isAdminSelected = currentSelectedProfile?.role === 'ADMIN';
+  const shiftHistoryList = useAppStore(state => state.shiftHistory) || [];
+  const openShiftsForTenant = shiftHistoryList.filter(s => s.tenantId === tenant.id && s.status === 'OPEN');
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
@@ -245,11 +278,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
               onChange={(e) => setSelectedFiscalRange(e.target.value)}
               style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem', width: '100%', background: '#ffffff', cursor: 'pointer' }}
             >
-              {(fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id).map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
+              {isAdminSelected && (
+                <option value="VIEW_MODE_ADMIN" style={{ fontWeight: 700, color: '#059669' }}>
+                  👁️ MODO VISTA (Solo Administración & Reportes - Sin Caja)
                 </option>
-              ))}
+              )}
+              {(fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id).map(r => {
+                const occupiedShift = openShiftsForTenant.find(s => (s.fiscalRangeId === r.id || s.cajaName === r.name) && s.status === 'OPEN');
+                return (
+                  <option key={r.id} value={r.id} disabled={!!occupiedShift && occupiedShift.userId !== currentSelectedProfile?.id}>
+                    {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
+                    {occupiedShift ? ` 🔒 (OCUPADA por ${occupiedShift.userName})` : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

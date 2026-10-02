@@ -384,19 +384,23 @@ export async function saveSaleToSupabase(sale: Sale) {
 
     if (insertedSale && sale.items && sale.items.length > 0) {
       const itemsToInsert = sale.items.map(item => ({
+        tenant_id: sale.tenantId,
         sale_id: insertedSale.id,
         product_id: (item.productId && isValidUUID(item.productId)) ? item.productId : null,
-        product_name: item.name,
-        sku: item.sku || '',
+        service_id: (item.serviceId && isValidUUID(item.serviceId)) ? item.serviceId : null,
+        staff_id: (item.staffId && isValidUUID(item.staffId)) ? item.staffId : null,
         quantity: item.quantity,
         unit_price: item.unitPrice,
-        subtotal: item.subtotal,
+        discount_amount: item.discountAmount || 0,
         tax_classification: item.taxClassification || 'EXENTO',
         tax_amount: item.taxAmount || 0,
-        total: item.total
+        subtotal: item.subtotal
       }));
 
-      await supabase.from('sale_items').insert(itemsToInsert);
+      const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToInsert);
+      if (itemsErr) {
+        console.warn('Supabase sale_items insert info:', itemsErr.message);
+      }
     }
 
     console.log('Venta guardada exitosamente en Supabase');
@@ -508,19 +512,22 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
   try {
-    const [salesRes, ranges] = await Promise.all([
+    const [salesRes, ranges, products] = await Promise.all([
       supabase
         .from('sales')
         .select('*, sale_items(*)')
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false }),
-      fetchFiscalRangesFromSupabase(tenantId)
+      fetchFiscalRangesFromSupabase(tenantId),
+      fetchProductsFromSupabase(tenantId)
     ]);
 
     const data = salesRes.data;
     if (salesRes.error || !data) return null;
 
     const caiRangeMap = new Map((ranges || []).map(r => [r.cai, r.name]));
+    const productMap = new Map((products || []).map(p => [p.id, p.name]));
+    const productSkuMap = new Map((products || []).map(p => [p.id, p.sku]));
     const defaultCajaName = (ranges && ranges.length > 0 && ranges[0].name) ? ranges[0].name : 'Caja 1 - Principal';
 
     return data.map((s: any) => ({
@@ -552,14 +559,16 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
       items: s.sale_items?.map((i: any) => ({
         id: i.id,
         productId: i.product_id,
-        name: i.product_name,
-        sku: i.sku || '',
-        quantity: i.quantity,
-        unitPrice: Number(i.unit_price),
-        subtotal: Number(i.subtotal),
+        serviceId: i.service_id,
+        staffId: i.staff_id,
+        name: i.product_name || (i.product_id && productMap.get(i.product_id)) || 'Artículo POS',
+        sku: i.sku || (i.product_id && productSkuMap.get(i.product_id)) || '',
+        quantity: Number(i.quantity || 1),
+        unitPrice: Number(i.unit_price || 0),
+        subtotal: Number(i.subtotal || 0),
         taxClassification: i.tax_classification || 'EXENTO',
         taxAmount: Number(i.tax_amount || 0),
-        total: Number(i.total)
+        total: Number(i.subtotal + (i.tax_amount || 0))
       })) || []
     }));
   } catch (err) {

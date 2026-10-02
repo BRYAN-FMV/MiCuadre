@@ -715,18 +715,19 @@ export const useAppStore = create<AppState>()(
     const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
     const targetCajaId = activeCaja?.id;
 
-    // Check if there is already an open shift for this specific caja
+    // Check if there is already an open shift for this specific caja by another session
     const existingOpenShift = (state.shiftHistory || []).find(
       s => s.tenantId === state.tenant.id &&
-           s.fiscalRangeId === targetCajaId &&
+           (s.fiscalRangeId === targetCajaId || s.cajaName === activeCaja?.name) &&
            s.status === 'OPEN'
     );
 
     if (existingOpenShift) {
-      toast.info(`Te has unido al turno activo de ${existingOpenShift.cajaName || activeCaja?.name || 'Caja Registradora'} (Iniciado por ${existingOpenShift.userName}).`);
-      return {
-        activeShift: existingOpenShift
-      };
+      if (existingOpenShift.userId === state.currentUser.id) {
+        return { activeShift: existingOpenShift };
+      }
+      toast.error(`La terminal "${activeCaja?.name || 'Caja Registradora'}" ya está siendo operada por ${existingOpenShift.userName} en otro dispositivo. Cada caja solo puede estar activa en 1 dispositivo a la vez.`);
+      return state;
     }
 
     const newShift: CashShift = {
