@@ -33,6 +33,7 @@ export const ReportsView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED'>('ALL');
   const [docTypeFilter, setDocTypeFilter] = useState<'ALL' | 'FISCAL' | 'TICKET'>('ALL');
+  const [selectedCajaFilter, setSelectedCajaFilter] = useState<string>('ALL');
 
   // Selected Sale / Shift for Detail Modals
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<Sale | null>(null);
@@ -1128,17 +1129,31 @@ export const ReportsView: React.FC = () => {
       {/* --- SUBTAB 5: SHIFTS HISTORY (REPORTES Z) --- */}
       {mainSubTab === 'shifts' && (
         <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
               <h3 style={{ fontSize: '1.05rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <FileText size={20} style={{ color: 'var(--accent-primary)' }} />
                 Historial Auditado de Cierres Z ({tenantShifts.length})
               </h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
-                Registro completo de turnos cerrados, arqueos de caja y sobrantes / faltantes detectados
+                Registro completo de turnos cerrados, arqueos de caja y sobrantes / faltantes por terminal
               </p>
             </div>
-            <span className="badge badge-wholesale">{tenantShifts.length} Cierres de Caja</span>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <select
+                className="input-control"
+                style={{ fontSize: '0.82rem', padding: '0.4rem 0.75rem' }}
+                value={selectedCajaFilter}
+                onChange={(e) => setSelectedCajaFilter(e.target.value)}
+              >
+                <option value="ALL">Todas las Cajas Registradoras</option>
+                {Array.from(new Set(tenantShifts.map((s: any) => s.cajaName || 'Caja Principal'))).map((name: any) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+              <span className="badge badge-wholesale">{tenantShifts.length} Cierres</span>
+            </div>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -1146,6 +1161,7 @@ export const ReportsView: React.FC = () => {
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
                   <th style={{ padding: '0.75rem 1rem' }}>Fecha / Hora Cierre</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Caja / Terminal</th>
                   <th style={{ padding: '0.75rem 1rem' }}>Cajero / Responsable</th>
                   <th style={{ padding: '0.75rem 1rem' }}>Fondo Inicial</th>
                   <th style={{ padding: '0.75rem 1rem' }}>Sistema (Esperado)</th>
@@ -1157,63 +1173,70 @@ export const ReportsView: React.FC = () => {
               <tbody>
                 {tenantShifts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
                       No se han realizado cierres de caja (Reportes Z) en este comercio aún.
                     </td>
                   </tr>
                 ) : (
-                  tenantShifts.map((shift: any) => {
-                    const diff = shift.difference ?? ((shift.closingDeclared ?? 0) - (shift.closingSystem ?? 0));
-                    const isPerfect = Math.abs(diff) < 0.01;
-                    const isShortage = diff < -0.01;
+                  tenantShifts
+                    .filter((shift: any) => selectedCajaFilter === 'ALL' || (shift.cajaName || 'Caja Principal') === selectedCajaFilter)
+                    .map((shift: any) => {
+                      const diff = shift.difference ?? ((shift.closingDeclared ?? 0) - (shift.closingSystem ?? 0));
+                      const isPerfect = Math.abs(diff) < 0.01;
+                      const isShortage = diff < -0.01;
 
-                    return (
-                      <tr key={shift.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#0f172a' }}>
-                          {shift.closedAt
-                            ? new Date(shift.closedAt).toLocaleString('es-HN', { dateStyle: 'short', timeStyle: 'short' })
-                            : new Date(shift.openedAt).toLocaleString('es-HN', { dateStyle: 'short', timeStyle: 'short' })}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 600 }}>
-                          {shift.userName || 'Cajero Principal'}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
-                          {tenant.currencySymbol} {(shift.openingAmount || 0).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#0f172a' }}>
-                          {tenant.currencySymbol} {(shift.closingSystem || 0).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#0f172a' }}>
-                          {tenant.currencySymbol} {(shift.closingDeclared || 0).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          {isPerfect ? (
-                            <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <CheckCircle size={12} /> Cuadre Perfecto
+                      return (
+                        <tr key={shift.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#0f172a' }}>
+                            {shift.closedAt
+                              ? new Date(shift.closedAt).toLocaleString('es-HN', { dateStyle: 'short', timeStyle: 'short' })
+                              : new Date(shift.openedAt).toLocaleString('es-HN', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span className="badge badge-wholesale" style={{ fontSize: '0.75rem' }}>
+                              {shift.cajaName || 'Caja Principal'}
                             </span>
-                          ) : isShortage ? (
-                            <span className="badge" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontWeight: 700 }}>
-                              Faltante: {tenant.currencySymbol} {Math.abs(diff).toFixed(2)}
-                            </span>
-                          ) : (
-                            <span className="badge" style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontWeight: 700 }}>
-                              Sobrante: {tenant.currencySymbol} {diff.toFixed(2)}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => setSelectedShiftDetail(shift)}
-                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
-                          >
-                            <Eye size={14} />
-                            <span>Ver Reporte Z</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: '#475569', fontWeight: 600 }}>
+                            {shift.userName || 'Cajero Principal'}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
+                            {tenant.currencySymbol} {(shift.openingAmount || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#0f172a' }}>
+                            {tenant.currencySymbol} {(shift.closingSystem || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#0f172a' }}>
+                            {tenant.currencySymbol} {(shift.closingDeclared || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            {isPerfect ? (
+                              <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <CheckCircle size={12} /> Cuadre Perfecto
+                              </span>
+                            ) : isShortage ? (
+                              <span className="badge" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontWeight: 700 }}>
+                                Faltante: {tenant.currencySymbol} {Math.abs(diff).toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="badge" style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', fontWeight: 700 }}>
+                                Sobrante: {tenant.currencySymbol} {diff.toFixed(2)}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => setSelectedShiftDetail(shift)}
+                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem' }}
+                            >
+                              <Eye size={14} />
+                              <span>Ver Reporte Z</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                 )}
               </tbody>
             </table>
@@ -1389,6 +1412,10 @@ export const ReportsView: React.FC = () => {
             <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               
               <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>Caja Registradora / Terminal:</span>
+                  <span style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>{selectedShiftDetail.cajaName || 'Caja Principal'}</span>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#64748b' }}>Cajero Responsable:</span>
                   <span style={{ fontWeight: 700, color: '#0f172a' }}>{selectedShiftDetail.userName || 'Cajero Principal'}</span>

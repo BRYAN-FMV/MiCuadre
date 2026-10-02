@@ -17,7 +17,7 @@ const EXPENSE_CATEGORIES: Array<{ value: ExpenseCategory; label: string }> = [
 
 export const PurchaseManager: React.FC = () => {
   const {
-    suppliers, products, purchaseInvoices, funds, expenses, tenant, currentUser,
+    suppliers, products, purchaseInvoices, funds, expenses, tenant, currentUser, activeShift, fiscalRange,
     processPurchase, addSupplier, payPurchaseInvoice, addFund, updateFund, deleteFund, addExpense, deleteExpense, addFinancialEvent
   } = useAppStore();
 
@@ -115,6 +115,13 @@ export const PurchaseManager: React.FC = () => {
     if (!invoiceNumber || purchaseItems.length === 0) {
       toast.error('Ingresa el número de factura e ítems a recibir');
       return;
+    }
+
+    if (paymentTerms === 'CASH' && selectedCashFundId === 'ACTIVE_CASH_SHIFT') {
+      if (!activeShift || activeShift.status !== 'OPEN') {
+        toast.error('No hay una caja registradora abierta en este terminal para pagar esta compra en efectivo.');
+        return;
+      }
     }
 
     const subtotal = purchaseItems.reduce((acc, i) => acc + (i.quantity * i.unitCost), 0);
@@ -281,22 +288,32 @@ export const PurchaseManager: React.FC = () => {
       toast.error('Ingresa una descripción clara del gasto');
       return;
     }
-    const selectedFund = tenantFunds.find(f => f.id === expFundId);
-    if (!selectedFund) {
-      toast.error('Selecciona un fondo de pago');
-      return;
+    const isCashShift = expFundId === 'ACTIVE_CASH_SHIFT';
+    if (isCashShift) {
+      if (!activeShift || activeShift.status !== 'OPEN') {
+        toast.error('No hay una caja registradora abierta en este terminal para realizar egresos en efectivo.');
+        return;
+      }
+    } else {
+      const selectedFund = tenantFunds.find(f => f.id === expFundId);
+      if (!selectedFund) {
+        toast.error('Selecciona un fondo de pago');
+        return;
+      }
+      if (selectedFund.balance < amount) {
+        toast.warning(`Atención: El saldo del fondo (${formatCurrency(selectedFund.balance, tenant.currencySymbol)}) es menor al gasto (${formatCurrency(amount, tenant.currencySymbol)}).`);
+      }
     }
 
-    if (selectedFund.balance < amount) {
-      toast.warning(`Atención: El saldo del fondo (${formatCurrency(selectedFund.balance, tenant.currencySymbol)}) es menor al gasto (${formatCurrency(amount, tenant.currencySymbol)}).`);
-    }
+    const selectedFund = tenantFunds.find(f => f.id === expFundId);
 
     addExpense({
       category: expCategory,
       description: expDescription.trim(),
       amount,
       fundId: expFundId,
-      fundName: selectedFund.name,
+      fundName: isCashShift ? `Caja Registradora (${activeShift?.cajaName || 'Turno Activo'})` : (selectedFund?.name || 'Fondo'),
+      paymentSource: isCashShift ? 'ACTIVE_CASH_SHIFT' : 'FUND',
       receiptNumber: expReceiptNumber.trim() || undefined,
       expenseDate: expDate || new Date().toISOString().split('T')[0],
       registeredBy: currentUser?.fullName || 'Usuario'
@@ -796,6 +813,9 @@ export const PurchaseManager: React.FC = () => {
                   <div className="form-group">
                     <label className="form-label">Pagar de Fondo *</label>
                     <select className="input-control" value={selectedCashFundId} onChange={(e) => setSelectedCashFundId(e.target.value)}>
+                      <option value="ACTIVE_CASH_SHIFT">
+                        💵 Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
+                      </option>
                       {tenantFunds.map(f => (
                         <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
                       ))}
@@ -1093,6 +1113,9 @@ export const PurchaseManager: React.FC = () => {
                     onChange={(e) => setExpFundId(e.target.value)}
                     required
                   >
+                    <option value="ACTIVE_CASH_SHIFT">
+                      💵 Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
+                    </option>
                     {tenantFunds.map(f => (
                       <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
                     ))}

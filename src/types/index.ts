@@ -99,6 +99,8 @@ export interface CashShift {
   tenantId: string;
   userId: string;
   userName?: string;
+  fiscalRangeId?: string;
+  cajaName?: string;
   openingAmount: number;
   closingDeclared?: number;
   closingSystem?: number;
@@ -106,6 +108,21 @@ export interface CashShift {
   status: 'OPEN' | 'CLOSED';
   openedAt: string;
   closedAt?: string;
+}
+
+export type CashMovementType = 'ENTRADA' | 'SALIDA';
+
+export interface CashMovement {
+  id: string;
+  tenantId: string;
+  cashShiftId: string;
+  fiscalRangeId: string;
+  type: CashMovementType;
+  amount: number;
+  concept: string;
+  registeredBy: string;
+  createdAt: string;
+  referenceId?: string;
 }
 
 export interface Supplier {
@@ -139,6 +156,8 @@ export interface PurchaseInvoice {
   dueDate: string;
   paymentTerms: 'CASH' | 'CREDIT';
   paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+  paymentSource?: 'FUND' | 'ACTIVE_CASH_SHIFT';
+  cashShiftId?: string;
   subtotal: number;
   taxAmount: number;
   total: number;
@@ -319,6 +338,8 @@ export interface Expense {
   amount: number;
   fundId: string;
   fundName?: string;
+  paymentSource?: 'FUND' | 'ACTIVE_CASH_SHIFT';
+  cashShiftId?: string;
   receiptNumber?: string;
   expenseDate: string;
   registeredBy?: string;

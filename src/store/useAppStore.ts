@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import {
-  Tenant, UserProfile, Product, FiscalRange, CashShift,
+  Tenant, UserProfile, Product, FiscalRange, CashShift, CashMovement,
   CartLine, Sale, PurchaseInvoice, Supplier, Service, Staff,
   Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment
 } from '../types';
@@ -119,9 +119,11 @@ interface AppState {
   restoreHeldCart: (heldOrderId: string) => void;
   deleteHeldCart: (heldOrderId: string) => void;
 
-  // Shift Actions
+  // Shift Actions & Movements
+  cashMovements: CashMovement[];
   openCashShift: (openingAmount: number) => void;
   closeCashShift: (declaredCash: number) => { difference: number; closingSystem: number };
+  addCashMovement: (type: 'ENTRADA' | 'SALIDA', amount: number, concept: string, referenceId?: string) => void;
 
   // Sales Action
   processSale: (paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT', loyaltyPointsRedeemed?: number, overrideIsFiscal?: boolean) => Sale;
@@ -179,6 +181,7 @@ export const useAppStore = create<AppState>()(
       products: INITIAL_PRODUCTS,
       activeShift: INITIAL_CASH_SHIFT,
       shiftHistory: [],
+      cashMovements: [],
       cartLines: [],
       cartCustomer: { name: 'Consumidor Final' },
       heldOrders: [],
@@ -651,17 +654,46 @@ export const useAppStore = create<AppState>()(
     heldOrders: state.heldOrders.filter(o => o.id !== heldOrderId)
   })),
 
-  openCashShift: (openingAmount) => set((state) => ({
-    activeShift: {
-      id: `shift-${Date.now()}`,
+  openCashShift: (openingAmount) => set((state) => {
+    const ranges = state.fiscalRanges || [state.fiscalRange];
+    const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+    return {
+      activeShift: {
+        id: `shift-${Date.now()}`,
+        tenantId: state.tenant.id,
+        userId: state.currentUser.id,
+        userName: state.currentUser.fullName,
+        fiscalRangeId: activeCaja?.id,
+        cajaName: activeCaja?.name || 'Caja 1 - Principal',
+        openingAmount,
+        status: 'OPEN',
+        openedAt: new Date().toISOString()
+      }
+    };
+  }),
+
+  addCashMovement: (type, amount, concept, referenceId) => set((state) => {
+    const shift = state.activeShift;
+    const ranges = state.fiscalRanges || [state.fiscalRange];
+    const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+
+    const movement: CashMovement = {
+      id: `mov-${Date.now()}`,
       tenantId: state.tenant.id,
-      userId: state.currentUser.id,
-      userName: state.currentUser.fullName,
-      openingAmount,
-      status: 'OPEN',
-      openedAt: new Date().toISOString()
-    }
-  })),
+      cashShiftId: shift?.id || 'general',
+      fiscalRangeId: shift?.fiscalRangeId || activeCaja?.id || '',
+      type,
+      amount,
+      concept,
+      registeredBy: state.currentUser.fullName,
+      createdAt: new Date().toISOString(),
+      referenceId
+    };
+
+    return {
+      cashMovements: [movement, ...(state.cashMovements || [])]
+    };
+  }),
 
   closeCashShift: (declaredCash) => {
     const state = get();
@@ -673,7 +705,11 @@ export const useAppStore = create<AppState>()(
       .filter(s => s.cashShiftId === shift.id && (s.paymentMethod === 'CASH' || s.paymentMethod === 'MIXED'))
       .reduce((acc, s) => acc + s.total, 0);
 
-    const closingSystem = shift.openingAmount + shiftCashSales;
+    const shiftMovements = (state.cashMovements || []).filter(m => m.cashShiftId === shift.id);
+    const totalIngresos = shiftMovements.filter(m => m.type === 'ENTRADA').reduce((acc, m) => acc + m.amount, 0);
+    const totalEgresos = shiftMovements.filter(m => m.type === 'SALIDA').reduce((acc, m) => acc + m.amount, 0);
+
+    const closingSystem = shift.openingAmount + shiftCashSales + totalIngresos - totalEgresos;
     const difference = declaredCash - closingSystem;
 
     const closedShift: CashShift = {
@@ -944,17 +980,38 @@ export const useAppStore = create<AppState>()(
     const newInvoice: PurchaseInvoice = {
       ...purchaseData,
       id: `pur-${Date.now()}`,
-      tenantId: state.tenant.id
+      tenantId: state.tenant.id,
+      paymentSource: paidFromFundId === 'ACTIVE_CASH_SHIFT' ? 'ACTIVE_CASH_SHIFT' : 'FUND',
+      cashShiftId: paidFromFundId === 'ACTIVE_CASH_SHIFT' ? state.activeShift?.id : undefined
     };
 
     const updatedFunds = [...state.funds];
-    if (purchaseData.paymentTerms === 'CASH' && paidFromFundId) {
-      const fundIndex = updatedFunds.findIndex(f => f.id === paidFromFundId);
-      if (fundIndex >= 0) {
-        updatedFunds[fundIndex] = {
-          ...updatedFunds[fundIndex],
-          balance: updatedFunds[fundIndex].balance - purchaseData.total
-        };
+    const updatedMovements = [...(state.cashMovements || [])];
+
+    if (purchaseData.paymentTerms === 'CASH') {
+      if (paidFromFundId === 'ACTIVE_CASH_SHIFT') {
+        const ranges = state.fiscalRanges || [state.fiscalRange];
+        const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+        updatedMovements.unshift({
+          id: `mov-${Date.now()}`,
+          tenantId: state.tenant.id,
+          cashShiftId: state.activeShift?.id || 'general',
+          fiscalRangeId: state.activeShift?.fiscalRangeId || activeCaja?.id || '',
+          type: 'SALIDA',
+          amount: purchaseData.total,
+          concept: `Compra al Contado #${purchaseData.invoiceNumber} (${purchaseData.supplierName || 'Proveedor'})`,
+          registeredBy: state.currentUser.fullName,
+          createdAt: new Date().toISOString(),
+          referenceId: newInvoice.id
+        });
+      } else if (paidFromFundId) {
+        const fundIndex = updatedFunds.findIndex(f => f.id === paidFromFundId);
+        if (fundIndex >= 0) {
+          updatedFunds[fundIndex] = {
+            ...updatedFunds[fundIndex],
+            balance: updatedFunds[fundIndex].balance - purchaseData.total
+          };
+        }
       }
     }
 
@@ -978,6 +1035,7 @@ export const useAppStore = create<AppState>()(
       purchaseInvoices: [newInvoice, ...state.purchaseInvoices],
       products: updatedProducts,
       funds: updatedFunds,
+      cashMovements: updatedMovements,
       financialEvents: updatedEvents
     };
   }),
@@ -1032,20 +1090,42 @@ export const useAppStore = create<AppState>()(
   })),
 
   addExpense: (expenseData) => set((state) => {
-    const fund = state.funds.find(f => f.id === expenseData.fundId);
+    const isFromCashShift = expenseData.fundId === 'ACTIVE_CASH_SHIFT' || expenseData.paymentSource === 'ACTIVE_CASH_SHIFT';
+    const fund = isFromCashShift ? null : state.funds.find(f => f.id === expenseData.fundId);
+
     const newExpense: Expense = {
       ...expenseData,
       id: `exp-${Date.now()}`,
       tenantId: state.tenant.id,
-      fundName: fund?.name || 'Fondo',
+      fundName: isFromCashShift ? 'Caja Registradora (Efectivo)' : (fund?.name || 'Fondo'),
+      paymentSource: isFromCashShift ? 'ACTIVE_CASH_SHIFT' : 'FUND',
+      cashShiftId: isFromCashShift ? state.activeShift?.id : undefined,
       createdAt: expenseData.createdAt || new Date().toISOString()
     };
 
     const updatedFunds = state.funds.map(f =>
-      f.id === expenseData.fundId
+      (!isFromCashShift && f.id === expenseData.fundId)
         ? { ...f, balance: f.balance - expenseData.amount }
         : f
     );
+
+    const updatedMovements = [...(state.cashMovements || [])];
+    if (isFromCashShift) {
+      const ranges = state.fiscalRanges || [state.fiscalRange];
+      const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+      updatedMovements.unshift({
+        id: `mov-${Date.now()}`,
+        tenantId: state.tenant.id,
+        cashShiftId: state.activeShift?.id || 'general',
+        fiscalRangeId: state.activeShift?.fiscalRangeId || activeCaja?.id || '',
+        type: 'SALIDA',
+        amount: expenseData.amount,
+        concept: `Gasto Operativo (${expenseData.category}): ${expenseData.description}`,
+        registeredBy: state.currentUser.fullName,
+        createdAt: new Date().toISOString(),
+        referenceId: newExpense.id
+      });
+    }
 
     if (isSupabaseConfigured()) {
       supabase.from('expenses').insert({
@@ -1065,7 +1145,8 @@ export const useAppStore = create<AppState>()(
 
     return {
       expenses: [newExpense, ...(state.expenses || [])],
-      funds: updatedFunds
+      funds: updatedFunds,
+      cashMovements: updatedMovements
     };
   }),
 
@@ -1340,8 +1421,8 @@ export const useAppStore = create<AppState>()(
     selectedFiscalRangeId: state.selectedFiscalRangeId,
     fiscalRange: state.fiscalRange,
     products: state.products,
-    activeShift: state.activeShift,
     shiftHistory: state.shiftHistory,
+    cashMovements: state.cashMovements,
     cartLines: state.cartLines,
     cartCustomer: state.cartCustomer,
     heldOrders: state.heldOrders,
