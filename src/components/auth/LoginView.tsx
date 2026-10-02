@@ -3,7 +3,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { ArrowRight, Store, ShieldAlert, Lock, User, Building2 } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
-import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase } from '../../lib/supabaseService';
+import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase } from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
 
 interface LoginViewProps {
@@ -60,19 +60,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
           tenantProfiles = [adminProfile, ...tenantProfiles];
         }
 
-        fetchFiscalRangesFromSupabase(matched.id).then(liveRanges => {
-          if (liveRanges && liveRanges.length > 0) {
-            useAppStore.setState(state => {
+        Promise.all([
+          fetchFiscalRangesFromSupabase(matched.id),
+          fetchShiftsFromSupabase(matched.id)
+        ]).then(([liveRanges, liveShifts]) => {
+          useAppStore.setState(state => {
+            const newState: any = {};
+            if (liveRanges && liveRanges.length > 0) {
               const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== matched.id);
-              const updated = [...liveRanges, ...otherRanges];
+              newState.fiscalRanges = [...liveRanges, ...otherRanges];
               const defaultRange = liveRanges.find(r => r.isDefault) || liveRanges[0];
-              return {
-                fiscalRanges: updated,
-                selectedFiscalRangeId: defaultRange.id,
-                fiscalRange: defaultRange
-              };
-            });
-          }
+              newState.selectedFiscalRangeId = defaultRange.id;
+              newState.fiscalRange = defaultRange;
+            }
+            if (liveShifts) {
+              const otherShifts = (state.shiftHistory || []).filter(s => s.tenantId && s.tenantId !== matched.id);
+              newState.shiftHistory = [...liveShifts, ...otherShifts];
+            }
+            return newState;
+          });
         });
 
         setAvailableProfiles(tenantProfiles);

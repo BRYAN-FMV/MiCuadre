@@ -243,8 +243,9 @@ export const INITIAL_CASH_SHIFT: CashShift = {
   userId: '00000000-0000-0000-0000-000000000002',
   userName: 'Bryan (Administrador)',
   openingAmount: 1000.00,
-  status: 'OPEN',
-  openedAt: new Date(Date.now() - 14400000).toISOString()
+  status: 'CLOSED',
+  openedAt: new Date(Date.now() - 14400000).toISOString(),
+  closedAt: new Date(Date.now() - 3600000).toISOString()
 };
 
 export const INITIAL_FINANCIAL_EVENTS: FinancialEvent[] = [

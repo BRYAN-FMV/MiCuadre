@@ -608,6 +608,7 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
       id: shiftUuid,
       tenant_id: shift.tenantId,
       user_id: validUserId,
+      fiscal_range_id: isValidUUID(shift.fiscalRangeId) ? shift.fiscalRangeId : null,
       opening_amount: shift.openingAmount,
       closing_declared: shift.closingDeclared != null ? shift.closingDeclared : null,
       closing_system: shift.closingSystem != null ? shift.closingSystem : null,
@@ -665,7 +666,7 @@ export async function fetchShiftsFromSupabase(tenantId: string): Promise<CashShi
       tenantId: s.tenant_id,
       userId: s.user_id || 'user-default',
       userName: (s.user_id && profileMap.get(s.user_id)) || s.user_name || 'Cajero',
-      fiscalRangeId: s.fiscal_range_id || (ranges && ranges.length > 0 ? ranges[0].id : undefined),
+      fiscalRangeId: s.fiscal_range_id || null,
       cajaName: (s.fiscal_range_id && rangeMap.get(s.fiscal_range_id)) || s.caja_name || defaultCajaName,
       openingAmount: Number(s.opening_amount || 0),
       closingDeclared: s.closing_declared != null ? Number(s.closing_declared) : undefined,
@@ -895,6 +896,7 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
     const payload: any = {
       id: rangeUuid,
       tenant_id: range.tenantId,
+      name: range.name || 'Caja Registradora',
       cai: range.cai || '',
       prefix: range.prefix || '000-001-01-',
       range_start: range.rangeStart,
@@ -902,7 +904,8 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
       current_number: range.currentNumber,
       deadline: range.deadline || '2026-12-31',
       document_type: range.documentType || '01',
-      is_active: range.isActive ?? true
+      is_active: range.isActive ?? true,
+      is_default: range.isDefault ?? false
     };
 
     const { data, error } = await supabase.from('fiscal_ranges').upsert(payload, { onConflict: 'id' }).select().single();
@@ -920,8 +923,11 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
 export async function deleteFiscalRangeSupabase(id: string) {
   if (!isSupabaseConfigured() || !isValidUUID(id)) return null;
   try {
+    // Soft delete first so is_active = false excludes it across all devices
+    await supabase.from('fiscal_ranges').update({ is_active: false }).eq('id', id);
+    // Hard delete if no FK constraints exist
     const { error } = await supabase.from('fiscal_ranges').delete().eq('id', id);
-    if (error) console.warn('Error deleting fiscal range from Supabase:', error.message);
+    if (error) console.info('Fiscal range soft-deleted in Supabase (hard delete skipped due to FK references):', error.message);
   } catch (err) {
     console.warn('Error deleting fiscal range:', err);
   }
@@ -1082,11 +1088,9 @@ export async function syncAllCloudData(tenantId: string) {
       // 6. Cash Shifts
       let shiftHistory = state.shiftHistory;
       let activeShift = state.activeShift;
-      if (liveShifts && liveShifts.length > 0) {
-        const liveIds = new Set(liveShifts.map(s => s.id));
-        const localOnly = (state.shiftHistory || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id));
+      if (liveShifts) {
         const otherTenantShifts = (state.shiftHistory || []).filter(s => s.tenantId && s.tenantId !== tenantId);
-        shiftHistory = [...liveShifts, ...localOnly, ...otherTenantShifts];
+        shiftHistory = [...liveShifts, ...otherTenantShifts];
 
         // Find active open shift for the selected caja
         const openShiftForCaja = liveShifts.find(s => s.tenantId === tenantId && s.status === 'OPEN' && (s.fiscalRangeId === selectedFiscalRangeId || !s.fiscalRangeId));
@@ -1094,7 +1098,9 @@ export async function syncAllCloudData(tenantId: string) {
           activeShift = openShiftForCaja;
         } else if (state.activeShift && state.activeShift.tenantId === tenantId) {
           const liveStatus = liveShifts.find(s => s.id === state.activeShift?.id);
-          if (liveStatus) activeShift = liveStatus;
+          activeShift = (liveStatus && liveStatus.status === 'OPEN') ? liveStatus : null;
+        } else {
+          activeShift = null;
         }
       }
 
