@@ -825,10 +825,13 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
       .eq('is_active', true);
 
     if (!error && data && data.length > 0) {
-      return data.map((r: any) => ({
+      const localState = useAppStore.getState();
+      const localRangesMap = new Map((localState.fiscalRanges || []).map(r => [r.id, r.name]));
+
+      return data.map((r: any, idx: number) => ({
         id: r.id,
         tenantId: r.tenant_id,
-        name: r.name || 'Caja Registradora',
+        name: localRangesMap.get(r.id) || r.name || `Caja ${idx + 1} - ${r.prefix || 'Principal'}`,
         cai: r.cai || '',
         prefix: r.prefix || '000-001-01-',
         rangeStart: Number(r.range_start || 1),
@@ -837,7 +840,7 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
         deadline: r.deadline || '2026-12-31',
         documentType: (r.document_type === '04' ? '04' : '01') as '01' | '04',
         isActive: r.is_active ?? true,
-        isDefault: r.is_default ?? false
+        isDefault: idx === 0
       }));
     }
 
@@ -895,7 +898,6 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
     const payload: any = {
       id: rangeUuid,
       tenant_id: range.tenantId,
-      name: range.name || 'Caja Registradora',
       cai: range.cai || '',
       prefix: range.prefix || '000-001-01-',
       range_start: range.rangeStart,
@@ -940,25 +942,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
   try {
     const state = useAppStore.getState();
 
-    // 1. Ensure tenant exists in Supabase
-    if (state.tenant && isValidUUID(state.tenant.id)) {
-      try {
-        await supabase.from('tenants').upsert({
-          id: state.tenant.id,
-          name: state.tenant.name,
-          rtn: state.tenant.rtn || null,
-          phone: state.tenant.phone || null,
-          email: state.tenant.email || null,
-          address: state.tenant.address || null,
-          business_type: state.tenant.businessType || 'RETAIL',
-          is_fiscal_enabled: state.tenant.isFiscalEnabled ?? true,
-          allow_negative_stock: state.tenant.allowNegativeStock ?? false,
-          currency_symbol: state.tenant.currencySymbol || 'L.'
-        }, { onConflict: 'id' });
-      } catch (e) {}
-    }
-
-    // 2. Push local sales (re-assigning non-UUID local IDs if needed)
+    // 1. Push local sales (re-assigning non-UUID local IDs if needed)
     const localSales = (state.sales || []).map(s => {
       const isThisTenant = !s.tenantId || s.tenantId === tenantId || s.tenantId === '00000000-0000-0000-0000-000000000001';
       if (!isThisTenant) return s;
@@ -977,7 +961,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
       await saveSaleToSupabase(sale);
     }
 
-    // 3. Push local shifts
+    // 2. Push local shifts
     const localShifts = (state.shiftHistory || []).map(s => {
       const isThisTenant = !s.tenantId || s.tenantId === tenantId || s.tenantId === '00000000-0000-0000-0000-000000000001';
       if (!isThisTenant) return s;
@@ -995,7 +979,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
       await saveCashShiftToSupabase(shift);
     }
 
-    // 4. Push local fiscal ranges
+    // 3. Push local fiscal ranges
     const localRanges = (state.fiscalRanges || []).map(r => {
       const isThisTenant = !r.tenantId || r.tenantId === tenantId || r.tenantId === '00000000-0000-0000-0000-000000000001';
       if (!isThisTenant) return r;
@@ -1024,15 +1008,13 @@ export async function syncAllCloudData(tenantId: string) {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return;
 
   try {
-    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts, liveMovements, liveExpenses] = await Promise.all([
+    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts] = await Promise.all([
       fetchProductsFromSupabase(tenantId),
       fetchSuppliersFromSupabase(tenantId),
       fetchProfilesFromSupabase(tenantId),
       fetchSalesFromSupabase(tenantId),
       fetchFiscalRangesFromSupabase(tenantId),
-      fetchShiftsFromSupabase(tenantId),
-      fetchCashMovementsFromSupabase(tenantId),
-      fetchExpensesFromSupabase(tenantId)
+      fetchShiftsFromSupabase(tenantId)
     ]);
 
     useAppStore.setState(state => {
@@ -1113,24 +1095,6 @@ export async function syncAllCloudData(tenantId: string) {
         }
       }
 
-      // 7. Cash Movements
-      let cashMovements = state.cashMovements;
-      if (liveMovements && liveMovements.length > 0) {
-        const liveIds = new Set(liveMovements.map(m => m.id));
-        const localOnly = (state.cashMovements || []).filter(m => m.tenantId === tenantId && !liveIds.has(m.id));
-        const otherTenantMovs = (state.cashMovements || []).filter(m => m.tenantId && m.tenantId !== tenantId);
-        cashMovements = [...liveMovements, ...localOnly, ...otherTenantMovs];
-      }
-
-      // 8. Expenses
-      let expenses = state.expenses;
-      if (liveExpenses && liveExpenses.length > 0) {
-        const liveIds = new Set(liveExpenses.map(e => e.id));
-        const localOnly = (state.expenses || []).filter(e => e.tenantId === tenantId && !liveIds.has(e.id));
-        const otherTenantExpenses = (state.expenses || []).filter(e => e.tenantId && e.tenantId !== tenantId);
-        expenses = [...liveExpenses, ...localOnly, ...otherTenantExpenses];
-      }
-
       return {
         products,
         suppliers,
@@ -1140,9 +1104,7 @@ export async function syncAllCloudData(tenantId: string) {
         selectedFiscalRangeId,
         fiscalRange,
         shiftHistory,
-        activeShift,
-        cashMovements,
-        expenses
+        activeShift
       };
     });
   } catch (err) {
