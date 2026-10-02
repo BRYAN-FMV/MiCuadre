@@ -835,20 +835,27 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
       .from('fiscal_ranges')
       .select('*')
       .eq('tenant_id', tenantId)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
 
     if (!error && data && data.length > 0) {
-      // Deduplicate rows by CAI & prefix to purge duplicate rows created from testing
+      // Deduplicate rows by base prefix (e.g. 000-001-01 or 000-002-01) or CAI to purge duplicate test rows
       const uniqueMap = new Map<string, any>();
       const duplicateIds: string[] = [];
 
       for (const r of data) {
-        const key = `${r.cai || ''}_${r.prefix || ''}`;
+        const rawPrefix = (r.prefix || '').trim();
+        const basePrefix = rawPrefix.split('-').slice(0, 3).join('-');
+        const key = basePrefix || (r.cai || '').trim() || r.id;
+
         if (!uniqueMap.has(key)) {
           uniqueMap.set(key, r);
         } else {
           const existing = uniqueMap.get(key);
-          if (Number(r.current_number || 0) > Number(existing.current_number || 0)) {
+          const existingScore = (Number(existing.current_number || 0) * 10) + (existing.name ? 5 : 0);
+          const currentScore = (Number(r.current_number || 0) * 10) + (r.name ? 5 : 0);
+
+          if (currentScore > existingScore) {
             duplicateIds.push(existing.id);
             uniqueMap.set(key, r);
           } else {
@@ -857,7 +864,7 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
         }
       }
 
-      // Soft-delete duplicate rows in Supabase
+      // Soft-delete duplicate rows in Supabase so they disappear permanently
       if (duplicateIds.length > 0) {
         for (const dupId of duplicateIds) {
           supabase.from('fiscal_ranges').update({ is_active: false }).eq('id', dupId).then();
@@ -874,7 +881,7 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
         return {
           id: r.id,
           tenantId: r.tenant_id,
-          name: storedName || autoName,
+          name: r.name || storedName || autoName,
           cai: r.cai || '',
           prefix: r.prefix || '000-001-01-',
           rangeStart: Number(r.range_start || 1),
@@ -883,7 +890,7 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
           deadline: r.deadline || '2026-12-31',
           documentType: (r.document_type === '04' ? '04' : '01') as '01' | '04',
           isActive: r.is_active ?? true,
-          isDefault: idx === 0
+          isDefault: r.is_default ?? (idx === 0)
         };
       });
     }
