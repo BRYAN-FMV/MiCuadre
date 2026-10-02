@@ -877,7 +877,7 @@ export const useAppStore = create<AppState>()(
     const activeShift = (state.activeShift && state.activeShift.tenantId === state.tenant.id) ? state.activeShift : null;
 
     const newSale: Sale = {
-      id: `sale-${Date.now()}`,
+      id: generateUUID(),
       tenantId: state.tenant.id,
       cashShiftId: activeShift?.id,
       documentNumber: docNumber,

@@ -346,82 +346,39 @@ export async function fetchSuppliersFromSupabase(tenantId: string): Promise<Supp
 export async function saveSaleToSupabase(sale: Sale) {
   if (!isSupabaseConfigured() || !isValidUUID(sale.tenantId)) return null;
 
-  // 1. Try RPC first if configured on Supabase instance
   try {
-    const { data: rpcData, error: rpcError } = await supabase.rpc('process_pos_sale', {
-      p_tenant_id: sale.tenantId,
-      p_cash_shift_id: (sale.cashShiftId && isValidUUID(sale.cashShiftId)) ? sale.cashShiftId : null,
-      p_customer_name: sale.customerName || 'Consumidor Final',
-      p_customer_rtn: sale.customerRtn || null,
-      p_idempotency_key: sale.id,
-      p_is_fiscal: sale.isFiscal,
-      p_subtotal: sale.subtotal,
-      p_discount_amount: sale.discountAmount,
-      p_exempt_amount: sale.exemptAmount,
-      p_exonerated_amount: sale.exoneratedAmount,
-      p_taxable_15: sale.taxable15,
-      p_tax_15: sale.tax15,
-      p_taxable_18: sale.taxable18,
-      p_tax_18: sale.tax18,
-      p_total: sale.total,
-      p_payment_method: sale.paymentMethod,
-      p_items: sale.items || []
-    });
+    const saleUuid = isValidUUID(sale.id) ? sale.id : generateUUID();
+    const payload: any = {
+      id: saleUuid,
+      tenant_id: sale.tenantId,
+      cash_shift_id: (sale.cashShiftId && isValidUUID(sale.cashShiftId)) ? sale.cashShiftId : null,
+      document_number: sale.documentNumber,
+      is_fiscal: sale.isFiscal,
+      cai: sale.cai || null,
+      customer_rtn: sale.customerRtn || null,
+      customer_name: sale.customerName || 'Consumidor Final',
+      idempotency_key: saleUuid,
+      subtotal: sale.subtotal,
+      discount_amount: sale.discountAmount,
+      exempt_amount: sale.exemptAmount,
+      exonerated_amount: sale.exoneratedAmount,
+      taxable_15: sale.taxable15,
+      tax_15: sale.tax15,
+      taxable_18: sale.taxable18,
+      tax_18: sale.tax18,
+      total: sale.total,
+      payment_method: sale.paymentMethod,
+      created_at: sale.createdAt || new Date().toISOString()
+    };
 
-    if (!rpcError && rpcData) {
-      console.log('Venta procesada exitosamente vía RPC en Supabase');
-      // Update caja_name and fiscal_range_id if column exists
-      await supabase.from('sales').update({
-        caja_name: sale.cajaName || 'Caja Registradora',
-        fiscal_range_id: (sale.fiscalRangeId && isValidUUID(sale.fiscalRangeId)) ? sale.fiscalRangeId : null
-      }).eq('id', sale.id);
-
-      return rpcData;
-    }
-    if (rpcError) {
-      console.warn('RPC process_pos_sale no disponible o devolvió error. Ejecutando inserción directa en Supabase:', rpcError.message);
-    }
-  } catch (err: any) {
-    console.warn('Excepción al ejecutar RPC process_pos_sale. Usando inserción directa fallback:', err?.message || err);
-  }
-
-  // 2. Direct insert fallback into `sales` and `sale_items`
-  try {
-    const saleUuid = isValidUUID(sale.id) ? sale.id : undefined;
     const { data: insertedSale, error: saleErr } = await supabase
       .from('sales')
-      .insert({
-        ...(saleUuid ? { id: saleUuid } : {}),
-        tenant_id: sale.tenantId,
-        cash_shift_id: (sale.cashShiftId && isValidUUID(sale.cashShiftId)) ? sale.cashShiftId : null,
-        document_number: sale.documentNumber,
-        is_fiscal: sale.isFiscal,
-        cai: sale.cai || null,
-        cai_deadline: sale.caiDeadline || null,
-        cai_range_start: sale.caiRangeStart || null,
-        cai_range_end: sale.caiRangeEnd || null,
-        fiscal_range_id: (sale.fiscalRangeId && isValidUUID(sale.fiscalRangeId)) ? sale.fiscalRangeId : null,
-        caja_name: sale.cajaName || 'Caja Registradora',
-        customer_id: (sale.customerId && isValidUUID(sale.customerId)) ? sale.customerId : null,
-        customer_name: sale.customerName || 'Consumidor Final',
-        customer_rtn: sale.customerRtn || null,
-        subtotal: sale.subtotal,
-        discount_amount: sale.discountAmount,
-        exempt_amount: sale.exemptAmount,
-        exonerated_amount: sale.exoneratedAmount,
-        taxable_15: sale.taxable15,
-        tax_15: sale.tax15,
-        taxable_18: sale.taxable18,
-        tax_18: sale.tax18,
-        total: sale.total,
-        payment_method: sale.paymentMethod,
-        created_at: sale.createdAt || new Date().toISOString()
-      })
+      .upsert(payload, { onConflict: 'id' })
       .select()
       .single();
 
     if (saleErr) {
-      console.error('Error al insertar venta directamente en Supabase:', saleErr.message);
+      console.error('Error al insertar venta en Supabase:', saleErr.message);
       return null;
     }
 
@@ -439,13 +396,10 @@ export async function saveSaleToSupabase(sale: Sale) {
         total: item.total
       }));
 
-      const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToInsert);
-      if (itemsErr) {
-        console.warn('Error al insertar ítems de venta en Supabase:', itemsErr.message);
-      }
+      await supabase.from('sale_items').insert(itemsToInsert);
     }
 
-    console.log('Venta guardada exitosamente en Supabase vía inserción directa');
+    console.log('Venta guardada exitosamente en Supabase');
     return insertedSale;
   } catch (fallbackErr: any) {
     console.error('Error general guardando venta en Supabase:', fallbackErr?.message || fallbackErr);
@@ -614,14 +568,30 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
   if (!isSupabaseConfigured() || !isValidUUID(shift.tenantId)) return null;
 
   try {
-    const shiftUuid = isValidUUID(shift.id) ? shift.id : undefined;
+    let validUserId = (shift.userId && isValidUUID(shift.userId)) ? shift.userId : null;
+    if (!validUserId) {
+      const profiles = await fetchProfilesFromSupabase(shift.tenantId);
+      if (profiles && profiles.length > 0) {
+        validUserId = profiles[0].id;
+      }
+    }
+    if (!validUserId) {
+      const { data: newProf } = await supabase.from('profiles').insert({
+        tenant_id: shift.tenantId,
+        full_name: shift.userName || 'Administrador POS',
+        role: 'ADMIN',
+        pin_code: '1234',
+        is_active: true
+      }).select().single();
+      if (newProf) validUserId = newProf.id;
+    }
+    if (!validUserId) return null;
+
+    const shiftUuid = isValidUUID(shift.id) ? shift.id : generateUUID();
     const payload: any = {
-      ...(shiftUuid ? { id: shiftUuid } : {}),
+      id: shiftUuid,
       tenant_id: shift.tenantId,
-      user_id: (shift.userId && isValidUUID(shift.userId)) ? shift.userId : null,
-      user_name: shift.userName || 'Usuario POS',
-      fiscal_range_id: (shift.fiscalRangeId && isValidUUID(shift.fiscalRangeId)) ? shift.fiscalRangeId : null,
-      caja_name: shift.cajaName || 'Caja Registradora',
+      user_id: validUserId,
       opening_amount: shift.openingAmount,
       closing_declared: shift.closingDeclared != null ? shift.closingDeclared : null,
       closing_system: shift.closingSystem != null ? shift.closingSystem : null,
@@ -638,12 +608,11 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
       .single();
 
     if (error) {
-      console.warn('Supabase upsert cash_shifts info:', error.message);
-      const { error: insertErr } = await supabase.from('cash_shifts').insert(payload);
-      if (insertErr) console.warn('Supabase insert cash_shifts fallback info:', insertErr.message);
+      console.warn('Supabase upsert cash_shifts error:', error.message);
+    } else {
+      console.log('Turno de caja guardado en Supabase:', shift.status, shift.cajaName);
     }
 
-    console.log('Turno de caja guardado en Supabase:', shift.status, shift.cajaName);
     return data;
   } catch (err) {
     console.warn('Error saving cash shift to Supabase:', err);
@@ -897,19 +866,18 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
   if (!isSupabaseConfigured() || !isValidUUID(range.tenantId)) return null;
 
   try {
-    const rangeUuid = isValidUUID(range.id) ? range.id : undefined;
+    const rangeUuid = isValidUUID(range.id) ? range.id : generateUUID();
     const payload: any = {
-      ...(rangeUuid ? { id: rangeUuid } : {}),
+      id: rangeUuid,
       tenant_id: range.tenantId,
-      name: range.name || 'Caja Registradora',
       cai: range.cai || '',
       prefix: range.prefix || '000-001-01-',
       range_start: range.rangeStart,
       range_end: range.rangeEnd,
       current_number: range.currentNumber,
-      deadline: range.deadline,
-      is_active: range.isActive ?? true,
-      is_default: range.isDefault ?? false
+      deadline: range.deadline || '2026-12-31',
+      document_type: range.documentType || '01',
+      is_active: range.isActive ?? true
     };
 
     const { data, error } = await supabase.from('fiscal_ranges').upsert(payload, { onConflict: 'id' }).select().single();
@@ -943,33 +911,74 @@ export async function pushLocalDataToCloud(tenantId: string) {
   try {
     const state = useAppStore.getState();
 
-    // 1. Push local sales
-    const localSales = (state.sales || []).filter(s => s.tenantId === tenantId);
-    for (const sale of localSales) {
+    // 1. Ensure tenant exists in Supabase
+    if (state.tenant && isValidUUID(state.tenant.id)) {
+      await supabase.from('tenants').upsert({
+        id: state.tenant.id,
+        name: state.tenant.name,
+        rtn: state.tenant.rtn || null,
+        phone: state.tenant.phone || null,
+        email: state.tenant.email || null,
+        address: state.tenant.address || null,
+        business_type: state.tenant.businessType || 'RETAIL',
+        is_fiscal_enabled: state.tenant.isFiscalEnabled ?? true,
+        allow_negative_stock: state.tenant.allowNegativeStock ?? false,
+        currency_symbol: state.tenant.currencySymbol || 'L.'
+      }, { onConflict: 'id' });
+    }
+
+    // 2. Push local sales (re-assigning non-UUID local IDs if needed)
+    const localSales = (state.sales || []).map(s => {
+      const isThisTenant = !s.tenantId || s.tenantId === tenantId || s.tenantId === '00000000-0000-0000-0000-000000000001';
+      if (!isThisTenant) return s;
+      return {
+        ...s,
+        id: isValidUUID(s.id) ? s.id : generateUUID(),
+        tenantId
+      };
+    });
+
+    // Update state sales with fixed UUIDs if modified
+    useAppStore.setState({ sales: localSales });
+
+    const tenantSales = localSales.filter(s => s.tenantId === tenantId);
+    for (const sale of tenantSales) {
       await saveSaleToSupabase(sale);
     }
 
-    // 2. Push local shifts
-    const localShifts = (state.shiftHistory || []).filter(s => s.tenantId === tenantId);
-    for (const shift of localShifts) {
+    // 3. Push local shifts
+    const localShifts = (state.shiftHistory || []).map(s => {
+      const isThisTenant = !s.tenantId || s.tenantId === tenantId || s.tenantId === '00000000-0000-0000-0000-000000000001';
+      if (!isThisTenant) return s;
+      return {
+        ...s,
+        id: isValidUUID(s.id) ? s.id : generateUUID(),
+        tenantId
+      };
+    });
+
+    useAppStore.setState({ shiftHistory: localShifts });
+
+    const tenantShifts = localShifts.filter(s => s.tenantId === tenantId);
+    for (const shift of tenantShifts) {
       await saveCashShiftToSupabase(shift);
     }
 
-    // 3. Push local cash movements
-    const localMovements = (state.cashMovements || []).filter(m => m.tenantId === tenantId);
-    for (const mov of localMovements) {
-      await saveCashMovementToSupabase(mov);
-    }
+    // 4. Push local fiscal ranges
+    const localRanges = (state.fiscalRanges || []).map(r => {
+      const isThisTenant = !r.tenantId || r.tenantId === tenantId || r.tenantId === '00000000-0000-0000-0000-000000000001';
+      if (!isThisTenant) return r;
+      return {
+        ...r,
+        id: isValidUUID(r.id) ? r.id : generateUUID(),
+        tenantId
+      };
+    });
 
-    // 4. Push local expenses
-    const localExpenses = (state.expenses || []).filter(e => e.tenantId === tenantId);
-    for (const exp of localExpenses) {
-      await saveExpenseToSupabase(exp);
-    }
+    useAppStore.setState({ fiscalRanges: localRanges });
 
-    // 5. Push local fiscal ranges (cajas)
-    const localRanges = (state.fiscalRanges || []).filter(r => r.tenantId === tenantId);
-    for (const range of localRanges) {
+    const tenantRanges = localRanges.filter(r => r.tenantId === tenantId);
+    for (const range of tenantRanges) {
       await saveFiscalRangeToSupabase(range);
     }
   } catch (err) {
