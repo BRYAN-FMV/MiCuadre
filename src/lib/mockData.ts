@@ -98,7 +98,7 @@ export const INITIAL_PROFILES: UserProfile[] = [
 
 export const INITIAL_FISCAL_RANGES: FiscalRange[] = [
   {
-    id: 'fiscal-range-001',
+    id: '11111111-1111-1111-1111-111111111101',
     tenantId: '00000000-0000-0000-0000-000000000001',
     name: 'Caja 1 - Principal',
     cai: 'E83910-149BF1-9243E9-913210-9182C1-02',
@@ -112,7 +112,7 @@ export const INITIAL_FISCAL_RANGES: FiscalRange[] = [
     isDefault: true
   },
   {
-    id: 'fiscal-range-002',
+    id: '11111111-1111-1111-1111-111111111102',
     tenantId: '00000000-0000-0000-0000-000000000001',
     name: 'Caja 2 - Expreso',
     cai: 'F94021-250CF2-0354F0-024321-0293D2-03',

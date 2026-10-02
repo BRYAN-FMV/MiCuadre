@@ -386,9 +386,10 @@ export const useAppStore = create<AppState>()(
       }),
 
       addFiscalRange: (rangeData) => set((state) => {
+        const rangeId = generateUUID();
         const newRange: FiscalRange = {
           ...rangeData,
-          id: generateUUID(),
+          id: rangeId,
           tenantId: state.tenant.id,
           isDefault: rangeData.isDefault || (state.fiscalRanges || []).length === 0
         };
@@ -402,7 +403,15 @@ export const useAppStore = create<AppState>()(
         const activeRange = updatedRanges.find(r => r.id === activeSelectedId) || newRange;
 
         if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
-          saveFiscalRangeToSupabase(newRange).catch(err => console.warn('Supabase save fiscal range info:', err));
+          saveFiscalRangeToSupabase(newRange).then(saved => {
+            if (saved && saved.id && saved.id !== rangeId) {
+              useAppStore.setState(s => ({
+                fiscalRanges: (s.fiscalRanges || []).map(r => r.id === rangeId ? { ...r, id: saved.id } : r),
+                selectedFiscalRangeId: s.selectedFiscalRangeId === rangeId ? saved.id : s.selectedFiscalRangeId,
+                fiscalRange: s.fiscalRange.id === rangeId ? { ...s.fiscalRange, id: saved.id } : s.fiscalRange
+              }));
+            }
+          }).catch(err => console.warn('Supabase save fiscal range info:', err));
         }
 
         return {
@@ -428,7 +437,7 @@ export const useAppStore = create<AppState>()(
 
         let updatedRanges = (state.fiscalRanges || [state.fiscalRange]).map(r => {
           if (r.id === targetId) {
-            updatedTarget = { ...r, ...updateData };
+            updatedTarget = { ...r, ...updateData, tenantId: r.tenantId || state.tenant.id };
             return updatedTarget;
           }
           if (updateData.isDefault) {
@@ -438,7 +447,15 @@ export const useAppStore = create<AppState>()(
         });
 
         if (updatedTarget && isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
-          saveFiscalRangeToSupabase(updatedTarget).catch(err => console.warn('Supabase update fiscal range info:', err));
+          saveFiscalRangeToSupabase(updatedTarget).then(saved => {
+            if (saved && saved.id && saved.id !== targetId) {
+              useAppStore.setState(s => ({
+                fiscalRanges: (s.fiscalRanges || []).map(r => r.id === targetId ? { ...r, id: saved.id } : r),
+                selectedFiscalRangeId: s.selectedFiscalRangeId === targetId ? saved.id : s.selectedFiscalRangeId,
+                fiscalRange: s.fiscalRange.id === targetId ? { ...s.fiscalRange, id: saved.id } : s.fiscalRange
+              }));
+            }
+          }).catch(err => console.warn('Supabase update fiscal range info:', err));
         }
 
         const activeSelectedId = state.selectedFiscalRangeId || state.fiscalRange.id;
@@ -721,7 +738,7 @@ export const useAppStore = create<AppState>()(
     // Check if there is already an open shift for this specific caja by another session
     const existingOpenShift = (state.shiftHistory || []).find(
       s => s.tenantId === state.tenant.id &&
-           (s.fiscalRangeId === targetCajaId || s.cajaName === activeCaja?.name) &&
+           s.fiscalRangeId === targetCajaId &&
            s.status === 'OPEN'
     );
 

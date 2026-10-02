@@ -1080,9 +1080,14 @@ export async function syncAllCloudData(tenantId: string) {
       if (liveRanges && liveRanges.length > 0) {
         const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== tenantId);
         fiscalRanges = [...liveRanges, ...otherRanges];
-        const currentSelected = fiscalRanges.find(r => r.id === state.selectedFiscalRangeId) || liveRanges[0];
-        selectedFiscalRangeId = currentSelected.id;
-        fiscalRange = currentSelected;
+        if (state.selectedFiscalRangeId === 'VIEW_MODE_ADMIN') {
+          selectedFiscalRangeId = 'VIEW_MODE_ADMIN';
+          fiscalRange = liveRanges[0];
+        } else {
+          const currentSelected = fiscalRanges.find(r => r.id === state.selectedFiscalRangeId) || liveRanges[0];
+          selectedFiscalRangeId = currentSelected.id;
+          fiscalRange = currentSelected;
+        }
       }
 
       // 6. Cash Shifts
@@ -1092,15 +1097,19 @@ export async function syncAllCloudData(tenantId: string) {
         const otherTenantShifts = (state.shiftHistory || []).filter(s => s.tenantId && s.tenantId !== tenantId);
         shiftHistory = [...liveShifts, ...otherTenantShifts];
 
-        // Find active open shift for the selected caja
-        const openShiftForCaja = liveShifts.find(s => s.tenantId === tenantId && s.status === 'OPEN' && (s.fiscalRangeId === selectedFiscalRangeId || !s.fiscalRangeId));
-        if (openShiftForCaja) {
-          activeShift = openShiftForCaja;
-        } else if (state.activeShift && state.activeShift.tenantId === tenantId) {
-          const liveStatus = liveShifts.find(s => s.id === state.activeShift?.id);
-          activeShift = (liveStatus && liveStatus.status === 'OPEN') ? liveStatus : null;
-        } else {
+        if (selectedFiscalRangeId === 'VIEW_MODE_ADMIN') {
           activeShift = null;
+        } else {
+          // Find active open shift for the selected caja strictly by ID
+          const openShiftForCaja = liveShifts.find(s => s.tenantId === tenantId && s.status === 'OPEN' && s.fiscalRangeId === selectedFiscalRangeId);
+          if (openShiftForCaja) {
+            activeShift = openShiftForCaja;
+          } else if (state.activeShift && state.activeShift.tenantId === tenantId) {
+            const liveStatus = liveShifts.find(s => s.id === state.activeShift?.id);
+            activeShift = (liveStatus && liveStatus.status === 'OPEN') ? liveStatus : null;
+          } else {
+            activeShift = null;
+          }
         }
       }
 

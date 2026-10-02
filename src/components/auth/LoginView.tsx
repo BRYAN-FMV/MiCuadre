@@ -186,15 +186,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       }
 
       // Check if chosen terminal/caja is currently occupied on another device
-      const shiftHistory = useAppStore.getState().shiftHistory || [];
-      const openShiftsForTenant = shiftHistory.filter(s => s.tenantId === matchedTenant.id && s.status === 'OPEN');
-      const targetCaja = (fiscalRanges || []).find(r => r.id === selectedFiscalRangeId);
-      const occupiedShift = openShiftsForTenant.find(s => (s.fiscalRangeId === targetCaja?.id || s.cajaName === targetCaja?.name) && s.status === 'OPEN');
+      if (selectedFiscalRangeId !== 'VIEW_MODE_ADMIN') {
+        const shiftHistory = useAppStore.getState().shiftHistory || [];
+        const openShiftsForTenant = shiftHistory.filter(s => s.tenantId === matchedTenant.id && s.status === 'OPEN');
+        const targetCaja = (fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === matchedTenant.id).find(r => r.id === selectedFiscalRangeId);
+        const occupiedShift = targetCaja ? openShiftsForTenant.find(s => s.fiscalRangeId === targetCaja.id && s.status === 'OPEN') : undefined;
 
-      if (occupiedShift && occupiedShift.userId !== selectedProfile.id) {
-        toast.error(`La terminal "${targetCaja?.name || 'Caja'}" ya está siendo operada en otro dispositivo por ${occupiedShift.userName}. Selecciona una caja disponible o ingresa en Modo Vista.`);
-        setIsLoading(false);
-        return;
+        if (occupiedShift && occupiedShift.userId !== selectedProfile.id) {
+          toast.error(`La terminal "${targetCaja?.name || 'Caja'}" ya está siendo operada en otro dispositivo por ${occupiedShift.userName}. Selecciona una caja disponible o ingresa en Modo Vista.`);
+          setIsLoading(false);
+          return;
+        }
       }
 
       toast.success(`Bienvenido a ${matchedTenant.name}, ${selectedProfile.fullName}`);
