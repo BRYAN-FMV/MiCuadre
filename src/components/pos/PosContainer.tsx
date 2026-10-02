@@ -5,7 +5,7 @@ import { generateEscPosReceipt } from '../../lib/escPos';
 import { toast } from 'sonner';
 import {
   Search, ShoppingCart, UserCheck, Trash2, Plus, Minus,
-  CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus
+  CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2
 } from 'lucide-react';
 import { Sale, Product, CartLine, Customer } from '../../types';
 
@@ -16,6 +16,7 @@ export const PosContainer: React.FC = () => {
   const customers = useAppStore(state => state.customers);
   const heldOrders = useAppStore(state => state.heldOrders);
   const tenant = useAppStore(state => state.tenant);
+  const currentUser = useAppStore(state => state.currentUser);
   const activeShift = useAppStore(state => state.activeShift);
   const fiscalRange = useAppStore(state => state.fiscalRange);
   const fiscalRanges = useAppStore(state => state.fiscalRanges) || [];
@@ -285,29 +286,41 @@ export const PosContainer: React.FC = () => {
               </button>
             )}
 
-            {tenant.isFiscalEnabled && tenantFiscalRanges.length > 0 && (
-              <select
-                value={selectedFiscalRangeId || tenantFiscalRanges[0]?.id}
-                onChange={(e) => setSelectedFiscalRange(e.target.value)}
+            {tenant.isFiscalEnabled && (
+              <div
                 style={{
-                  padding: '0.4rem 0.65rem',
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.4rem 0.75rem',
                   borderRadius: '8px',
-                  border: '1px solid #0284c7',
-                  background: '#f0f9ff',
-                  color: '#0369a1',
-                  cursor: 'pointer',
-                  outline: 'none'
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  color: '#0f172a',
+                  fontSize: '0.8rem',
+                  fontWeight: 700
                 }}
-                title="Caja Registradora / Rango Fiscal Activo"
+                title={`Caja Registradora asignada a esta máquina (${fiscalRange?.name || 'Caja 1'})`}
               >
-                {tenantFiscalRanges.map(fr => (
-                  <option key={fr.id} value={fr.id}>
-                    {fr.name || 'Caja Registradora'} ({fr.prefix})
-                  </option>
-                ))}
-              </select>
+                <Lock size={14} style={{ color: 'var(--accent-primary)' }} />
+                <span>{fiscalRange?.name ? (fiscalRange.name.startsWith('Caja') ? fiscalRange.name : `Caja ${fiscalRange.name}`) : 'Caja 1'}</span>
+                {currentUser?.role === 'ADMIN' && tenantFiscalRanges.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextRange = tenantFiscalRanges.find(r => r.id !== fiscalRange?.id) || tenantFiscalRanges[0];
+                      if (nextRange) {
+                        setSelectedFiscalRange(nextRange.id);
+                        toast.info(`Terminal reconfigurado a ${nextRange.name}`);
+                      }
+                    }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '0 2px', marginLeft: '0.2rem' }}
+                    title="Cambiar caja asignada a esta PC (Solo Admin)"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                )}
+              </div>
             )}
 
             <div className="desktop-shortcuts" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>

@@ -146,7 +146,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
 
       setCurrentUser(selectedProfile);
       toast.success(`Bienvenido a ${matchedTenant.name}, ${selectedProfile.fullName}`);
-      useAppStore.setState({ isAuthenticated: true, isDevMode: false });
+      
+      const currentActiveShift = useAppStore.getState().activeShift;
+      const isShiftOpen = currentActiveShift && currentActiveShift.tenantId === matchedTenant.id && currentActiveShift.status === 'OPEN';
+      const isNonAdmin = selectedProfile.role !== 'ADMIN';
+
+      useAppStore.setState({ 
+        isAuthenticated: true, 
+        isDevMode: false,
+        isShiftModalOpen: isNonAdmin && !isShiftOpen
+      });
     } catch (err) {
       console.error('Error al iniciar sesión:', err);
       toast.error('Error al verificar credenciales. Intenta de nuevo.');

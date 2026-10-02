@@ -16,6 +16,7 @@ import { calculateLineTotals, calculateCartTotals, calculateCPP } from '../lib/m
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
 import { processPosSaleSupabase, closeCashShiftSupabase } from '../lib/supabaseService';
+import { toast } from 'sonner';
 
 export interface HeldOrder {
   id: string;
@@ -208,7 +209,20 @@ export const useAppStore = create<AppState>()(
       setMobileSidebarOpen: (open) => set({ isMobileSidebarOpen: open }),
       toggleMobileSidebar: () => set((s) => ({ isMobileSidebarOpen: !s.isMobileSidebarOpen })),
 
-      logout: () => set({ isAuthenticated: false, isDevMode: false }),
+      logout: () => {
+        const state = get();
+        const activeShift = state.activeShift;
+        const isShiftOpen = activeShift && activeShift.tenantId === state.tenant.id && activeShift.status === 'OPEN';
+        const isNonAdmin = state.currentUser?.role !== 'ADMIN';
+
+        if (isNonAdmin && isShiftOpen) {
+          toast.warning('Debes realizar el Arqueo Ciego y Cierre Z de caja antes de cerrar sesión.', { duration: 5000 });
+          set({ isShiftModalOpen: true });
+          return;
+        }
+
+        set({ isAuthenticated: false, isDevMode: false });
+      },
       setActiveTab: (tab) => set({ activeTab: tab }),
       setDevMode: (enabled) => set({ isDevMode: enabled }),
       setCurrentUser: (user) => set({ currentUser: user, isAuthenticated: true }),
@@ -336,6 +350,9 @@ export const useAppStore = create<AppState>()(
         const ranges = state.fiscalRanges || [state.fiscalRange];
         const found = ranges.find(r => r.id === id);
         if (!found) return state;
+        try {
+          localStorage.setItem('micuadre_assigned_caja_id', id);
+        } catch (err) {}
         return {
           selectedFiscalRangeId: id,
           fiscalRange: found
