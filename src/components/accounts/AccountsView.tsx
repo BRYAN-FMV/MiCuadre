@@ -278,7 +278,7 @@ export const AccountsView: React.FC = () => {
       </div>
 
       {/* Navigation Sub-Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.2rem' }}>
+      <div className="subtab-nav-container" style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.2rem' }}>
         <button
           onClick={() => setActiveSubTab('customers')}
           style={{

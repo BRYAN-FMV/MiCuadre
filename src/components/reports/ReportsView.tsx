@@ -309,8 +309,8 @@ export const ReportsView: React.FC = () => {
         </div>
 
         {/* Global SubTab & Controls Header */}
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: '0.35rem', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #cbd5e1', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+          <div className="subtab-nav-container" style={{ display: 'flex', gap: '0.35rem', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
             <button
               className="btn"
               onClick={() => setMainSubTab('sales')}

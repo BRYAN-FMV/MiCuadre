@@ -66,7 +66,7 @@ export const Header: React.FC = () => {
         <div className="user-badge" style={{ padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)' }}>
           <div className="status-dot"></div>
           <User size={16} style={{ color: '#ffffff' }} />
-          <span style={{ color: '#ffffff', fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+          <span className="top-bar-user-name" style={{ color: '#ffffff', fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
             {currentUser?.fullName || 'Usuario'}
           </span>
         </div>

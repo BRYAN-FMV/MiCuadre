@@ -64,7 +64,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button
               onClick={onEnterDemo}
-              className="landing-btn-demo"
+              className="landing-btn-demo btn-text-responsive-hide"
             >
               <Building2 size={16} style={{ color: '#059669' }} />
               <span>Ver Demo</span>
