@@ -23,7 +23,9 @@ import {
   fetchProfilesFromSupabase,
   fetchTenantsFromSupabase,
   fetchSalesFromSupabase,
-  fetchFiscalRangesFromSupabase
+  fetchFiscalRangesFromSupabase,
+  pushLocalDataToCloud,
+  syncAllCloudData
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -158,59 +160,20 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     if (isSupabaseConfigured() && tenant?.id) {
-      fetchProductsFromSupabase(tenant.id).then(liveProducts => {
-        if (liveProducts && liveProducts.length > 0) {
-          useAppStore.setState(state => {
-            const otherProducts = state.products.filter(p => p.tenantId && p.tenantId !== tenant.id);
-            return { products: [...liveProducts, ...otherProducts] };
-          });
-        }
+      // 1. Push any local test/offline records to cloud
+      pushLocalDataToCloud(tenant.id).then(() => {
+        // 2. Initial cloud state hydration
+        syncAllCloudData(tenant.id);
       });
 
-      fetchSuppliersFromSupabase(tenant.id).then(liveSuppliers => {
-        if (liveSuppliers && liveSuppliers.length > 0) {
-          useAppStore.setState(state => {
-            const otherSuppliers = state.suppliers.filter(s => s.tenantId && s.tenantId !== tenant.id);
-            return { suppliers: [...liveSuppliers, ...otherSuppliers] };
-          });
-        }
-      });
+      // 3. Periodic cloud polling every 8 seconds for real-time multi-device sync
+      const syncInterval = setInterval(() => {
+        syncAllCloudData(tenant.id);
+      }, 8000);
 
-      fetchProfilesFromSupabase(tenant.id).then(liveProfiles => {
-        if (liveProfiles && liveProfiles.length > 0) {
-          useAppStore.setState(state => {
-            const otherProfiles = state.profiles.filter(p => p.tenantId && p.tenantId !== tenant.id);
-            return { profiles: [...liveProfiles, ...otherProfiles] };
-          });
-        }
-      });
-
-      fetchSalesFromSupabase(tenant.id).then(liveSales => {
-        if (liveSales && liveSales.length > 0) {
-          useAppStore.setState(state => {
-            const liveIds = new Set(liveSales.map(ls => ls.id));
-            const localOnly = (state.sales || []).filter(s => !liveIds.has(s.id));
-            return { sales: [...liveSales, ...localOnly] };
-          });
-        }
-      });
-
-      fetchFiscalRangesFromSupabase(tenant.id).then(liveRanges => {
-        if (liveRanges && liveRanges.length > 0) {
-          useAppStore.setState(state => {
-            const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== tenant.id);
-            const updatedRanges = [...liveRanges, ...otherRanges];
-            const currentSelected = updatedRanges.find(r => r.id === state.selectedFiscalRangeId) || liveRanges[0];
-            return {
-              fiscalRanges: updatedRanges,
-              selectedFiscalRangeId: currentSelected.id,
-              fiscalRange: currentSelected
-            };
-          });
-        }
-      });
+      return () => clearInterval(syncInterval);
     }
-  }, [tenant.id]);
+  }, [tenant?.id, isAuthenticated]);
 
   // Handle dedicated SuperAdmin Route (/admin)
   if (isAdminRoute) {

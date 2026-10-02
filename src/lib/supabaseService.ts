@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from './supabase';
 import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
+import { useAppStore } from '../store/useAppStore';
 
 /**
  * Seed initial sample products and tenant to Supabase when database is empty
@@ -930,6 +931,172 @@ export async function deleteFiscalRangeSupabase(id: string) {
     if (error) console.warn('Error deleting fiscal range from Supabase:', error.message);
   } catch (err) {
     console.warn('Error deleting fiscal range:', err);
+  }
+}
+
+/**
+ * Pushes any un-synced local sales, shifts, cash movements, and expenses to Supabase
+ */
+export async function pushLocalDataToCloud(tenantId: string) {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return;
+
+  try {
+    const state = useAppStore.getState();
+
+    // 1. Push local sales
+    const localSales = (state.sales || []).filter(s => s.tenantId === tenantId);
+    for (const sale of localSales) {
+      await saveSaleToSupabase(sale);
+    }
+
+    // 2. Push local shifts
+    const localShifts = (state.shiftHistory || []).filter(s => s.tenantId === tenantId);
+    for (const shift of localShifts) {
+      await saveCashShiftToSupabase(shift);
+    }
+
+    // 3. Push local cash movements
+    const localMovements = (state.cashMovements || []).filter(m => m.tenantId === tenantId);
+    for (const mov of localMovements) {
+      await saveCashMovementToSupabase(mov);
+    }
+
+    // 4. Push local expenses
+    const localExpenses = (state.expenses || []).filter(e => e.tenantId === tenantId);
+    for (const exp of localExpenses) {
+      await saveExpenseToSupabase(exp);
+    }
+
+    // 5. Push local fiscal ranges (cajas)
+    const localRanges = (state.fiscalRanges || []).filter(r => r.tenantId === tenantId);
+    for (const range of localRanges) {
+      await saveFiscalRangeToSupabase(range);
+    }
+  } catch (err) {
+    console.warn('Error en pushLocalDataToCloud:', err);
+  }
+}
+
+/**
+ * Downloads and synchronizes full business state across devices
+ */
+export async function syncAllCloudData(tenantId: string) {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return;
+
+  try {
+    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts, liveMovements, liveExpenses] = await Promise.all([
+      fetchProductsFromSupabase(tenantId),
+      fetchSuppliersFromSupabase(tenantId),
+      fetchProfilesFromSupabase(tenantId),
+      fetchSalesFromSupabase(tenantId),
+      fetchFiscalRangesFromSupabase(tenantId),
+      fetchShiftsFromSupabase(tenantId),
+      fetchCashMovementsFromSupabase(tenantId),
+      fetchExpensesFromSupabase(tenantId)
+    ]);
+
+    useAppStore.setState(state => {
+      // 1. Products
+      let products = state.products;
+      if (liveProducts && liveProducts.length > 0) {
+        const liveIds = new Set(liveProducts.map(p => p.id));
+        const localOnly = state.products.filter(p => p.tenantId === tenantId && !liveIds.has(p.id));
+        const otherTenantProds = state.products.filter(p => p.tenantId && p.tenantId !== tenantId);
+        products = [...liveProducts, ...localOnly, ...otherTenantProds];
+      }
+
+      // 2. Suppliers
+      let suppliers = state.suppliers;
+      if (liveSuppliers && liveSuppliers.length > 0) {
+        const liveIds = new Set(liveSuppliers.map(s => s.id));
+        const localOnly = state.suppliers.filter(s => s.tenantId === tenantId && !liveIds.has(s.id));
+        const otherTenantSuppliers = state.suppliers.filter(s => s.tenantId && s.tenantId !== tenantId);
+        suppliers = [...liveSuppliers, ...localOnly, ...otherTenantSuppliers];
+      }
+
+      // 3. Profiles
+      let profiles = state.profiles;
+      if (liveProfiles && liveProfiles.length > 0) {
+        const liveIds = new Set(liveProfiles.map(p => p.id));
+        const localOnly = state.profiles.filter(p => p.tenantId === tenantId && !liveIds.has(p.id));
+        const otherTenantProfiles = state.profiles.filter(p => p.tenantId && p.tenantId !== tenantId);
+        profiles = [...liveProfiles, ...localOnly, ...otherTenantProfiles];
+      }
+
+      // 4. Sales
+      let sales = state.sales;
+      if (liveSales && liveSales.length > 0) {
+        const liveIds = new Set(liveSales.map(s => s.id));
+        const localOnly = (state.sales || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id));
+        const otherTenantSales = (state.sales || []).filter(s => s.tenantId && s.tenantId !== tenantId);
+        sales = [...liveSales, ...localOnly, ...otherTenantSales];
+      }
+
+      // 5. Fiscal Ranges (Cajas)
+      let fiscalRanges = state.fiscalRanges;
+      let selectedFiscalRangeId = state.selectedFiscalRangeId;
+      let fiscalRange = state.fiscalRange;
+      if (liveRanges && liveRanges.length > 0) {
+        const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== tenantId);
+        fiscalRanges = [...liveRanges, ...otherRanges];
+        const currentSelected = fiscalRanges.find(r => r.id === state.selectedFiscalRangeId) || liveRanges[0];
+        selectedFiscalRangeId = currentSelected.id;
+        fiscalRange = currentSelected;
+      }
+
+      // 6. Cash Shifts
+      let shiftHistory = state.shiftHistory;
+      let activeShift = state.activeShift;
+      if (liveShifts && liveShifts.length > 0) {
+        const liveIds = new Set(liveShifts.map(s => s.id));
+        const localOnly = (state.shiftHistory || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id));
+        const otherTenantShifts = (state.shiftHistory || []).filter(s => s.tenantId && s.tenantId !== tenantId);
+        shiftHistory = [...liveShifts, ...localOnly, ...otherTenantShifts];
+
+        // Find active open shift for the selected caja
+        const openShiftForCaja = liveShifts.find(s => s.tenantId === tenantId && s.status === 'OPEN' && (s.fiscalRangeId === selectedFiscalRangeId || !s.fiscalRangeId));
+        if (openShiftForCaja) {
+          activeShift = openShiftForCaja;
+        } else if (state.activeShift && state.activeShift.tenantId === tenantId) {
+          const liveStatus = liveShifts.find(s => s.id === state.activeShift?.id);
+          if (liveStatus) activeShift = liveStatus;
+        }
+      }
+
+      // 7. Cash Movements
+      let cashMovements = state.cashMovements;
+      if (liveMovements && liveMovements.length > 0) {
+        const liveIds = new Set(liveMovements.map(m => m.id));
+        const localOnly = (state.cashMovements || []).filter(m => m.tenantId === tenantId && !liveIds.has(m.id));
+        const otherTenantMovs = (state.cashMovements || []).filter(m => m.tenantId && m.tenantId !== tenantId);
+        cashMovements = [...liveMovements, ...localOnly, ...otherTenantMovs];
+      }
+
+      // 8. Expenses
+      let expenses = state.expenses;
+      if (liveExpenses && liveExpenses.length > 0) {
+        const liveIds = new Set(liveExpenses.map(e => e.id));
+        const localOnly = (state.expenses || []).filter(e => e.tenantId === tenantId && !liveIds.has(e.id));
+        const otherTenantExpenses = (state.expenses || []).filter(e => e.tenantId && e.tenantId !== tenantId);
+        expenses = [...liveExpenses, ...localOnly, ...otherTenantExpenses];
+      }
+
+      return {
+        products,
+        suppliers,
+        profiles,
+        sales,
+        fiscalRanges,
+        selectedFiscalRangeId,
+        fiscalRange,
+        shiftHistory,
+        activeShift,
+        cashMovements,
+        expenses
+      };
+    });
+  } catch (err) {
+    console.warn('Error en syncAllCloudData:', err);
   }
 }
 
