@@ -50,6 +50,7 @@ export function generateEscPosReceipt(
   }
 
   buffer.push(...encoder.encode(`FECHA: ${new Date(sale.createdAt).toLocaleString('es-HN')}\n`));
+  buffer.push(...encoder.encode(`CAJA: ${sale.cajaName || 'Caja 1'}\n`));
   buffer.push(...encoder.encode(`CLIENTE: ${sale.customerName}\n`));
   if (sale.customerRtn) buffer.push(...encoder.encode(`RTN CLIENTE: ${sale.customerRtn}\n`));
 

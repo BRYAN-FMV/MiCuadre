@@ -154,6 +154,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       useAppStore.setState({ 
         isAuthenticated: true, 
         isDevMode: false,
+        cartLines: [],
+        cartCustomer: { name: 'Consumidor Final' },
         isShiftModalOpen: isNonAdmin && !isShiftOpen
       });
     } catch (err) {

@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import { Sale, Product, CartLine, Staff, UserProfile, Customer, StaffCommission } from '../../types';
 import { generateEscPosReceipt } from '../../lib/escPos';
+import { fetchSalesFromSupabase } from '../../lib/supabaseService';
+import { isSupabaseConfigured } from '../../lib/supabase';
+import { toast } from 'sonner';
 
 export const ReportsView: React.FC = () => {
   const sales = useAppStore(state => state.sales);
@@ -292,6 +295,23 @@ export const ReportsView: React.FC = () => {
     }
   };
 
+  const handleSyncCloudData = async () => {
+    if (isSupabaseConfigured() && tenant.id) {
+      toast.info('Sincronizando ventas desde la nube...');
+      const liveSales = await fetchSalesFromSupabase(tenant.id);
+      if (liveSales) {
+        useAppStore.setState(s => {
+          const currentSalesMap = new Map(s.sales.map(sale => [sale.id, sale]));
+          liveSales.forEach(ls => currentSalesMap.set(ls.id, ls));
+          return { sales: Array.from(currentSalesMap.values()) };
+        });
+        toast.success('Datos de ventas sincronizados con éxito.');
+      }
+    } else {
+      toast.info('Los datos en este navegador están actualizados.');
+    }
+  };
+
   return (
     <div className="reports-view-container" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       
@@ -389,14 +409,25 @@ export const ReportsView: React.FC = () => {
             </button>
           </div>
 
-          <button
-            className="btn btn-secondary"
-            onClick={() => window.print()}
-            style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', fontWeight: 600 }}
-          >
-            <Printer size={16} />
-            <span>Imprimir</span>
-          </button>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={handleSyncCloudData}
+              title="Sincronizar ventas y movimientos desde otros dispositivos"
+              style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', fontWeight: 600 }}
+            >
+              <RefreshCw size={15} />
+              <span>Refrescar</span>
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => window.print()}
+              style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', fontWeight: 600 }}
+            >
+              <Printer size={16} />
+              <span>Imprimir</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -656,6 +687,7 @@ export const ReportsView: React.FC = () => {
                   <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
                     <th style={{ padding: '0.75rem 1rem' }}>N° Documento</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Fecha & Hora</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Caja / Terminal</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Cliente</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Artículos</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Subtotal</th>
@@ -668,7 +700,7 @@ export const ReportsView: React.FC = () => {
                 <tbody>
                   {filteredSales.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
+                      <td colSpan={10} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
                         No se encontraron ventas con los filtros aplicados.
                       </td>
                     </tr>
@@ -686,6 +718,11 @@ export const ReportsView: React.FC = () => {
                           </td>
                           <td style={{ padding: '0.75rem 1rem', color: '#475569', fontSize: '0.8rem' }}>
                             {new Date(s.createdAt).toLocaleString('es-HN', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <span className="badge badge-wholesale" style={{ fontSize: '0.75rem' }}>
+                              {s.cajaName || 'Caja 1'}
+                            </span>
                           </td>
                           <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#0f172a' }}>
                             {s.customerName}
@@ -1280,6 +1317,10 @@ export const ReportsView: React.FC = () => {
               
               {/* Customer Info Card */}
               <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Caja Registradora / Terminal</span>
+                  <p style={{ fontWeight: 700, color: 'var(--accent-primary)', margin: 0, fontSize: '0.9rem' }}>{selectedSaleDetail.cajaName || 'Caja 1 - Principal'}</p>
+                </div>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Cliente</span>
                   <p style={{ fontWeight: 700, color: '#0f172a', margin: 0, fontSize: '0.9rem' }}>{selectedSaleDetail.customerName}</p>

@@ -1126,6 +1126,7 @@ export const PosContainer: React.FC = () => {
 
               {/* Meta & Customer */}
               <div style={{ fontSize: '9px' }}><strong>FECHA:</strong> {new Date(lastCompletedSale.createdAt).toLocaleDateString('es-HN')} {new Date(lastCompletedSale.createdAt).toLocaleTimeString('es-HN')}</div>
+              <div style={{ fontSize: '9px', textTransform: 'uppercase' }}><strong>CAJA:</strong> {lastCompletedSale.cajaName || 'Caja 1'}</div>
               <div style={{ fontSize: '9px', textTransform: 'uppercase' }}><strong>CLIENTE / RTN:</strong> {lastCompletedSale.customerName} {lastCompletedSale.customerRtn ? `| ${lastCompletedSale.customerRtn}` : ''}</div>
               <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 

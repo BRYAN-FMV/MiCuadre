@@ -449,3 +449,63 @@ export async function closeCashShiftSupabase(shiftId: string, declaredCash: numb
 
   return data;
 }
+
+/**
+ * Fetch sales list for tenant from Supabase
+ */
+export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*, sale_items(*)')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return null;
+
+    return data.map((s: any) => ({
+      id: s.id,
+      tenantId: s.tenant_id,
+      cashShiftId: s.cash_shift_id,
+      documentNumber: s.document_number,
+      isFiscal: s.is_fiscal,
+      cai: s.cai,
+      caiDeadline: s.cai_deadline,
+      caiRangeStart: s.cai_range_start,
+      caiRangeEnd: s.cai_range_end,
+      fiscalRangeId: s.fiscal_range_id,
+      cajaName: s.caja_name || 'Caja Registradora',
+      customerId: s.customer_id,
+      customerName: s.customer_name || 'Consumidor Final',
+      customerRtn: s.customer_rtn,
+      subtotal: Number(s.subtotal),
+      discountAmount: Number(s.discount_amount),
+      exemptAmount: Number(s.exempt_amount),
+      exoneratedAmount: Number(s.exonerated_amount),
+      taxable15: Number(s.taxable_15),
+      tax15: Number(s.tax_15),
+      taxable18: Number(s.taxable_18),
+      tax18: Number(s.tax_18),
+      total: Number(s.total),
+      paymentMethod: s.payment_method,
+      createdAt: s.created_at,
+      items: s.sale_items?.map((i: any) => ({
+        id: i.id,
+        productId: i.product_id,
+        name: i.product_name,
+        sku: i.sku || '',
+        quantity: i.quantity,
+        unitPrice: Number(i.unit_price),
+        subtotal: Number(i.subtotal),
+        taxClassification: i.tax_classification || 'EXENTO',
+        taxAmount: Number(i.tax_amount || 0),
+        total: Number(i.total)
+      })) || []
+    }));
+  } catch (err) {
+    console.warn('Error fetching sales from Supabase:', err);
+    return null;
+  }
+}

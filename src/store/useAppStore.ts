@@ -221,11 +221,21 @@ export const useAppStore = create<AppState>()(
           return;
         }
 
-        set({ isAuthenticated: false, isDevMode: false });
+        set({ 
+          isAuthenticated: false, 
+          isDevMode: false,
+          cartLines: [],
+          cartCustomer: { name: 'Consumidor Final' }
+        });
       },
       setActiveTab: (tab) => set({ activeTab: tab }),
       setDevMode: (enabled) => set({ isDevMode: enabled }),
-      setCurrentUser: (user) => set({ currentUser: user, isAuthenticated: true }),
+      setCurrentUser: (user) => set((s) => ({
+        currentUser: user,
+        isAuthenticated: true,
+        cartLines: user.tenantId !== s.tenant.id ? [] : s.cartLines,
+        cartCustomer: user.tenantId !== s.tenant.id ? { name: 'Consumidor Final' } : s.cartCustomer
+      })),
 
       addCustomer: (customerData) => {
         const state = get();
@@ -834,8 +844,8 @@ export const useAppStore = create<AppState>()(
       caiDeadline,
       caiRangeStart,
       caiRangeEnd,
-      fiscalRangeId: activeTargetRange?.id,
-      cajaName: activeTargetRange?.name || 'Caja 1 - Principal',
+      fiscalRangeId: state.activeShift?.fiscalRangeId || activeTargetRange?.id,
+      cajaName: state.activeShift?.cajaName || activeTargetRange?.name || 'Caja 1 - Principal',
       customerId: state.cartCustomer.id,
       customerRtn: state.cartCustomer.rtn,
       customerName: state.cartCustomer.name || 'Consumidor Final',
