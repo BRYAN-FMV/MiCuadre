@@ -608,7 +608,6 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
       id: shiftUuid,
       tenant_id: shift.tenantId,
       user_id: validUserId,
-      fiscal_range_id: isValidUUID(shift.fiscalRangeId) ? shift.fiscalRangeId : null,
       opening_amount: shift.openingAmount,
       closing_declared: shift.closingDeclared != null ? shift.closingDeclared : null,
       closing_system: shift.closingSystem != null ? shift.closingSystem : null,
@@ -904,8 +903,7 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
       current_number: range.currentNumber,
       deadline: range.deadline || '2026-12-31',
       document_type: range.documentType || '01',
-      is_active: range.isActive ?? true,
-      is_default: range.isDefault ?? false
+      is_active: range.isActive ?? true
     };
 
     const { data, error } = await supabase.from('fiscal_ranges').upsert(payload, { onConflict: 'id' }).select().single();
@@ -944,18 +942,20 @@ export async function pushLocalDataToCloud(tenantId: string) {
 
     // 1. Ensure tenant exists in Supabase
     if (state.tenant && isValidUUID(state.tenant.id)) {
-      await supabase.from('tenants').upsert({
-        id: state.tenant.id,
-        name: state.tenant.name,
-        rtn: state.tenant.rtn || null,
-        phone: state.tenant.phone || null,
-        email: state.tenant.email || null,
-        address: state.tenant.address || null,
-        business_type: state.tenant.businessType || 'RETAIL',
-        is_fiscal_enabled: state.tenant.isFiscalEnabled ?? true,
-        allow_negative_stock: state.tenant.allowNegativeStock ?? false,
-        currency_symbol: state.tenant.currencySymbol || 'L.'
-      }, { onConflict: 'id' });
+      try {
+        await supabase.from('tenants').upsert({
+          id: state.tenant.id,
+          name: state.tenant.name,
+          rtn: state.tenant.rtn || null,
+          phone: state.tenant.phone || null,
+          email: state.tenant.email || null,
+          address: state.tenant.address || null,
+          business_type: state.tenant.businessType || 'RETAIL',
+          is_fiscal_enabled: state.tenant.isFiscalEnabled ?? true,
+          allow_negative_stock: state.tenant.allowNegativeStock ?? false,
+          currency_symbol: state.tenant.currencySymbol || 'L.'
+        }, { onConflict: 'id' });
+      } catch (e) {}
     }
 
     // 2. Push local sales (re-assigning non-UUID local IDs if needed)
