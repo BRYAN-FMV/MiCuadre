@@ -508,13 +508,20 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('sales')
-      .select('*, sale_items(*)')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+    const [salesRes, ranges] = await Promise.all([
+      supabase
+        .from('sales')
+        .select('*, sale_items(*)')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false }),
+      fetchFiscalRangesFromSupabase(tenantId)
+    ]);
 
-    if (error || !data) return null;
+    const data = salesRes.data;
+    if (salesRes.error || !data) return null;
+
+    const caiRangeMap = new Map((ranges || []).map(r => [r.cai, r.name]));
+    const defaultCajaName = (ranges && ranges.length > 0 && ranges[0].name) ? ranges[0].name : 'Caja 1 - Principal';
 
     return data.map((s: any) => ({
       id: s.id,
@@ -527,7 +534,7 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
       caiRangeStart: s.cai_range_start,
       caiRangeEnd: s.cai_range_end,
       fiscalRangeId: s.fiscal_range_id,
-      cajaName: s.caja_name || 'Caja Registradora',
+      cajaName: (s.cai && caiRangeMap.get(s.cai)) || s.caja_name || defaultCajaName,
       customerId: s.customer_id,
       customerName: s.customer_name || 'Consumidor Final',
       customerRtn: s.customer_rtn,
@@ -627,21 +634,30 @@ export async function fetchShiftsFromSupabase(tenantId: string): Promise<CashShi
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('cash_shifts')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('opened_at', { ascending: false });
+    const [shiftsRes, profiles, ranges] = await Promise.all([
+      supabase
+        .from('cash_shifts')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('opened_at', { ascending: false }),
+      fetchProfilesFromSupabase(tenantId),
+      fetchFiscalRangesFromSupabase(tenantId)
+    ]);
 
-    if (error || !data) return null;
+    const data = shiftsRes.data;
+    if (shiftsRes.error || !data) return null;
+
+    const profileMap = new Map((profiles || []).map(p => [p.id, p.fullName]));
+    const rangeMap = new Map((ranges || []).map(r => [r.id, r.name]));
+    const defaultCajaName = (ranges && ranges.length > 0 && ranges[0].name) ? ranges[0].name : 'Caja 1 - Principal';
 
     return data.map((s: any) => ({
       id: s.id,
       tenantId: s.tenant_id,
       userId: s.user_id || 'user-default',
-      userName: s.user_name || 'Cajero',
-      fiscalRangeId: s.fiscal_range_id,
-      cajaName: s.caja_name || 'Caja Registradora',
+      userName: (s.user_id && profileMap.get(s.user_id)) || s.user_name || 'Cajero',
+      fiscalRangeId: s.fiscal_range_id || (ranges && ranges.length > 0 ? ranges[0].id : undefined),
+      cajaName: (s.fiscal_range_id && rangeMap.get(s.fiscal_range_id)) || s.caja_name || defaultCajaName,
       openingAmount: Number(s.opening_amount || 0),
       closingDeclared: s.closing_declared != null ? Number(s.closing_declared) : undefined,
       closingSystem: s.closing_system != null ? Number(s.closing_system) : undefined,
@@ -1036,7 +1052,8 @@ export async function syncAllCloudData(tenantId: string) {
       let sales = state.sales;
       if (liveSales && liveSales.length > 0) {
         const liveIds = new Set(liveSales.map(s => s.id));
-        const localOnly = (state.sales || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id));
+        const liveDocs = new Set(liveSales.map(s => s.documentNumber));
+        const localOnly = (state.sales || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id) && (!s.documentNumber || !liveDocs.has(s.documentNumber)));
         const otherTenantSales = (state.sales || []).filter(s => s.tenantId && s.tenantId !== tenantId);
         sales = [...liveSales, ...localOnly, ...otherTenantSales];
       }
