@@ -140,10 +140,16 @@ export const SettingsView: React.FC = () => {
       setFiscalIsDefault(!!range.isDefault);
     } else {
       setEditingFiscalRange(null);
-      const nextNum = tenantFiscalRanges.length + 1;
-      setFiscalName(`Caja ${nextNum} - Sucursal`);
+      const existingNums = tenantFiscalRanges.map(r => {
+        const match = r.prefix?.match(/000-(\d+)-/);
+        return match ? parseInt(match[1]) : 0;
+      });
+      const maxNum = Math.max(0, ...existingNums);
+      const nextNum = maxNum + 1;
+      const formattedNum = String(nextNum).padStart(3, '0');
+      setFiscalName(`Caja ${nextNum}`);
       setFiscalCai('E83910-149BF1-9243E9-913210-9182C1-02');
-      setFiscalPrefix(`000-00${nextNum}-01-`);
+      setFiscalPrefix(`000-${formattedNum}-01-`);
       setFiscalRangeStart('1');
       setFiscalRangeEnd('5000');
       setFiscalCurrentNumber('0');

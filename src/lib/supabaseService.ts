@@ -660,21 +660,32 @@ export async function fetchShiftsFromSupabase(tenantId: string): Promise<CashShi
     const rangeMap = new Map((ranges || []).map(r => [r.id, r.name]));
     const defaultCajaName = (ranges && ranges.length > 0 && ranges[0].name) ? ranges[0].name : 'Caja 1 - Principal';
 
-    return data.map((s: any) => ({
-      id: s.id,
-      tenantId: s.tenant_id,
-      userId: s.user_id || 'user-default',
-      userName: (s.user_id && profileMap.get(s.user_id)) || s.user_name || 'Cajero',
-      fiscalRangeId: s.fiscal_range_id || null,
-      cajaName: (s.fiscal_range_id && rangeMap.get(s.fiscal_range_id)) || s.caja_name || defaultCajaName,
-      openingAmount: Number(s.opening_amount || 0),
-      closingDeclared: s.closing_declared != null ? Number(s.closing_declared) : undefined,
-      closingSystem: s.closing_system != null ? Number(s.closing_system) : undefined,
-      difference: s.difference != null ? Number(s.difference) : undefined,
-      status: s.status as 'OPEN' | 'CLOSED',
-      openedAt: s.opened_at,
-      closedAt: s.closed_at
-    }));
+    return data.map((s: any) => {
+      let mappedRangeId = s.fiscal_range_id || null;
+      if (!mappedRangeId && s.caja_name && ranges && ranges.length > 0) {
+        const matchedRange = ranges.find(r => r.name === s.caja_name || r.prefix === s.caja_name);
+        if (matchedRange) mappedRangeId = matchedRange.id;
+      }
+      if (!mappedRangeId && ranges && ranges.length > 0) {
+        mappedRangeId = ranges[0].id;
+      }
+
+      return {
+        id: s.id,
+        tenantId: s.tenant_id,
+        userId: s.user_id || 'user-default',
+        userName: (s.user_id && profileMap.get(s.user_id)) || s.user_name || 'Cajero',
+        fiscalRangeId: mappedRangeId,
+        cajaName: (mappedRangeId && rangeMap.get(mappedRangeId)) || s.caja_name || defaultCajaName,
+        openingAmount: Number(s.opening_amount || 0),
+        closingDeclared: s.closing_declared != null ? Number(s.closing_declared) : undefined,
+        closingSystem: s.closing_system != null ? Number(s.closing_system) : undefined,
+        difference: s.difference != null ? Number(s.difference) : undefined,
+        status: s.status as 'OPEN' | 'CLOSED',
+        openedAt: s.opened_at,
+        closedAt: s.closed_at
+      };
+    });
   } catch (err) {
     console.warn('Error fetching cash shifts from Supabase:', err);
     return null;
@@ -825,23 +836,54 @@ export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<F
       .eq('is_active', true);
 
     if (!error && data && data.length > 0) {
+      // Deduplicate rows by CAI & prefix to purge duplicate rows created from testing
+      const uniqueMap = new Map<string, any>();
+      const duplicateIds: string[] = [];
+
+      for (const r of data) {
+        const key = `${r.cai || ''}_${r.prefix || ''}`;
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, r);
+        } else {
+          const existing = uniqueMap.get(key);
+          if (Number(r.current_number || 0) > Number(existing.current_number || 0)) {
+            duplicateIds.push(existing.id);
+            uniqueMap.set(key, r);
+          } else {
+            duplicateIds.push(r.id);
+          }
+        }
+      }
+
+      // Soft-delete duplicate rows in Supabase
+      if (duplicateIds.length > 0) {
+        for (const dupId of duplicateIds) {
+          supabase.from('fiscal_ranges').update({ is_active: false }).eq('id', dupId).then();
+        }
+      }
+
+      const cleanData = Array.from(uniqueMap.values());
       const localState = useAppStore.getState();
       const localRangesMap = new Map((localState.fiscalRanges || []).map(r => [r.id, r.name]));
 
-      return data.map((r: any, idx: number) => ({
-        id: r.id,
-        tenantId: r.tenant_id,
-        name: localRangesMap.get(r.id) || r.name || `Caja ${idx + 1} - ${r.prefix || 'Principal'}`,
-        cai: r.cai || '',
-        prefix: r.prefix || '000-001-01-',
-        rangeStart: Number(r.range_start || 1),
-        rangeEnd: Number(r.range_end || 10000),
-        currentNumber: Number(r.current_number || 0),
-        deadline: r.deadline || '2026-12-31',
-        documentType: (r.document_type === '04' ? '04' : '01') as '01' | '04',
-        isActive: r.is_active ?? true,
-        isDefault: idx === 0
-      }));
+      return cleanData.map((r: any, idx: number) => {
+        const storedName = localRangesMap.get(r.id);
+        const autoName = idx === 0 ? 'Caja 1 - Principal' : `Caja ${idx + 1}`;
+        return {
+          id: r.id,
+          tenantId: r.tenant_id,
+          name: storedName || autoName,
+          cai: r.cai || '',
+          prefix: r.prefix || '000-001-01-',
+          rangeStart: Number(r.range_start || 1),
+          rangeEnd: Number(r.range_end || 10000),
+          currentNumber: Number(r.current_number || 0),
+          deadline: r.deadline || '2026-12-31',
+          documentType: (r.document_type === '04' ? '04' : '01') as '01' | '04',
+          isActive: r.is_active ?? true,
+          isDefault: idx === 0
+        };
+      });
     }
 
     // Auto-seed initial Cajas to Supabase for this tenant if none exist yet

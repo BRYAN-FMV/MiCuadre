@@ -228,7 +228,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const tenantRangesRaw = (fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id);
   const uniqueRangesMap = new Map<string, typeof tenantRangesRaw[0]>();
   tenantRangesRaw.forEach(r => {
-    const key = r.prefix || r.id;
+    const key = r.id;
     if (!uniqueRangesMap.has(key)) {
       uniqueRangesMap.set(key, r);
     }
@@ -302,7 +302,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
                 </option>
               )}
               {uniqueTenantRanges.map((r, index) => {
-                const cajaDisplayName = r.name && r.name !== 'Caja Registradora' ? r.name : `Caja ${index + 1} - ${r.prefix || 'Principal'}`;
+                const cajaDisplayName = r.name || (index === 0 ? 'Caja 1 - Principal' : `Caja ${index + 1}`);
                 const occupiedShift = openShiftsForTenant.find(s => s.fiscalRangeId === r.id && s.status === 'OPEN');
                 const isOccupiedByAnother = !!occupiedShift && occupiedShift.userId !== currentSelectedProfile?.id;
                 return (
