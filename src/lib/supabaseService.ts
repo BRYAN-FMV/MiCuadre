@@ -608,6 +608,8 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
       id: shiftUuid,
       tenant_id: shift.tenantId,
       user_id: validUserId,
+      fiscal_range_id: (shift.fiscalRangeId && isValidUUID(shift.fiscalRangeId)) ? shift.fiscalRangeId : null,
+      caja_name: shift.cajaName || null,
       opening_amount: shift.openingAmount,
       closing_declared: shift.closingDeclared != null ? shift.closingDeclared : null,
       closing_system: shift.closingSystem != null ? shift.closingSystem : null,
@@ -940,6 +942,7 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
     const payload: any = {
       id: rangeUuid,
       tenant_id: range.tenantId,
+      name: range.name || 'Caja Registradora',
       cai: range.cai || '',
       prefix: range.prefix || '000-001-01-',
       range_start: range.rangeStart,
@@ -947,7 +950,8 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
       current_number: range.currentNumber,
       deadline: range.deadline || '2026-12-31',
       document_type: range.documentType || '01',
-      is_active: range.isActive ?? true
+      is_active: range.isActive ?? true,
+      is_default: range.isDefault ?? false
     };
 
     const { data, error } = await supabase.from('fiscal_ranges').upsert(payload, { onConflict: 'id' }).select().single();
