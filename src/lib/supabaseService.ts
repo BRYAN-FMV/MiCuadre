@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile } from '../types';
+import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug } from './security';
 
@@ -605,3 +605,214 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
     return null;
   }
 }
+
+/**
+ * Save / Upsert Cash Shift (Apertura o Cierre) to Supabase
+ */
+export async function saveCashShiftToSupabase(shift: CashShift) {
+  if (!isSupabaseConfigured() || !isValidUUID(shift.tenantId)) return null;
+
+  try {
+    const shiftUuid = isValidUUID(shift.id) ? shift.id : undefined;
+    const payload: any = {
+      ...(shiftUuid ? { id: shiftUuid } : {}),
+      tenant_id: shift.tenantId,
+      user_id: (shift.userId && isValidUUID(shift.userId)) ? shift.userId : null,
+      user_name: shift.userName || 'Usuario POS',
+      fiscal_range_id: (shift.fiscalRangeId && isValidUUID(shift.fiscalRangeId)) ? shift.fiscalRangeId : null,
+      caja_name: shift.cajaName || 'Caja Registradora',
+      opening_amount: shift.openingAmount,
+      closing_declared: shift.closingDeclared != null ? shift.closingDeclared : null,
+      closing_system: shift.closingSystem != null ? shift.closingSystem : null,
+      difference: shift.difference != null ? shift.difference : null,
+      status: shift.status,
+      opened_at: shift.openedAt || new Date().toISOString(),
+      closed_at: shift.closedAt || null
+    };
+
+    const { data, error } = await supabase
+      .from('cash_shifts')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase upsert cash_shifts info:', error.message);
+      const { error: insertErr } = await supabase.from('cash_shifts').insert(payload);
+      if (insertErr) console.warn('Supabase insert cash_shifts fallback info:', insertErr.message);
+    }
+
+    console.log('Turno de caja guardado en Supabase:', shift.status, shift.cajaName);
+    return data;
+  } catch (err) {
+    console.warn('Error saving cash shift to Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Fetch all Cash Shifts for Tenant from Supabase
+ */
+export async function fetchShiftsFromSupabase(tenantId: string): Promise<CashShift[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('cash_shifts')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('opened_at', { ascending: false });
+
+    if (error || !data) return null;
+
+    return data.map((s: any) => ({
+      id: s.id,
+      tenantId: s.tenant_id,
+      userId: s.user_id || 'user-default',
+      userName: s.user_name || 'Cajero',
+      fiscalRangeId: s.fiscal_range_id,
+      cajaName: s.caja_name || 'Caja Registradora',
+      openingAmount: Number(s.opening_amount || 0),
+      closingDeclared: s.closing_declared != null ? Number(s.closing_declared) : undefined,
+      closingSystem: s.closing_system != null ? Number(s.closing_system) : undefined,
+      difference: s.difference != null ? Number(s.difference) : undefined,
+      status: s.status as 'OPEN' | 'CLOSED',
+      openedAt: s.opened_at,
+      closedAt: s.closed_at
+    }));
+  } catch (err) {
+    console.warn('Error fetching cash shifts from Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Save Cash Movement (Entrada / Egreso de dinero) to Supabase
+ */
+export async function saveCashMovementToSupabase(movement: CashMovement) {
+  if (!isSupabaseConfigured() || !isValidUUID(movement.tenantId)) return null;
+
+  try {
+    const movUuid = isValidUUID(movement.id) ? movement.id : undefined;
+    const payload: any = {
+      ...(movUuid ? { id: movUuid } : {}),
+      tenant_id: movement.tenantId,
+      cash_shift_id: (movement.cashShiftId && isValidUUID(movement.cashShiftId)) ? movement.cashShiftId : null,
+      fiscal_range_id: (movement.fiscalRangeId && isValidUUID(movement.fiscalRangeId)) ? movement.fiscalRangeId : null,
+      type: movement.type,
+      amount: movement.amount,
+      concept: movement.concept,
+      registered_by: movement.registeredBy,
+      created_at: movement.createdAt || new Date().toISOString(),
+      reference_id: movement.referenceId || null
+    };
+
+    const { data, error } = await supabase
+      .from('cash_movements')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Error inserting cash_movement to Supabase:', error.message);
+    } else {
+      console.log('Movimiento de caja guardado en Supabase:', movement.type, movement.amount);
+    }
+    return data;
+  } catch (err) {
+    console.warn('Error saving cash movement to Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Fetch Cash Movements for Tenant from Supabase
+ */
+export async function fetchCashMovementsFromSupabase(tenantId: string): Promise<CashMovement[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('cash_movements')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return null;
+
+    return data.map((m: any) => ({
+      id: m.id,
+      tenantId: m.tenant_id,
+      cashShiftId: m.cash_shift_id || 'general',
+      fiscalRangeId: m.fiscal_range_id || '',
+      type: m.type as 'ENTRADA' | 'SALIDA',
+      amount: Number(m.amount),
+      concept: m.concept || '',
+      registeredBy: m.registered_by || 'Sistema',
+      createdAt: m.created_at,
+      referenceId: m.reference_id
+    }));
+  } catch (err) {
+    console.warn('Error fetching cash movements from Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Save Expense (Gasto) to Supabase
+ */
+export async function saveExpenseToSupabase(expense: Expense) {
+  if (!isSupabaseConfigured() || !isValidUUID(expense.tenantId)) return null;
+
+  try {
+    const expUuid = isValidUUID(expense.id) ? expense.id : undefined;
+    const payload: any = {
+      ...(expUuid ? { id: expUuid } : {}),
+      tenant_id: expense.tenantId,
+      category: expense.category || 'VARIOS',
+      description: expense.description || '',
+      amount: expense.amount,
+      fund_id: (expense.fundId && isValidUUID(expense.fundId)) ? expense.fundId : null,
+      created_at: expense.createdAt || new Date().toISOString()
+    };
+
+    const { data, error } = await supabase.from('expenses').insert(payload).select().single();
+    if (error) console.warn('Supabase insert expense info:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Error saving expense to Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Fetch Expenses from Supabase
+ */
+export async function fetchExpensesFromSupabase(tenantId: string): Promise<Expense[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return null;
+
+    return data.map((e: any) => ({
+      id: e.id,
+      tenantId: e.tenant_id,
+      category: e.category || 'OTROS',
+      description: e.description || '',
+      amount: Number(e.amount),
+      fundId: e.fund_id || 'cash',
+      expenseDate: e.expense_date || e.created_at || new Date().toISOString(),
+      createdAt: e.created_at || new Date().toISOString()
+    }));
+  } catch (err) {
+    console.warn('Error fetching expenses from Supabase:', err);
+    return null;
+  }
+}
+

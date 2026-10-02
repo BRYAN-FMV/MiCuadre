@@ -8,7 +8,12 @@ import {
 } from 'lucide-react';
 import { Sale, Product, CartLine, Staff, UserProfile, Customer, StaffCommission } from '../../types';
 import { generateEscPosReceipt } from '../../lib/escPos';
-import { fetchSalesFromSupabase } from '../../lib/supabaseService';
+import {
+  fetchSalesFromSupabase,
+  fetchShiftsFromSupabase,
+  fetchCashMovementsFromSupabase,
+  fetchExpensesFromSupabase
+} from '../../lib/supabaseService';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { toast } from 'sonner';
 
@@ -42,7 +47,7 @@ export const ReportsView: React.FC = () => {
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<Sale | null>(null);
   const [selectedShiftDetail, setSelectedShiftDetail] = useState<any | null>(null);
 
-  // Auto-sync sales from cloud on view mount
+  // Auto-sync full business telemetry (sales, shifts, cash movements, expenses) from cloud on view mount
   React.useEffect(() => {
     if (isSupabaseConfigured() && tenant?.id) {
       fetchSalesFromSupabase(tenant.id).then(liveSales => {
@@ -51,6 +56,36 @@ export const ReportsView: React.FC = () => {
             const liveIds = new Set(liveSales.map(ls => ls.id));
             const localOnly = (state.sales || []).filter(s => !liveIds.has(s.id));
             return { sales: [...liveSales, ...localOnly] };
+          });
+        }
+      });
+
+      fetchShiftsFromSupabase(tenant.id).then(liveShifts => {
+        if (liveShifts && liveShifts.length > 0) {
+          useAppStore.setState(state => {
+            const liveIds = new Set(liveShifts.map(ls => ls.id));
+            const localOnly = (state.shiftHistory || []).filter(s => !liveIds.has(s.id));
+            return { shiftHistory: [...liveShifts, ...localOnly] };
+          });
+        }
+      });
+
+      fetchCashMovementsFromSupabase(tenant.id).then(liveMovements => {
+        if (liveMovements && liveMovements.length > 0) {
+          useAppStore.setState(state => {
+            const liveIds = new Set(liveMovements.map(lm => lm.id));
+            const localOnly = (state.cashMovements || []).filter(m => !liveIds.has(m.id));
+            return { cashMovements: [...liveMovements, ...localOnly] };
+          });
+        }
+      });
+
+      fetchExpensesFromSupabase(tenant.id).then(liveExpenses => {
+        if (liveExpenses && liveExpenses.length > 0) {
+          useAppStore.setState(state => {
+            const liveIds = new Set(liveExpenses.map(le => le.id));
+            const localOnly = (state.expenses || []).filter(e => !liveIds.has(e.id));
+            return { expenses: [...liveExpenses, ...localOnly] };
           });
         }
       });
@@ -312,16 +347,36 @@ export const ReportsView: React.FC = () => {
 
   const handleSyncCloudData = async () => {
     if (isSupabaseConfigured() && tenant.id) {
-      toast.info('Sincronizando ventas desde la nube...');
-      const liveSales = await fetchSalesFromSupabase(tenant.id);
-      if (liveSales) {
-        useAppStore.setState(s => {
-          const currentSalesMap = new Map(s.sales.map(sale => [sale.id, sale]));
-          liveSales.forEach(ls => currentSalesMap.set(ls.id, ls));
-          return { sales: Array.from(currentSalesMap.values()) };
-        });
-        toast.success('Datos de ventas sincronizados con éxito.');
-      }
+      toast.info('Sincronizando reportes y movimientos desde la nube...');
+      const [liveSales, liveShifts, liveMovements, liveExpenses] = await Promise.all([
+        fetchSalesFromSupabase(tenant.id),
+        fetchShiftsFromSupabase(tenant.id),
+        fetchCashMovementsFromSupabase(tenant.id),
+        fetchExpensesFromSupabase(tenant.id)
+      ]);
+
+      useAppStore.setState(s => {
+        const salesMap = new Map((s.sales || []).map(item => [item.id, item]));
+        if (liveSales) liveSales.forEach(ls => salesMap.set(ls.id, ls));
+
+        const shiftsMap = new Map((s.shiftHistory || []).map(item => [item.id, item]));
+        if (liveShifts) liveShifts.forEach(ls => shiftsMap.set(ls.id, ls));
+
+        const movsMap = new Map((s.cashMovements || []).map(item => [item.id, item]));
+        if (liveMovements) liveMovements.forEach(lm => movsMap.set(lm.id, lm));
+
+        const expMap = new Map((s.expenses || []).map(item => [item.id, item]));
+        if (liveExpenses) liveExpenses.forEach(le => expMap.set(le.id, le));
+
+        return {
+          sales: Array.from(salesMap.values()),
+          shiftHistory: Array.from(shiftsMap.values()),
+          cashMovements: Array.from(movsMap.values()),
+          expenses: Array.from(expMap.values())
+        };
+      });
+
+      toast.success('Reportes, turnos y movimientos de caja sincronizados.');
     } else {
       toast.info('Los datos en este navegador están actualizados.');
     }

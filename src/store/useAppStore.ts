@@ -15,7 +15,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 export interface HeldOrder {
@@ -701,7 +701,7 @@ export const useAppStore = create<AppState>()(
     }
 
     const newShift: CashShift = {
-      id: `shift-${Date.now()}`,
+      id: generateUUID(),
       tenantId: state.tenant.id,
       userId: state.currentUser.id,
       userName: state.currentUser.fullName,
@@ -711,6 +711,10 @@ export const useAppStore = create<AppState>()(
       status: 'OPEN',
       openedAt: new Date().toISOString()
     };
+
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      saveCashShiftToSupabase(newShift).catch(err => console.warn('Supabase save shift info:', err));
+    }
 
     return {
       activeShift: newShift,
@@ -724,7 +728,7 @@ export const useAppStore = create<AppState>()(
     const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
 
     const movement: CashMovement = {
-      id: `mov-${Date.now()}`,
+      id: generateUUID(),
       tenantId: state.tenant.id,
       cashShiftId: shift?.id || 'general',
       fiscalRangeId: shift?.fiscalRangeId || activeCaja?.id || '',
@@ -735,6 +739,10 @@ export const useAppStore = create<AppState>()(
       createdAt: new Date().toISOString(),
       referenceId
     };
+
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      saveCashMovementToSupabase(movement).catch(err => console.warn('Supabase save movement info:', err));
+    }
 
     return {
       cashMovements: [movement, ...(state.cashMovements || [])]
@@ -772,7 +780,8 @@ export const useAppStore = create<AppState>()(
       shiftHistory: [closedShift, ...(s.shiftHistory || []).filter(sh => sh.id !== closedShift.id)]
     }));
 
-    if (isSupabaseConfigured() && isValidUUID(shift.id)) {
+    if (isSupabaseConfigured() && isValidUUID(shift.tenantId)) {
+      saveCashShiftToSupabase(closedShift).catch(err => console.warn('Supabase save shift info:', err));
       closeCashShiftSupabase(shift.id, declaredCash).catch(err => console.warn('Supabase close shift info:', err));
     }
 
