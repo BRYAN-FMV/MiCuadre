@@ -369,6 +369,9 @@ export const useAppStore = create<AppState>()(
       }),
 
       setSelectedFiscalRange: (id) => set((state) => {
+        if (id === 'VIEW_MODE_ADMIN') {
+          return { selectedFiscalRangeId: 'VIEW_MODE_ADMIN' };
+        }
         const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
         const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
         const found = ranges.find(r => r.id === id);

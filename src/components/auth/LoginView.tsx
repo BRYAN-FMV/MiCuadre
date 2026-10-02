@@ -217,6 +217,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const shiftHistoryList = useAppStore(state => state.shiftHistory) || [];
   const openShiftsForTenant = shiftHistoryList.filter(s => s.tenantId === tenant.id && s.status === 'OPEN');
 
+  const tenantRangesRaw = (fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id);
+  const uniqueRangesMap = new Map<string, typeof tenantRangesRaw[0]>();
+  tenantRangesRaw.forEach(r => {
+    const key = r.prefix || r.id;
+    if (!uniqueRangesMap.has(key)) {
+      uniqueRangesMap.set(key, r);
+    }
+  });
+  const uniqueTenantRanges = Array.from(uniqueRangesMap.values());
+
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
       <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '2rem', background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)' }}>
@@ -280,15 +290,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
             >
               {isAdminSelected && (
                 <option value="VIEW_MODE_ADMIN" style={{ fontWeight: 700, color: '#059669' }}>
-                  👁️ MODO VISTA (Solo Administración & Reportes - Sin Caja)
+                  MODO VISTA (Solo Administración & Reportes - Sin Caja)
                 </option>
               )}
-              {(fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id).map(r => {
-                const occupiedShift = openShiftsForTenant.find(s => (s.fiscalRangeId === r.id || s.cajaName === r.name) && s.status === 'OPEN');
+              {uniqueTenantRanges.map((r, index) => {
+                const cajaDisplayName = r.name && r.name !== 'Caja Registradora' ? r.name : `Caja ${index + 1} - ${r.prefix || 'Principal'}`;
+                const occupiedShift = openShiftsForTenant.find(s => s.fiscalRangeId === r.id && s.status === 'OPEN');
+                const isOccupiedByAnother = !!occupiedShift && occupiedShift.userId !== currentSelectedProfile?.id;
                 return (
-                  <option key={r.id} value={r.id} disabled={!!occupiedShift && occupiedShift.userId !== currentSelectedProfile?.id}>
-                    {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
-                    {occupiedShift ? ` 🔒 (OCUPADA por ${occupiedShift.userName})` : ''}
+                  <option key={r.id} value={r.id} disabled={isOccupiedByAnother}>
+                    {cajaDisplayName} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
+                    {occupiedShift ? ` (OCUPADA por ${occupiedShift.userName})` : ''}
                   </option>
                 );
               })}

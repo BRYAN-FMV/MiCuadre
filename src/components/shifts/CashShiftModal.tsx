@@ -170,20 +170,30 @@ export const CashShiftModal: React.FC = () => {
                   style={{ fontWeight: 700, fontSize: '0.95rem', background: '#f8fafc', borderColor: '#cbd5e1', cursor: 'pointer' }}
                   required
                 >
-                  {((fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id).length > 0
-                    ? (fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id)
-                    : (fiscalRange ? [fiscalRange] : [])
-                  ).map(r => {
+                  {(() => {
+                    const rawRanges = (fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id);
+                    const listToUse = rawRanges.length > 0 ? rawRanges : (fiscalRange ? [fiscalRange] : []);
+                    const uniqueMap = new Map<string, typeof listToUse[0]>();
+                    listToUse.forEach(r => {
+                      const key = r.prefix || r.id;
+                      if (!uniqueMap.has(key)) uniqueMap.set(key, r);
+                    });
+                    const uniqueList = Array.from(uniqueMap.values());
                     const shiftHistoryList = useAppStore.getState().shiftHistory || [];
                     const openShiftsForTenant = shiftHistoryList.filter(s => s.tenantId === tenant.id && s.status === 'OPEN');
-                    const occupiedShift = openShiftsForTenant.find(s => (s.fiscalRangeId === r.id || s.cajaName === r.name) && s.status === 'OPEN');
-                    return (
-                      <option key={r.id} value={r.id} disabled={!!occupiedShift && occupiedShift.userId !== currentUser?.id}>
-                        {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
-                        {occupiedShift ? ` 🔒 (OCUPADA por ${occupiedShift.userName})` : ''}
-                      </option>
-                    );
-                  })}
+
+                    return uniqueList.map((r, index) => {
+                      const cajaDisplayName = r.name && r.name !== 'Caja Registradora' ? r.name : `Caja ${index + 1} - ${r.prefix || 'Principal'}`;
+                      const occupiedShift = openShiftsForTenant.find(s => s.fiscalRangeId === r.id && s.status === 'OPEN');
+                      const isOccupiedByAnother = !!occupiedShift && occupiedShift.userId !== currentUser?.id;
+                      return (
+                        <option key={r.id} value={r.id} disabled={isOccupiedByAnother}>
+                          {cajaDisplayName} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
+                          {occupiedShift ? ` (OCUPADA por ${occupiedShift.userName})` : ''}
+                        </option>
+                      );
+                    });
+                  })()}
                 </select>
               </div>
 
@@ -238,7 +248,7 @@ export const CashShiftModal: React.FC = () => {
                   }}
                   style={{ marginTop: '0.85rem', width: '100%', background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700, fontSize: '0.84rem' }}
                 >
-                  👁️ MODO VISTA (Solo Administración / Reportes - Sin Abrir Caja)
+                  MODO VISTA (Solo Administración / Reportes - Sin Abrir Caja)
                 </button>
               )}
             </form>
