@@ -22,7 +22,8 @@ import {
   fetchSuppliersFromSupabase,
   fetchProfilesFromSupabase,
   fetchTenantsFromSupabase,
-  fetchSalesFromSupabase
+  fetchSalesFromSupabase,
+  fetchFiscalRangesFromSupabase
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -190,6 +191,21 @@ export const App: React.FC = () => {
             const liveIds = new Set(liveSales.map(ls => ls.id));
             const localOnly = (state.sales || []).filter(s => !liveIds.has(s.id));
             return { sales: [...liveSales, ...localOnly] };
+          });
+        }
+      });
+
+      fetchFiscalRangesFromSupabase(tenant.id).then(liveRanges => {
+        if (liveRanges && liveRanges.length > 0) {
+          useAppStore.setState(state => {
+            const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== tenant.id);
+            const updatedRanges = [...liveRanges, ...otherRanges];
+            const currentSelected = updatedRanges.find(r => r.id === state.selectedFiscalRangeId) || liveRanges[0];
+            return {
+              fiscalRanges: updatedRanges,
+              selectedFiscalRangeId: currentSelected.id,
+              fiscalRange: currentSelected
+            };
           });
         }
       });

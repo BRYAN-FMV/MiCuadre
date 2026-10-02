@@ -816,3 +816,69 @@ export async function fetchExpensesFromSupabase(tenantId: string): Promise<Expen
   }
 }
 
+/**
+ * Fetch Fiscal Ranges / Cajas for Tenant from Supabase
+ */
+export async function fetchFiscalRangesFromSupabase(tenantId: string): Promise<FiscalRange[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('fiscal_ranges')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true);
+
+    if (error || !data || data.length === 0) return null;
+
+    return data.map((r: any) => ({
+      id: r.id,
+      tenantId: r.tenant_id,
+      name: r.name || 'Caja Registradora',
+      cai: r.cai || '',
+      prefix: r.prefix || '000-001-01-',
+      rangeStart: Number(r.range_start || 1),
+      rangeEnd: Number(r.range_end || 10000),
+      currentNumber: Number(r.current_number || 0),
+      deadline: r.deadline || '2026-12-31',
+      documentType: (r.document_type === '04' ? '04' : '01') as '01' | '04',
+      isActive: r.is_active ?? true,
+      isDefault: r.is_default ?? false
+    }));
+  } catch (err) {
+    console.warn('Error fetching fiscal_ranges from Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Save / Upsert Fiscal Range / Caja to Supabase
+ */
+export async function saveFiscalRangeToSupabase(range: FiscalRange) {
+  if (!isSupabaseConfigured() || !isValidUUID(range.tenantId)) return null;
+
+  try {
+    const rangeUuid = isValidUUID(range.id) ? range.id : undefined;
+    const payload: any = {
+      ...(rangeUuid ? { id: rangeUuid } : {}),
+      tenant_id: range.tenantId,
+      name: range.name || 'Caja Registradora',
+      cai: range.cai || '',
+      prefix: range.prefix || '000-001-01-',
+      range_start: range.rangeStart,
+      range_end: range.rangeEnd,
+      current_number: range.currentNumber,
+      deadline: range.deadline,
+      is_active: range.isActive ?? true,
+      is_default: range.isDefault ?? false
+    };
+
+    const { data, error } = await supabase.from('fiscal_ranges').upsert(payload, { onConflict: 'id' }).select().single();
+    if (error) console.warn('Supabase upsert fiscal_ranges info:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Error saving fiscal range to Supabase:', err);
+    return null;
+  }
+}
+

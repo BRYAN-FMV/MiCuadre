@@ -170,7 +170,10 @@ export const CashShiftModal: React.FC = () => {
                   style={{ fontWeight: 700, fontSize: '0.95rem', background: '#f8fafc', borderColor: '#cbd5e1', cursor: 'pointer' }}
                   required
                 >
-                  {(fiscalRanges && fiscalRanges.length > 0 ? fiscalRanges : [fiscalRange]).map(r => (
+                  {((fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id).length > 0
+                    ? (fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id)
+                    : (fiscalRange ? [fiscalRange] : [])
+                  ).map(r => (
                     <option key={r.id} value={r.id}>
                       {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
                     </option>

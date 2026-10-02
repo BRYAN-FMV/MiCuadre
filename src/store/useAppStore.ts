@@ -230,12 +230,24 @@ export const useAppStore = create<AppState>()(
       },
       setActiveTab: (tab) => set({ activeTab: tab }),
       setDevMode: (enabled) => set({ isDevMode: enabled }),
-      setCurrentUser: (user) => set((s) => ({
-        currentUser: user,
-        isAuthenticated: true,
-        cartLines: user.tenantId !== s.tenant.id ? [] : s.cartLines,
-        cartCustomer: user.tenantId !== s.tenant.id ? { name: 'Consumidor Final' } : s.cartCustomer
-      })),
+      setCurrentUser: (user) => set((s) => {
+        const isTenantChanged = user.tenantId !== s.tenant.id;
+        const activeShift = (s.activeShift && s.activeShift.tenantId === user.tenantId) ? s.activeShift : null;
+        
+        const tenantRanges = (s.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === user.tenantId);
+        const nextFiscalRange = tenantRanges.length > 0 ? (tenantRanges.find(r => r.isDefault) || tenantRanges[0]) : s.fiscalRange;
+        const nextFiscalRangeId = nextFiscalRange?.id;
+
+        return {
+          currentUser: user,
+          isAuthenticated: true,
+          activeShift,
+          selectedFiscalRangeId: isTenantChanged ? nextFiscalRangeId : (s.selectedFiscalRangeId || nextFiscalRangeId),
+          fiscalRange: isTenantChanged ? nextFiscalRange : (s.fiscalRange || nextFiscalRange),
+          cartLines: isTenantChanged ? [] : s.cartLines,
+          cartCustomer: isTenantChanged ? { name: 'Consumidor Final' } : s.cartCustomer
+        };
+      }),
 
       addCustomer: (customerData) => {
         const state = get();
@@ -357,7 +369,8 @@ export const useAppStore = create<AppState>()(
       }),
 
       setSelectedFiscalRange: (id) => set((state) => {
-        const ranges = state.fiscalRanges || [state.fiscalRange];
+        const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+        const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
         const found = ranges.find(r => r.id === id);
         if (!found) return state;
         try {
@@ -682,7 +695,8 @@ export const useAppStore = create<AppState>()(
   })),
 
   openCashShift: (openingAmount) => set((state) => {
-    const ranges = state.fiscalRanges || [state.fiscalRange];
+    const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+    const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
     const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
     const targetCajaId = activeCaja?.id;
 
@@ -723,8 +737,9 @@ export const useAppStore = create<AppState>()(
   }),
 
   addCashMovement: (type, amount, concept, referenceId) => set((state) => {
-    const shift = state.activeShift;
-    const ranges = state.fiscalRanges || [state.fiscalRange];
+    const shift = (state.activeShift && state.activeShift.tenantId === state.tenant.id) ? state.activeShift : null;
+    const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+    const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
     const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
 
     const movement: CashMovement = {
@@ -811,7 +826,8 @@ export const useAppStore = create<AppState>()(
     let caiRangeEnd: string | undefined;
 
     if (isFiscal) {
-      const ranges = state.fiscalRanges || [state.fiscalRange];
+      const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+      const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
       const selectedId = state.selectedFiscalRangeId || state.fiscalRange?.id;
       const targetRange = ranges.find(r => r.id === selectedId) || ranges[0] || state.fiscalRange;
 
@@ -839,22 +855,24 @@ export const useAppStore = create<AppState>()(
       });
     }
 
-    const ranges = state.fiscalRanges || [state.fiscalRange];
+    const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+    const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
     const selectedId = state.selectedFiscalRangeId || state.fiscalRange?.id;
     const activeTargetRange = ranges.find(r => r.id === selectedId) || ranges[0] || state.fiscalRange;
+    const activeShift = (state.activeShift && state.activeShift.tenantId === state.tenant.id) ? state.activeShift : null;
 
     const newSale: Sale = {
       id: `sale-${Date.now()}`,
       tenantId: state.tenant.id,
-      cashShiftId: state.activeShift?.id,
+      cashShiftId: activeShift?.id,
       documentNumber: docNumber,
       isFiscal,
       cai,
       caiDeadline,
       caiRangeStart,
       caiRangeEnd,
-      fiscalRangeId: state.activeShift?.fiscalRangeId || activeTargetRange?.id,
-      cajaName: state.activeShift?.cajaName || activeTargetRange?.name || 'Caja 1 - Principal',
+      fiscalRangeId: activeShift?.fiscalRangeId || activeTargetRange?.id,
+      cajaName: activeShift?.cajaName || activeTargetRange?.name || 'Caja 1 - Principal',
       customerId: state.cartCustomer.id,
       customerRtn: state.cartCustomer.rtn,
       customerName: state.cartCustomer.name || 'Consumidor Final',

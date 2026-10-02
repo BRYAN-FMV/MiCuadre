@@ -230,7 +230,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
               onChange={(e) => setSelectedFiscalRange(e.target.value)}
               style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem', width: '100%', background: '#ffffff', cursor: 'pointer' }}
             >
-              {(fiscalRanges || []).map(r => (
+              {(fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === tenant.id).map(r => (
                 <option key={r.id} value={r.id}>
                   {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
                 </option>
