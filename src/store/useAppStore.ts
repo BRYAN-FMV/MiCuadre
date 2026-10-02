@@ -674,18 +674,37 @@ export const useAppStore = create<AppState>()(
   openCashShift: (openingAmount) => set((state) => {
     const ranges = state.fiscalRanges || [state.fiscalRange];
     const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+    const targetCajaId = activeCaja?.id;
+
+    // Check if there is already an open shift for this specific caja
+    const existingOpenShift = (state.shiftHistory || []).find(
+      s => s.tenantId === state.tenant.id &&
+           s.fiscalRangeId === targetCajaId &&
+           s.status === 'OPEN'
+    );
+
+    if (existingOpenShift) {
+      toast.info(`Te has unido al turno activo de ${existingOpenShift.cajaName || activeCaja?.name || 'Caja Registradora'} (Iniciado por ${existingOpenShift.userName}).`);
+      return {
+        activeShift: existingOpenShift
+      };
+    }
+
+    const newShift: CashShift = {
+      id: `shift-${Date.now()}`,
+      tenantId: state.tenant.id,
+      userId: state.currentUser.id,
+      userName: state.currentUser.fullName,
+      fiscalRangeId: activeCaja?.id,
+      cajaName: activeCaja?.name || 'Caja 1 - Principal',
+      openingAmount,
+      status: 'OPEN',
+      openedAt: new Date().toISOString()
+    };
+
     return {
-      activeShift: {
-        id: `shift-${Date.now()}`,
-        tenantId: state.tenant.id,
-        userId: state.currentUser.id,
-        userName: state.currentUser.fullName,
-        fiscalRangeId: activeCaja?.id,
-        cajaName: activeCaja?.name || 'Caja 1 - Principal',
-        openingAmount,
-        status: 'OPEN',
-        openedAt: new Date().toISOString()
-      }
+      activeShift: newShift,
+      shiftHistory: [newShift, ...(state.shiftHistory || []).filter(s => s.id !== newShift.id)]
     };
   }),
 
@@ -1438,6 +1457,7 @@ export const useAppStore = create<AppState>()(
     selectedFiscalRangeId: state.selectedFiscalRangeId,
     fiscalRange: state.fiscalRange,
     products: state.products,
+    activeShift: state.activeShift,
     shiftHistory: state.shiftHistory,
     cashMovements: state.cashMovements,
     cartLines: state.cartLines,

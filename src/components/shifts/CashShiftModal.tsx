@@ -42,6 +42,14 @@ export const CashShiftModal: React.FC = () => {
   if (!isShiftModalOpen) return null;
 
   const closeModal = () => {
+    const isShiftOpen = activeShift && activeShift.tenantId === tenant.id && activeShift.status === 'OPEN';
+    if (!isShiftOpen && currentUser?.role !== 'ADMIN') {
+      logout();
+      toast.info('Sesión cerrada. Debes ingresar el monto de apertura para operar en el POS.');
+      useAppStore.setState({ isShiftModalOpen: false });
+      setZReportData(null);
+      return;
+    }
     useAppStore.setState({ isShiftModalOpen: false });
     setZReportData(null);
   };
@@ -167,15 +175,15 @@ export const CashShiftModal: React.FC = () => {
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
-                    closeModal();
-                    if (currentUser?.role === 'CAJERO') {
+                    if (currentUser?.role !== 'ADMIN') {
                       logout();
-                      toast.info('Sesión cerrada');
+                      toast.info('Sesión cerrada.');
                     }
+                    closeModal();
                   }}
                   style={{ flex: 1 }}
                 >
-                  {currentUser?.role === 'CAJERO' ? (
+                  {currentUser?.role !== 'ADMIN' ? (
                     <>
                       <LogOut size={15} />
                       <span>Cerrar Sesión</span>
