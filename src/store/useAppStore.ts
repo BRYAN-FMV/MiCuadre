@@ -232,18 +232,20 @@ export const useAppStore = create<AppState>()(
       setDevMode: (enabled) => set({ isDevMode: enabled }),
       setCurrentUser: (user) => set((s) => {
         const isTenantChanged = user.tenantId !== s.tenant.id;
-        const activeShift = (s.activeShift && s.activeShift.tenantId === user.tenantId) ? s.activeShift : null;
-        
         const tenantRanges = (s.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === user.tenantId);
-        const nextFiscalRange = tenantRanges.length > 0 ? (tenantRanges.find(r => r.isDefault) || tenantRanges[0]) : s.fiscalRange;
-        const nextFiscalRangeId = nextFiscalRange?.id;
+        const defaultRange = tenantRanges.length > 0 ? (tenantRanges.find(r => r.isDefault) || tenantRanges[0]) : s.fiscalRange;
+        const nextFiscalRangeId = isTenantChanged ? defaultRange?.id : (s.selectedFiscalRangeId || defaultRange?.id);
+
+        const openShiftForCaja = (s.shiftHistory || []).find(
+          shift => shift.tenantId === user.tenantId && shift.status === 'OPEN' && shift.fiscalRangeId === nextFiscalRangeId
+        ) || null;
 
         return {
           currentUser: user,
           isAuthenticated: true,
-          activeShift,
-          selectedFiscalRangeId: isTenantChanged ? nextFiscalRangeId : (s.selectedFiscalRangeId || nextFiscalRangeId),
-          fiscalRange: isTenantChanged ? nextFiscalRange : (s.fiscalRange || nextFiscalRange),
+          activeShift: nextFiscalRangeId === 'VIEW_MODE_ADMIN' ? null : openShiftForCaja,
+          selectedFiscalRangeId: nextFiscalRangeId,
+          fiscalRange: isTenantChanged ? defaultRange : (s.fiscalRanges?.find(r => r.id === nextFiscalRangeId) || defaultRange),
           cartLines: isTenantChanged ? [] : s.cartLines,
           cartCustomer: isTenantChanged ? { name: 'Consumidor Final' } : s.cartCustomer
         };
@@ -370,7 +372,7 @@ export const useAppStore = create<AppState>()(
 
       setSelectedFiscalRange: (id) => set((state) => {
         if (id === 'VIEW_MODE_ADMIN') {
-          return { selectedFiscalRangeId: 'VIEW_MODE_ADMIN' };
+          return { selectedFiscalRangeId: 'VIEW_MODE_ADMIN', activeShift: null };
         }
         const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
         const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
@@ -379,9 +381,15 @@ export const useAppStore = create<AppState>()(
         try {
           localStorage.setItem('micuadre_assigned_caja_id', id);
         } catch (err) {}
+
+        const openShiftForCaja = (state.shiftHistory || []).find(
+          s => s.tenantId === state.tenant.id && s.status === 'OPEN' && s.fiscalRangeId === id
+        ) || null;
+
         return {
           selectedFiscalRangeId: id,
-          fiscalRange: found
+          fiscalRange: found,
+          activeShift: openShiftForCaja
         };
       }),
 

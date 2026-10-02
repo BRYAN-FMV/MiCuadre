@@ -69,9 +69,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
             if (liveRanges && liveRanges.length > 0) {
               const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== matched.id);
               newState.fiscalRanges = [...liveRanges, ...otherRanges];
-              const defaultRange = liveRanges.find(r => r.isDefault) || liveRanges[0];
-              newState.selectedFiscalRangeId = defaultRange.id;
-              newState.fiscalRange = defaultRange;
+              
+              const existingSelected = liveRanges.find(r => r.id === state.selectedFiscalRangeId);
+              const targetRange = existingSelected || liveRanges.find(r => r.isDefault) || liveRanges[0];
+              newState.selectedFiscalRangeId = targetRange.id;
+              newState.fiscalRange = targetRange;
+
+              const allShifts = liveShifts || state.shiftHistory || [];
+              const matchingShift = allShifts.find(
+                s => s.tenantId === matched.id && s.status === 'OPEN' && s.fiscalRangeId === targetRange.id
+              ) || null;
+              newState.activeShift = targetRange.id === 'VIEW_MODE_ADMIN' ? null : matchingShift;
             }
             if (liveShifts) {
               const otherShifts = (state.shiftHistory || []).filter(s => s.tenantId && s.tenantId !== matched.id);
@@ -201,15 +209,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
 
       toast.success(`Bienvenido a ${matchedTenant.name}, ${selectedProfile.fullName}`);
       
-      const currentActiveShift = useAppStore.getState().activeShift;
-      const isShiftOpen = currentActiveShift && currentActiveShift.tenantId === matchedTenant.id && currentActiveShift.status === 'OPEN';
+      const currentShiftHistory = useAppStore.getState().shiftHistory || [];
+      const openShiftForSelectedCaja = currentShiftHistory.find(
+        s => s.tenantId === matchedTenant.id && s.status === 'OPEN' && s.fiscalRangeId === selectedFiscalRangeId
+      ) || null;
+      const isShiftOpen = !!openShiftForSelectedCaja;
       const isNonAdmin = selectedProfile.role !== 'ADMIN';
+      const targetCajaObj = (fiscalRanges || []).find(r => r.id === selectedFiscalRangeId);
 
       useAppStore.setState({ 
         isAuthenticated: true, 
         isDevMode: false,
         cartLines: [],
         cartCustomer: { name: 'Consumidor Final' },
+        selectedFiscalRangeId: selectedFiscalRangeId,
+        fiscalRange: targetCajaObj || useAppStore.getState().fiscalRange,
+        activeShift: openShiftForSelectedCaja,
         isShiftModalOpen: isNonAdmin && !isShiftOpen
       });
     } catch (err) {
@@ -313,6 +328,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
                 );
               })}
             </select>
+            {uniqueTenantRanges.length > 0 && uniqueTenantRanges.every(r => {
+              const s = openShiftsForTenant.find(shift => shift.fiscalRangeId === r.id && shift.status === 'OPEN');
+              return !!s && s.userId !== currentSelectedProfile?.id;
+            }) && !isAdminSelected && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.75rem', marginTop: '0.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                <ShieldAlert size={18} style={{ color: '#dc2626', flexShrink: 0, marginTop: '2px' }} />
+                <span style={{ fontSize: '0.82rem', color: '#991b1b', lineHeight: '1.3', fontWeight: 600 }}>
+                  Todas las cajas registradoras están ocupadas en otros dispositivos. Contacta a un administrador para habilitar una nueva caja o cerrar un turno activo.
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="form-group">

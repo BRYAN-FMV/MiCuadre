@@ -1132,14 +1132,7 @@ export async function syncAllCloudData(tenantId: string) {
         } else {
           // Find active open shift for the selected caja strictly by ID
           const openShiftForCaja = liveShifts.find(s => s.tenantId === tenantId && s.status === 'OPEN' && s.fiscalRangeId === selectedFiscalRangeId);
-          if (openShiftForCaja) {
-            activeShift = openShiftForCaja;
-          } else if (state.activeShift && state.activeShift.tenantId === tenantId) {
-            const liveStatus = liveShifts.find(s => s.id === state.activeShift?.id);
-            activeShift = (liveStatus && liveStatus.status === 'OPEN') ? liveStatus : null;
-          } else {
-            activeShift = null;
-          }
+          activeShift = openShiftForCaja || null;
         }
       }
 
