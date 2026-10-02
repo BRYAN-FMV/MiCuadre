@@ -1054,13 +1054,15 @@ export async function syncAllCloudData(tenantId: string) {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return;
 
   try {
-    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts] = await Promise.all([
+    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts, liveMovements, liveExpenses] = await Promise.all([
       fetchProductsFromSupabase(tenantId),
       fetchSuppliersFromSupabase(tenantId),
       fetchProfilesFromSupabase(tenantId),
       fetchSalesFromSupabase(tenantId),
       fetchFiscalRangesFromSupabase(tenantId),
-      fetchShiftsFromSupabase(tenantId)
+      fetchShiftsFromSupabase(tenantId),
+      fetchCashMovementsFromSupabase(tenantId),
+      fetchExpensesFromSupabase(tenantId)
     ]);
 
     useAppStore.setState(state => {
@@ -1141,6 +1143,24 @@ export async function syncAllCloudData(tenantId: string) {
         }
       }
 
+      // 7. Cash Movements
+      let cashMovements = state.cashMovements;
+      if (liveMovements && liveMovements.length > 0) {
+        const liveIds = new Set(liveMovements.map(m => m.id));
+        const localOnly = (state.cashMovements || []).filter(m => m.tenantId === tenantId && !liveIds.has(m.id));
+        const otherTenantMovs = (state.cashMovements || []).filter(m => m.tenantId && m.tenantId !== tenantId);
+        cashMovements = [...liveMovements, ...localOnly, ...otherTenantMovs];
+      }
+
+      // 8. Expenses
+      let expenses = state.expenses;
+      if (liveExpenses && liveExpenses.length > 0) {
+        const liveIds = new Set(liveExpenses.map(e => e.id));
+        const localOnly = (state.expenses || []).filter(e => e.tenantId === tenantId && !liveIds.has(e.id));
+        const otherTenantExpenses = (state.expenses || []).filter(e => e.tenantId && e.tenantId !== tenantId);
+        expenses = [...liveExpenses, ...localOnly, ...otherTenantExpenses];
+      }
+
       return {
         products,
         suppliers,
@@ -1150,7 +1170,9 @@ export async function syncAllCloudData(tenantId: string) {
         selectedFiscalRangeId,
         fiscalRange,
         shiftHistory,
-        activeShift
+        activeShift,
+        cashMovements,
+        expenses
       };
     });
   } catch (err) {
