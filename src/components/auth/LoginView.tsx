@@ -14,6 +14,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const profiles = useAppStore(state => state.profiles);
   const setCurrentUser = useAppStore(state => state.setCurrentUser);
   const tenant = useAppStore(state => state.tenant);
+  const fiscalRanges = useAppStore(state => state.fiscalRanges);
+  const selectedFiscalRangeId = useAppStore(state => state.selectedFiscalRangeId);
+  const setSelectedFiscalRange = useAppStore(state => state.setSelectedFiscalRange);
 
   // Form input states
   const [storeInput, setStoreInput] = useState<string>(tenant?.name || '');
@@ -211,6 +214,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
               {availableProfiles.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.fullName} ({p.role === 'ADMIN' ? 'Administrador' : p.role === 'CAJERO' ? 'Cajero' : p.role === 'BODEGUERO' ? 'Bodeguero' : 'Personal'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+              <Store size={16} style={{ color: '#059669' }} />
+              <span>Caja Registradora / Terminal</span>
+            </label>
+            <select
+              className="input-control"
+              value={selectedFiscalRangeId}
+              onChange={(e) => setSelectedFiscalRange(e.target.value)}
+              style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem', width: '100%', background: '#ffffff', cursor: 'pointer' }}
+            >
+              {(fiscalRanges || []).map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
                 </option>
               ))}
             </select>

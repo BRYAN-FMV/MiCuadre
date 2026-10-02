@@ -21,7 +21,8 @@ import {
   fetchProductsFromSupabase,
   fetchSuppliersFromSupabase,
   fetchProfilesFromSupabase,
-  fetchTenantsFromSupabase
+  fetchTenantsFromSupabase,
+  fetchSalesFromSupabase
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -179,6 +180,16 @@ export const App: React.FC = () => {
           useAppStore.setState(state => {
             const otherProfiles = state.profiles.filter(p => p.tenantId && p.tenantId !== tenant.id);
             return { profiles: [...liveProfiles, ...otherProfiles] };
+          });
+        }
+      });
+
+      fetchSalesFromSupabase(tenant.id).then(liveSales => {
+        if (liveSales && liveSales.length > 0) {
+          useAppStore.setState(state => {
+            const liveIds = new Set(liveSales.map(ls => ls.id));
+            const localOnly = (state.sales || []).filter(s => !liveIds.has(s.id));
+            return { sales: [...liveSales, ...localOnly] };
           });
         }
       });

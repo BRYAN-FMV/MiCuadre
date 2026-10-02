@@ -340,56 +340,152 @@ export async function fetchSuppliersFromSupabase(tenantId: string): Promise<Supp
 }
 
 /**
- * Execute atomic POS Sale via Supabase RPC function
+ * Execute atomic POS Sale via Supabase RPC function with direct insert fallback
  */
-export async function processPosSaleSupabase(payload: {
-  tenantId: string;
-  cashShiftId?: string;
-  customerName: string;
-  customerRtn?: string;
-  idempotencyKey?: string;
-  isFiscal: boolean;
-  subtotal: number;
-  discountAmount: number;
-  exemptAmount: number;
-  exoneratedAmount: number;
-  taxable15: number;
-  tax15: number;
-  taxable18: number;
-  tax18: number;
-  total: number;
-  paymentMethod: string;
-  items: any[];
-}) {
-  if (!isSupabaseConfigured()) return null;
+export async function saveSaleToSupabase(sale: Sale) {
+  if (!isSupabaseConfigured() || !isValidUUID(sale.tenantId)) return null;
 
-  const { data, error } = await supabase.rpc('process_pos_sale', {
-    p_tenant_id: payload.tenantId,
-    p_cash_shift_id: payload.cashShiftId || null,
-    p_customer_name: payload.customerName,
-    p_customer_rtn: payload.customerRtn || null,
-    p_idempotency_key: payload.idempotencyKey || null,
-    p_is_fiscal: payload.isFiscal,
-    p_subtotal: payload.subtotal,
-    p_discount_amount: payload.discountAmount,
-    p_exempt_amount: payload.exemptAmount,
-    p_exonerated_amount: payload.exoneratedAmount,
-    p_taxable_15: payload.taxable15,
-    p_tax_15: payload.tax15,
-    p_taxable_18: payload.taxable18,
-    p_tax_18: payload.tax18,
-    p_total: payload.total,
-    p_payment_method: payload.paymentMethod,
-    p_items: payload.items
-  });
+  // 1. Try RPC first if configured on Supabase instance
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('process_pos_sale', {
+      p_tenant_id: sale.tenantId,
+      p_cash_shift_id: (sale.cashShiftId && isValidUUID(sale.cashShiftId)) ? sale.cashShiftId : null,
+      p_customer_name: sale.customerName || 'Consumidor Final',
+      p_customer_rtn: sale.customerRtn || null,
+      p_idempotency_key: sale.id,
+      p_is_fiscal: sale.isFiscal,
+      p_subtotal: sale.subtotal,
+      p_discount_amount: sale.discountAmount,
+      p_exempt_amount: sale.exemptAmount,
+      p_exonerated_amount: sale.exoneratedAmount,
+      p_taxable_15: sale.taxable15,
+      p_tax_15: sale.tax15,
+      p_taxable_18: sale.taxable18,
+      p_tax_18: sale.tax18,
+      p_total: sale.total,
+      p_payment_method: sale.paymentMethod,
+      p_items: sale.items || []
+    });
 
-  if (error) {
-    console.error('Error al procesar venta en Supabase:', error);
-    throw new Error(error.message);
+    if (!rpcError && rpcData) {
+      console.log('Venta procesada exitosamente vía RPC en Supabase');
+      // Update caja_name and fiscal_range_id if column exists
+      await supabase.from('sales').update({
+        caja_name: sale.cajaName || 'Caja Registradora',
+        fiscal_range_id: (sale.fiscalRangeId && isValidUUID(sale.fiscalRangeId)) ? sale.fiscalRangeId : null
+      }).eq('id', sale.id);
+
+      return rpcData;
+    }
+    if (rpcError) {
+      console.warn('RPC process_pos_sale no disponible o devolvió error. Ejecutando inserción directa en Supabase:', rpcError.message);
+    }
+  } catch (err: any) {
+    console.warn('Excepción al ejecutar RPC process_pos_sale. Usando inserción directa fallback:', err?.message || err);
   }
 
-  return data;
+  // 2. Direct insert fallback into `sales` and `sale_items`
+  try {
+    const saleUuid = isValidUUID(sale.id) ? sale.id : undefined;
+    const { data: insertedSale, error: saleErr } = await supabase
+      .from('sales')
+      .insert({
+        ...(saleUuid ? { id: saleUuid } : {}),
+        tenant_id: sale.tenantId,
+        cash_shift_id: (sale.cashShiftId && isValidUUID(sale.cashShiftId)) ? sale.cashShiftId : null,
+        document_number: sale.documentNumber,
+        is_fiscal: sale.isFiscal,
+        cai: sale.cai || null,
+        cai_deadline: sale.caiDeadline || null,
+        cai_range_start: sale.caiRangeStart || null,
+        cai_range_end: sale.caiRangeEnd || null,
+        fiscal_range_id: (sale.fiscalRangeId && isValidUUID(sale.fiscalRangeId)) ? sale.fiscalRangeId : null,
+        caja_name: sale.cajaName || 'Caja Registradora',
+        customer_id: (sale.customerId && isValidUUID(sale.customerId)) ? sale.customerId : null,
+        customer_name: sale.customerName || 'Consumidor Final',
+        customer_rtn: sale.customerRtn || null,
+        subtotal: sale.subtotal,
+        discount_amount: sale.discountAmount,
+        exempt_amount: sale.exemptAmount,
+        exonerated_amount: sale.exoneratedAmount,
+        taxable_15: sale.taxable15,
+        tax_15: sale.tax15,
+        taxable_18: sale.taxable18,
+        tax_18: sale.tax18,
+        total: sale.total,
+        payment_method: sale.paymentMethod,
+        created_at: sale.createdAt || new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (saleErr) {
+      console.error('Error al insertar venta directamente en Supabase:', saleErr.message);
+      return null;
+    }
+
+    if (insertedSale && sale.items && sale.items.length > 0) {
+      const itemsToInsert = sale.items.map(item => ({
+        sale_id: insertedSale.id,
+        product_id: (item.productId && isValidUUID(item.productId)) ? item.productId : null,
+        product_name: item.name,
+        sku: item.sku || '',
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        subtotal: item.subtotal,
+        tax_classification: item.taxClassification || 'EXENTO',
+        tax_amount: item.taxAmount || 0,
+        total: item.total
+      }));
+
+      const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToInsert);
+      if (itemsErr) {
+        console.warn('Error al insertar ítems de venta en Supabase:', itemsErr.message);
+      }
+    }
+
+    console.log('Venta guardada exitosamente en Supabase vía inserción directa');
+    return insertedSale;
+  } catch (fallbackErr: any) {
+    console.error('Error general guardando venta en Supabase:', fallbackErr?.message || fallbackErr);
+    return null;
+  }
 }
+
+export async function processPosSaleSupabase(payload: any) {
+  if (payload.idempotencyKey) {
+    const saleObj: Sale = {
+      id: payload.idempotencyKey,
+      tenantId: payload.tenantId,
+      cashShiftId: payload.cashShiftId,
+      documentNumber: payload.documentNumber || `TICK-${Date.now()}`,
+      isFiscal: payload.isFiscal,
+      cai: payload.cai,
+      caiDeadline: payload.caiDeadline,
+      caiRangeStart: payload.caiRangeStart,
+      caiRangeEnd: payload.caiRangeEnd,
+      fiscalRangeId: payload.fiscalRangeId,
+      cajaName: payload.cajaName || 'Caja Registradora',
+      customerName: payload.customerName || 'Consumidor Final',
+      customerRtn: payload.customerRtn,
+      subtotal: payload.subtotal,
+      discountAmount: payload.discountAmount,
+      exemptAmount: payload.exemptAmount,
+      exoneratedAmount: payload.exoneratedAmount,
+      taxable15: payload.taxable15,
+      tax15: payload.tax15,
+      taxable18: payload.taxable18,
+      tax18: payload.tax18,
+      total: payload.total,
+      paymentMethod: payload.paymentMethod,
+      createdAt: new Date().toISOString(),
+      items: payload.items || []
+    };
+    return saveSaleToSupabase(saleObj);
+  }
+  return null;
+}
+
 
 /**
  * Execute atomic Purchase Invoice & CPP calculation via Supabase RPC function

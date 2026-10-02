@@ -15,7 +15,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, closeCashShiftSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 export interface HeldOrder {
@@ -957,25 +957,7 @@ export const useAppStore = create<AppState>()(
     }));
 
     if (isSupabaseConfigured() && isValidUUID(newSale.tenantId)) {
-      processPosSaleSupabase({
-        tenantId: newSale.tenantId,
-        cashShiftId: newSale.cashShiftId,
-        customerName: newSale.customerName,
-        customerRtn: newSale.customerRtn,
-        idempotencyKey: newSale.id,
-        isFiscal: newSale.isFiscal,
-        subtotal: newSale.subtotal,
-        discountAmount: newSale.discountAmount,
-        exemptAmount: newSale.exemptAmount,
-        exoneratedAmount: newSale.exoneratedAmount,
-        taxable15: newSale.taxable15,
-        tax15: newSale.tax15,
-        taxable18: newSale.taxable18,
-        tax18: newSale.tax18,
-        total: newSale.total,
-        paymentMethod: newSale.paymentMethod,
-        items: newSale.items || []
-      }).catch(err => console.warn('Supabase process sale info:', err));
+      saveSaleToSupabase(newSale).catch(err => console.warn('Supabase process sale info:', err));
     }
 
     return newSale;

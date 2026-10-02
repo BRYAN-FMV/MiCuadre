@@ -17,6 +17,9 @@ export const CashShiftModal: React.FC = () => {
   const sales = useAppStore(state => state.sales);
   const currentUser = useAppStore(state => state.currentUser);
   const fiscalRange = useAppStore(state => state.fiscalRange);
+  const fiscalRanges = useAppStore(state => state.fiscalRanges);
+  const selectedFiscalRangeId = useAppStore(state => state.selectedFiscalRangeId);
+  const setSelectedFiscalRange = useAppStore(state => state.setSelectedFiscalRange);
 
   const [activeTab, setActiveTab] = useState<'CLOSE' | 'MOVEMENT'>('CLOSE');
   const [openingAmountInput, setOpeningAmountInput] = useState('1000.00');
@@ -156,6 +159,25 @@ export const CashShiftModal: React.FC = () => {
             </div>
 
             <form onSubmit={handleOpenShift}>
+              <div className="form-group" style={{ marginBottom: '1.1rem' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                  Seleccionar Caja Registradora / Terminal
+                </label>
+                <select
+                  className="input-control"
+                  value={selectedFiscalRangeId || fiscalRange?.id}
+                  onChange={(e) => setSelectedFiscalRange(e.target.value)}
+                  style={{ fontWeight: 700, fontSize: '0.95rem', background: '#f8fafc', borderColor: '#cbd5e1', cursor: 'pointer' }}
+                  required
+                >
+                  {(fiscalRanges && fiscalRanges.length > 0 ? fiscalRanges : [fiscalRange]).map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.name || 'Caja Registradora'} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Monto de Apertura ({tenant.currencySymbol})</label>
                 <input

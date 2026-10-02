@@ -42,6 +42,21 @@ export const ReportsView: React.FC = () => {
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<Sale | null>(null);
   const [selectedShiftDetail, setSelectedShiftDetail] = useState<any | null>(null);
 
+  // Auto-sync sales from cloud on view mount
+  React.useEffect(() => {
+    if (isSupabaseConfigured() && tenant?.id) {
+      fetchSalesFromSupabase(tenant.id).then(liveSales => {
+        if (liveSales && liveSales.length > 0) {
+          useAppStore.setState(state => {
+            const liveIds = new Set(liveSales.map(ls => ls.id));
+            const localOnly = (state.sales || []).filter(s => !liveIds.has(s.id));
+            return { sales: [...liveSales, ...localOnly] };
+          });
+        }
+      });
+    }
+  }, [tenant.id]);
+
   // Filter Sales based on Selected Time Period & Search & Filters & Tenant ID
   const getFilteredSales = () => {
     const now = new Date();
