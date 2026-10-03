@@ -44,8 +44,12 @@ export const CashShiftModal: React.FC = () => {
 
   if (!isShiftModalOpen) return null;
 
-  const closeModal = () => {
+  const closeModal = (force = false) => {
     const isShiftOpen = activeShift && activeShift.tenantId === tenant.id && activeShift.status === 'OPEN';
+    if (isShiftOpen && currentUser?.role !== 'ADMIN' && !force) {
+      toast.warning('Debes realizar el Arqueo Ciego y Cierre Z de la caja registradora antes de salir del turno.');
+      return;
+    }
     if (!isShiftOpen && currentUser?.role !== 'ADMIN') {
       logout();
       toast.info('Sesión cerrada. Debes ingresar el monto de apertura para operar en el POS.');
@@ -58,9 +62,9 @@ export const CashShiftModal: React.FC = () => {
   };
 
   const handleFinishZReportAndLogout = () => {
-    closeModal();
+    closeModal(true);
     logout();
-    toast.info('Turno cerrado y sesión finalizada.');
+    toast.info('Turno cerrado exitosamente y sesión finalizada.');
   };
 
   const handleOpenShift = (e: React.FormEvent) => {
@@ -327,8 +331,8 @@ export const CashShiftModal: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
-                    <button type="button" className="btn btn-secondary" onClick={closeModal} style={{ flex: 1 }}>
-                      Cancelar
+                    <button type="button" className="btn btn-secondary" onClick={() => closeModal(false)} style={{ flex: 1 }}>
+                      {currentUser?.role !== 'ADMIN' ? 'Volver al Arqueo' : 'Cancelar'}
                     </button>
                     <button type="submit" className="btn btn-primary" style={{ flex: 2, background: '#ef4444', borderColor: '#ef4444' }}>
                       Cerrar Turno & Generar Reporte Z

@@ -159,6 +159,19 @@ export const App: React.FC = () => {
   }, [tenant?.id, currentUser?.tenantId]);
 
   useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const state = useAppStore.getState();
+      const isShiftOpen = state.activeShift && state.activeShift.tenantId === state.tenant?.id && state.activeShift.status === 'OPEN';
+      const isNonAdmin = state.currentUser?.role !== 'ADMIN';
+      if (state.isAuthenticated && isNonAdmin && isShiftOpen) {
+        e.preventDefault();
+        e.returnValue = 'Tienes un turno de caja registradora abierto. Debes realizar el Arqueo Ciego y Cierre Z antes de salir o cerrar la ventana.';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     if (isSupabaseConfigured() && tenant?.id) {
       // 1. Push any local test/offline records to cloud
       pushLocalDataToCloud(tenant.id).then(() => {
@@ -171,8 +184,13 @@ export const App: React.FC = () => {
         syncAllCloudData(tenant.id);
       }, 8000);
 
-      return () => clearInterval(syncInterval);
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        clearInterval(syncInterval);
+      };
     }
+
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [tenant?.id, isAuthenticated]);
 
   // Handle dedicated SuperAdmin Route (/admin)

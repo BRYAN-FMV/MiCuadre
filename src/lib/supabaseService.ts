@@ -401,9 +401,32 @@ export async function saveSaleToSupabase(sale: Sale) {
       if (itemsErr) {
         console.warn('Supabase sale_items insert info:', itemsErr.message);
       }
+
+      // Synchronize shared product stock in Supabase so all Cajas (Caja 1, Caja 2) share 1 unified inventory
+      for (const item of sale.items) {
+        if (item.productId && isValidUUID(item.productId)) {
+          try {
+            const { data: currentProd } = await supabase
+              .from('products')
+              .select('current_stock')
+              .eq('id', item.productId)
+              .single();
+
+            if (currentProd) {
+              const updatedStock = Math.max(0, Number(currentProd.current_stock || 0) - Number(item.quantity || 0));
+              await supabase
+                .from('products')
+                .update({ current_stock: updatedStock })
+                .eq('id', item.productId);
+            }
+          } catch (stkErr) {
+            console.warn('Error updating shared product stock in Supabase:', stkErr);
+          }
+        }
+      }
     }
 
-    console.log('Venta guardada exitosamente en Supabase');
+    console.log('Venta guardada e inventario actualizado exitosamente en Supabase');
     return insertedSale;
   } catch (fallbackErr: any) {
     console.error('Error general guardando venta en Supabase:', fallbackErr?.message || fallbackErr);
