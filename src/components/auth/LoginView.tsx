@@ -316,17 +316,32 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
                   MODO VISTA (Solo Administración & Reportes - Sin Caja)
                 </option>
               )}
-              {uniqueTenantRanges.map((r, index) => {
-                const cajaDisplayName = r.name || (index === 0 ? 'Caja 1 - Principal' : `Caja ${index + 1}`);
-                const occupiedShift = openShiftsForTenant.find(s => s.fiscalRangeId === r.id && s.status === 'OPEN');
-                const isOccupiedByAnother = !!occupiedShift && occupiedShift.userId !== currentSelectedProfile?.id;
-                return (
-                  <option key={r.id} value={r.id} disabled={isOccupiedByAnother}>
-                    {cajaDisplayName} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
-                    {occupiedShift ? ` (OCUPADA por ${occupiedShift.userName})` : ''}
-                  </option>
-                );
-              })}
+              {(() => {
+                const activeShiftIdLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('micuadre_active_shift_id') : null;
+                const availableRanges = uniqueTenantRanges.filter(r => {
+                  const occupiedShift = openShiftsForTenant.find(s => s.fiscalRangeId === r.id && s.status === 'OPEN');
+                  if (!occupiedShift) return true;
+                  if (activeShiftIdLocal && occupiedShift.id === activeShiftIdLocal) return true;
+                  return false; // Omit occupied caja completely from selection list
+                });
+
+                if (availableRanges.length === 0 && !isAdminSelected) {
+                  return (
+                    <option value="" disabled>
+                      (No hay cajas disponibles - Todas están ocupadas en otros dispositivos)
+                    </option>
+                  );
+                }
+
+                return availableRanges.map((r, index) => {
+                  const cajaDisplayName = r.name || (index === 0 ? 'Caja 1 - Principal' : `Caja ${index + 1}`);
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {cajaDisplayName} ({r.prefix}{String(r.currentNumber).padStart(8, '0')})
+                    </option>
+                  );
+                });
+              })()}
             </select>
             {uniqueTenantRanges.length > 0 && uniqueTenantRanges.every(r => {
               const s = openShiftsForTenant.find(shift => shift.fiscalRangeId === r.id && shift.status === 'OPEN');

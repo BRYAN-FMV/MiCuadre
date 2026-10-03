@@ -751,10 +751,11 @@ export const useAppStore = create<AppState>()(
     );
 
     if (existingOpenShift) {
-      if (existingOpenShift.userId === state.currentUser.id) {
+      const activeShiftIdLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('micuadre_active_shift_id') : null;
+      if (activeShiftIdLocal && existingOpenShift.id === activeShiftIdLocal) {
         return { activeShift: existingOpenShift };
       }
-      toast.error(`La terminal "${activeCaja?.name || 'Caja Registradora'}" ya está siendo operada por ${existingOpenShift.userName} en otro dispositivo. Cada caja solo puede estar activa en 1 dispositivo a la vez.`);
+      toast.error(`La terminal "${activeCaja?.name || 'Caja Registradora'}" ya está siendo operada en otro dispositivo por ${existingOpenShift.userName}. Cada caja solo puede estar activa en 1 dispositivo a la vez.`);
       return state;
     }
 
@@ -769,6 +770,10 @@ export const useAppStore = create<AppState>()(
       status: 'OPEN',
       openedAt: new Date().toISOString()
     };
+
+    try {
+      localStorage.setItem('micuadre_active_shift_id', newShift.id);
+    } catch (err) {}
 
     if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
       saveCashShiftToSupabase(newShift).catch(err => console.warn('Supabase save shift info:', err));
@@ -833,6 +838,10 @@ export const useAppStore = create<AppState>()(
       status: 'CLOSED',
       closedAt: new Date().toISOString()
     };
+
+    try {
+      localStorage.removeItem('micuadre_active_shift_id');
+    } catch (err) {}
 
     set((s) => ({
       activeShift: closedShift,

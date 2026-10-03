@@ -397,6 +397,7 @@ export async function saveSaleToSupabase(sale: Sale) {
         subtotal: item.subtotal
       }));
 
+      await supabase.from('sale_items').delete().eq('sale_id', insertedSale.id);
       const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToInsert);
       if (itemsErr) {
         console.warn('Supabase sale_items insert info:', itemsErr.message);
@@ -579,20 +580,32 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
       total: Number(s.total),
       paymentMethod: s.payment_method,
       createdAt: s.created_at,
-      items: s.sale_items?.map((i: any) => ({
-        id: i.id,
-        productId: i.product_id,
-        serviceId: i.service_id,
-        staffId: i.staff_id,
-        name: i.product_name || (i.product_id && productMap.get(i.product_id)) || 'Artículo POS',
-        sku: i.sku || (i.product_id && productSkuMap.get(i.product_id)) || '',
-        quantity: Number(i.quantity || 1),
-        unitPrice: Number(i.unit_price || 0),
-        subtotal: Number(i.subtotal || 0),
-        taxClassification: i.tax_classification || 'EXENTO',
-        taxAmount: Number(i.tax_amount || 0),
-        total: Number(i.subtotal + (i.tax_amount || 0))
-      })) || []
+      items: (() => {
+        const rawItems = s.sale_items || [];
+        const uniqueItemsMap = new Map<string, any>();
+        rawItems.forEach((i: any) => {
+          const itemKey = i.id || `${i.product_id}_${i.service_id}_${i.quantity}_${i.unit_price}_${i.subtotal}`;
+          if (!uniqueItemsMap.has(itemKey)) {
+            uniqueItemsMap.set(itemKey, i);
+          }
+        });
+        return Array.from(uniqueItemsMap.values()).map((i: any) => ({
+          id: i.id,
+          productId: i.product_id,
+          serviceId: i.service_id,
+          staffId: i.staff_id,
+          name: i.product_name || (i.product_id && productMap.get(i.product_id)) || 'Artículo POS',
+          sku: i.sku || (i.product_id && productSkuMap.get(i.product_id)) || '',
+          quantity: Number(i.quantity || 1),
+          unitPrice: Number(i.unit_price || 0),
+          originalUnitPrice: Number(i.unit_price || 0),
+          discountAmount: Number(i.discount_amount || 0),
+          subtotal: Number(i.subtotal || 0),
+          taxClassification: i.tax_classification || 'EXENTO',
+          taxAmount: Number(i.tax_amount || 0),
+          total: Number(i.subtotal + (i.tax_amount || 0))
+        }));
+      })()
     }));
   } catch (err) {
     console.warn('Error fetching sales from Supabase:', err);
