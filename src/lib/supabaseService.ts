@@ -275,39 +275,89 @@ export async function updateProfilePinInSupabase(
 export async function fetchProductsFromSupabase(tenantId: string): Promise<Product[] | null> {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
-  const { data, error } = await supabase
-    .from('products')
-    .select('*, product_price_tiers(*)')
-    .eq('tenant_id', tenantId)
-    .eq('is_active', true);
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*, product_price_tiers(*)')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true);
 
-  if (error) {
-    console.error('Error al cargar productos de Supabase:', error);
+    if (error || !data) {
+      console.error('Error al cargar productos de Supabase:', error?.message);
+      return null;
+    }
+
+    return data.map((p: any) => ({
+      id: p.id,
+      tenantId: p.tenant_id,
+      sku: p.sku,
+      barcode: p.barcode,
+      name: p.name,
+      category: p.category,
+      unitOfMeasure: p.unit_of_measure,
+      costPrice: Number(p.cost_price),
+      salePrice: Number(p.sale_price),
+      currentStock: Number(p.current_stock),
+      minStockAlert: Number(p.min_stock_alert),
+      taxClassification: p.tax_classification,
+      isActive: p.is_active,
+      tiers: p.product_price_tiers?.map((t: any) => ({
+        id: t.id,
+        minQuantity: t.min_quantity,
+        maxQuantity: t.max_quantity,
+        unitPrice: Number(t.unit_price),
+        tierName: t.tier_name
+      }))
+    }));
+  } catch (err) {
+    console.error('Error al cargar productos de Supabase:', err);
     return null;
   }
+}
+/**
+ * Save / Upsert Product to Supabase
+ */
+export async function saveProductToSupabase(product: Product) {
+  if (!isSupabaseConfigured() || !isValidUUID(product.tenantId)) return null;
 
-  return data.map((p: any) => ({
-    id: p.id,
-    tenantId: p.tenant_id,
-    sku: p.sku,
-    barcode: p.barcode,
-    name: p.name,
-    category: p.category,
-    unitOfMeasure: p.unit_of_measure,
-    costPrice: Number(p.cost_price),
-    salePrice: Number(p.sale_price),
-    currentStock: Number(p.current_stock),
-    minStockAlert: Number(p.min_stock_alert),
-    taxClassification: p.tax_classification,
-    isActive: p.is_active,
-    tiers: p.product_price_tiers?.map((t: any) => ({
-      id: t.id,
-      minQuantity: t.min_quantity,
-      maxQuantity: t.max_quantity,
-      unitPrice: Number(t.unit_price),
-      tierName: t.tier_name
-    }))
-  }));
+  try {
+    const prodUuid = isValidUUID(product.id) ? product.id : generateUUID();
+    const payload: any = {
+      id: prodUuid,
+      tenant_id: product.tenantId,
+      sku: product.sku || `SKU-${Date.now()}`,
+      barcode: product.barcode || null,
+      name: product.name,
+      category: product.category || 'General',
+      unit_of_measure: product.unitOfMeasure || 'Unidad',
+      cost_price: product.costPrice || 0,
+      sale_price: product.salePrice || 0,
+      current_stock: product.currentStock != null ? product.currentStock : 0,
+      min_stock_alert: product.minStockAlert != null ? product.minStockAlert : 5,
+      tax_classification: product.taxClassification || 'EXENTO',
+      is_active: product.isActive ?? true
+    };
+
+    const { data, error } = await supabase.from('products').upsert(payload, { onConflict: 'id' }).select().single();
+    if (error) {
+      console.warn('Supabase upsert products info:', error.message);
+    } else if (data && product.tiers && product.tiers.length > 0) {
+      const tiersToInsert = product.tiers.map((t: any) => ({
+        tenant_id: product.tenantId,
+        product_id: data.id,
+        min_quantity: t.minQuantity,
+        max_quantity: t.maxQuantity || null,
+        unit_price: t.unitPrice,
+        tier_name: t.tierName || 'Mayoreo'
+      }));
+      await supabase.from('product_price_tiers').delete().eq('product_id', data.id);
+      await supabase.from('product_price_tiers').insert(tiersToInsert);
+    }
+    return data ? { ...product, id: data.id } : null;
+  } catch (err) {
+    console.warn('Error saving product to Supabase:', err);
+    return null;
+  }
 }
 
 /**
@@ -1084,6 +1134,24 @@ export async function pushLocalDataToCloud(tenantId: string) {
     const tenantRanges = localRanges.filter(r => r.tenantId === tenantId);
     for (const range of tenantRanges) {
       await saveFiscalRangeToSupabase(range);
+    }
+
+    // 4. Push local products
+    const localProds = (state.products || []).map(p => {
+      const isThisTenant = !p.tenantId || p.tenantId === tenantId || p.tenantId === '00000000-0000-0000-0000-000000000001';
+      if (!isThisTenant) return p;
+      return {
+        ...p,
+        id: isValidUUID(p.id) ? p.id : generateUUID(),
+        tenantId
+      };
+    });
+
+    useAppStore.setState({ products: localProds });
+
+    const tenantProds = localProds.filter(p => p.tenantId === tenantId);
+    for (const prod of tenantProds) {
+      await saveProductToSupabase(prod);
     }
   } catch (err) {
     console.warn('Error en pushLocalDataToCloud:', err);

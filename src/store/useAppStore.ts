@@ -15,7 +15,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 export interface HeldOrder {
@@ -496,58 +496,50 @@ export const useAppStore = create<AppState>()(
       }),
 
       addProduct: (productData) => set((state) => {
+        const prodId = generateUUID();
         const newProduct: Product = {
           ...productData,
-          id: generateUUID(),
+          id: prodId,
           tenantId: state.tenant.id
         };
 
-        if (isSupabaseConfigured()) {
-          supabase.from('products').insert({
-            id: newProduct.id,
-            tenant_id: newProduct.tenantId,
-            sku: newProduct.sku,
-            barcode: newProduct.barcode || null,
-            name: newProduct.name,
-            category: newProduct.category,
-            unit_of_measure: newProduct.unitOfMeasure,
-            cost_price: newProduct.costPrice,
-            sale_price: newProduct.salePrice,
-            current_stock: newProduct.currentStock,
-            min_stock_alert: newProduct.minStockAlert,
-            tax_classification: newProduct.taxClassification,
-            is_active: true
-          }).then(({ error }) => {
-            if (error) console.warn('Supabase add product info:', error.message);
-          });
+        if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+          saveProductToSupabase(newProduct).then(saved => {
+            if (saved && saved.id && saved.id !== prodId) {
+              useAppStore.setState(s => ({
+                products: s.products.map(p => p.id === prodId ? saved : p)
+              }));
+            }
+          }).catch(err => console.warn('Supabase save product info:', err));
         }
 
         return { products: [newProduct, ...state.products] };
       }),
 
       updateProduct: (id, productData) => set((state) => {
-        if (isSupabaseConfigured()) {
-          const updatePayload: any = {};
-          if (productData.name !== undefined) updatePayload.name = productData.name;
-          if (productData.sku !== undefined) updatePayload.sku = productData.sku;
-          if (productData.barcode !== undefined) updatePayload.barcode = productData.barcode;
-          if (productData.category !== undefined) updatePayload.category = productData.category;
-          if (productData.unitOfMeasure !== undefined) updatePayload.unit_of_measure = productData.unitOfMeasure;
-          if (productData.costPrice !== undefined) updatePayload.cost_price = productData.costPrice;
-          if (productData.salePrice !== undefined) updatePayload.sale_price = productData.salePrice;
-          if (productData.currentStock !== undefined) updatePayload.current_stock = productData.currentStock;
-          if (productData.minStockAlert !== undefined) updatePayload.min_stock_alert = productData.minStockAlert;
-          if (productData.taxClassification !== undefined) updatePayload.tax_classification = productData.taxClassification;
+        const existing = state.products.find(p => p.id === id);
+        if (!existing) return state;
 
-          if (Object.keys(updatePayload).length > 0) {
-            supabase.from('products').update(updatePayload).eq('id', id).then(({ error }) => {
-              if (error) console.warn('Supabase update product info:', error.message);
-            });
-          }
+        const targetId = isValidUUID(id) ? id : generateUUID();
+        const updatedProduct: Product = {
+          ...existing,
+          ...productData,
+          id: targetId,
+          tenantId: existing.tenantId || state.tenant.id
+        };
+
+        if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+          saveProductToSupabase(updatedProduct).then(saved => {
+            if (saved && saved.id && saved.id !== targetId) {
+              useAppStore.setState(s => ({
+                products: s.products.map(p => (p.id === id || p.id === targetId) ? saved : p)
+              }));
+            }
+          }).catch(err => console.warn('Supabase update product info:', err));
         }
 
         return {
-          products: state.products.map(p => p.id === id ? { ...p, ...productData } : p)
+          products: state.products.map(p => p.id === id ? updatedProduct : p)
         };
       }),
 

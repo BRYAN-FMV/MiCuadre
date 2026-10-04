@@ -131,7 +131,7 @@ export const INITIAL_FISCAL_RANGE: FiscalRange = INITIAL_FISCAL_RANGES[0];
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
-    id: 'prod-001',
+    id: '00000000-0000-0000-0000-000000000101',
     tenantId: '00000000-0000-0000-0000-000000000001',
     sku: 'BEB-HAR-5LB',
     barcode: '740100100101',
@@ -150,7 +150,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     ]
   },
   {
-    id: 'prod-002',
+    id: '00000000-0000-0000-0000-000000000102',
     tenantId: '00000000-0000-0000-0000-000000000001',
     sku: 'ACE-COC-1L',
     barcode: '740100100202',
@@ -168,7 +168,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     ]
   },
   {
-    id: 'prod-003',
+    id: '00000000-0000-0000-0000-000000000103',
     tenantId: '00000000-0000-0000-0000-000000000001',
     sku: 'SHAM-BARB-250',
     barcode: '740100100303',
@@ -183,7 +183,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     isActive: true
   },
   {
-    id: 'prod-004',
+    id: '00000000-0000-0000-0000-000000000104',
     tenantId: '00000000-0000-0000-0000-000000000001',
     sku: 'LIC-RUM-750',
     barcode: '740100100404',
