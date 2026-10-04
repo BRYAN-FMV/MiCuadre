@@ -1188,7 +1188,7 @@ export async function syncAllCloudData(tenantId: string) {
     useAppStore.setState(state => {
       // 1. Products
       let products = state.products;
-      if (liveProducts && liveProducts.length > 0) {
+      if (liveProducts !== null) {
         const liveIds = new Set(liveProducts.map(p => p.id));
         const localOnly = state.products.filter(p => p.tenantId === tenantId && !liveIds.has(p.id));
         const otherTenantProds = state.products.filter(p => p.tenantId && p.tenantId !== tenantId);
@@ -1197,7 +1197,7 @@ export async function syncAllCloudData(tenantId: string) {
 
       // 2. Suppliers
       let suppliers = state.suppliers;
-      if (liveSuppliers && liveSuppliers.length > 0) {
+      if (liveSuppliers !== null) {
         const liveIds = new Set(liveSuppliers.map(s => s.id));
         const localOnly = state.suppliers.filter(s => s.tenantId === tenantId && !liveIds.has(s.id));
         const otherTenantSuppliers = state.suppliers.filter(s => s.tenantId && s.tenantId !== tenantId);
@@ -1206,7 +1206,7 @@ export async function syncAllCloudData(tenantId: string) {
 
       // 3. Profiles
       let profiles = state.profiles;
-      if (liveProfiles && liveProfiles.length > 0) {
+      if (liveProfiles !== null && liveProfiles.length > 0) {
         const liveIds = new Set(liveProfiles.map(p => p.id));
         const localOnly = state.profiles.filter(p => p.tenantId === tenantId && !liveIds.has(p.id));
         const otherTenantProfiles = state.profiles.filter(p => p.tenantId && p.tenantId !== tenantId);
@@ -1215,7 +1215,7 @@ export async function syncAllCloudData(tenantId: string) {
 
       // 4. Sales
       let sales = state.sales;
-      if (liveSales && liveSales.length > 0) {
+      if (liveSales !== null) {
         const liveIds = new Set(liveSales.map(s => s.id));
         const liveDocs = new Set(liveSales.map(s => s.documentNumber));
         const localOnly = (state.sales || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id) && (!s.documentNumber || !liveDocs.has(s.documentNumber)));
@@ -1227,7 +1227,7 @@ export async function syncAllCloudData(tenantId: string) {
       let fiscalRanges = state.fiscalRanges;
       let selectedFiscalRangeId = state.selectedFiscalRangeId;
       let fiscalRange = state.fiscalRange;
-      if (liveRanges && liveRanges.length > 0) {
+      if (liveRanges !== null && liveRanges.length > 0) {
         const otherRanges = (state.fiscalRanges || []).filter(r => r.tenantId && r.tenantId !== tenantId);
         fiscalRanges = [...liveRanges, ...otherRanges];
         if (state.selectedFiscalRangeId === 'VIEW_MODE_ADMIN') {
@@ -1243,7 +1243,7 @@ export async function syncAllCloudData(tenantId: string) {
       // 6. Cash Shifts
       let shiftHistory = state.shiftHistory;
       let activeShift = state.activeShift;
-      if (liveShifts) {
+      if (liveShifts !== null) {
         const otherTenantShifts = (state.shiftHistory || []).filter(s => s.tenantId && s.tenantId !== tenantId);
         shiftHistory = [...liveShifts, ...otherTenantShifts];
 
@@ -1258,7 +1258,7 @@ export async function syncAllCloudData(tenantId: string) {
 
       // 7. Cash Movements
       let cashMovements = state.cashMovements;
-      if (liveMovements && liveMovements.length > 0) {
+      if (liveMovements !== null) {
         const liveIds = new Set(liveMovements.map(m => m.id));
         const localOnly = (state.cashMovements || []).filter(m => m.tenantId === tenantId && !liveIds.has(m.id));
         const otherTenantMovs = (state.cashMovements || []).filter(m => m.tenantId && m.tenantId !== tenantId);
@@ -1267,7 +1267,7 @@ export async function syncAllCloudData(tenantId: string) {
 
       // 8. Expenses
       let expenses = state.expenses;
-      if (liveExpenses && liveExpenses.length > 0) {
+      if (liveExpenses !== null) {
         const liveIds = new Set(liveExpenses.map(e => e.id));
         const localOnly = (state.expenses || []).filter(e => e.tenantId === tenantId && !liveIds.has(e.id));
         const otherTenantExpenses = (state.expenses || []).filter(e => e.tenantId && e.tenantId !== tenantId);
