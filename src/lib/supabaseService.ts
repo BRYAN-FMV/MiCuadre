@@ -1032,12 +1032,21 @@ export async function saveFiscalRangeToSupabase(range: FiscalRange) {
 
   try {
     const rangeUuid = isValidUUID(range.id) ? range.id : generateUUID();
+    let cleanPrefix = (range.prefix || '000-001-01-').trim();
+    if (cleanPrefix.length > 16) {
+      const parts = cleanPrefix.split('-');
+      if (parts.length >= 3) {
+        cleanPrefix = `${parts.slice(0, 3).join('-')}-`;
+      }
+      cleanPrefix = cleanPrefix.slice(0, 16);
+    }
+
     const payload: any = {
       id: rangeUuid,
       tenant_id: range.tenantId,
       name: range.name || 'Caja Registradora',
-      cai: range.cai || '',
-      prefix: range.prefix || '000-001-01-',
+      cai: (range.cai || '').trim(),
+      prefix: cleanPrefix,
       range_start: range.rangeStart,
       range_end: range.rangeEnd,
       current_number: range.currentNumber,

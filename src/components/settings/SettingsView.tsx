@@ -166,10 +166,19 @@ export const SettingsView: React.FC = () => {
       return;
     }
 
+    let cleanPrefix = fiscalPrefix.trim();
+    if (cleanPrefix.length > 16) {
+      const parts = cleanPrefix.split('-');
+      if (parts.length >= 3) {
+        cleanPrefix = `${parts.slice(0, 3).join('-')}-`;
+      }
+      cleanPrefix = cleanPrefix.slice(0, 16);
+    }
+
     const payload = {
       name: fiscalName.trim(),
       cai: fiscalCai.trim(),
-      prefix: fiscalPrefix.trim(),
+      prefix: cleanPrefix,
       rangeStart: parseInt(fiscalRangeStart) || 1,
       rangeEnd: parseInt(fiscalRangeEnd) || 5000,
       currentNumber: parseInt(fiscalCurrentNumber) || 0,
