@@ -621,7 +621,20 @@ export const useAppStore = create<AppState>()(
     let newLines = [...state.cartLines];
 
     if (product) {
-      const currentQty = existingIndex >= 0 ? newLines[existingIndex].quantity + quantity : quantity;
+      const existingQty = existingIndex >= 0 ? newLines[existingIndex].quantity : 0;
+      const currentQty = existingQty + quantity;
+
+      if (!state.tenant.allowNegativeStock) {
+        if (product.currentStock <= 0) {
+          toast.error(`Producto "${product.name}" sin existencias (Stock: ${product.currentStock}).`);
+          return state;
+        }
+        if (currentQty > product.currentStock) {
+          toast.error(`Stock insuficiente para "${product.name}". Disponible: ${product.currentStock}, en carrito: ${existingQty}`);
+          return state;
+        }
+      }
+
       const lineCalculations = calculateLineTotals(
         product.salePrice,
         currentQty,
@@ -697,6 +710,13 @@ export const useAppStore = create<AppState>()(
 
     const targetLine = state.cartLines[index];
     const product = state.products.find(p => p.id === targetLine.productId);
+
+    if (product && !state.tenant.allowNegativeStock) {
+      if (qty > product.currentStock) {
+        toast.error(`Stock insuficiente para "${product.name}". Disponible: ${product.currentStock}`);
+        return state;
+      }
+    }
 
     const lineCalculations = calculateLineTotals(
       targetLine.originalUnitPrice,
@@ -921,6 +941,18 @@ export const useAppStore = create<AppState>()(
     if (!state.activeShift || state.activeShift.status !== 'OPEN') {
       toast.error('Debes abrir un turno de caja registradora antes de realizar una venta.');
       return null;
+    }
+
+    if (!state.tenant.allowNegativeStock) {
+      for (const item of state.cartLines) {
+        if (item.productId) {
+          const prod = state.products.find(p => p.id === item.productId);
+          if (prod && item.quantity > prod.currentStock) {
+            toast.error(`La venta no puede procesarse. El producto "${prod.name}" no tiene suficiente stock (Disponible: ${prod.currentStock}, Solicitado: ${item.quantity}).`);
+            return null;
+          }
+        }
+      }
     }
 
     const isFiscal = overrideIsFiscal !== undefined ? overrideIsFiscal : state.tenant.isFiscalEnabled;

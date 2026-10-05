@@ -5,7 +5,7 @@ import { generateEscPosReceipt } from '../../lib/escPos';
 import { toast } from 'sonner';
 import {
   Search, ShoppingCart, UserCheck, Trash2, Plus, Minus,
-  CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2
+  CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle
 } from 'lucide-react';
 import { Sale, Product, CartLine, Customer } from '../../types';
 
@@ -102,9 +102,12 @@ export const PosContainer: React.FC = () => {
   });
   const availableStaff = Array.from(availableStaffMap.values());
 
-  // Multi-tenant catalog filtering
+  // Multi-tenant catalog filtering & Stock Alerts calculation
   const tenantProducts = products.filter((p: Product) => p.tenantId === tenant.id);
   const categories = ['TODOS', ...Array.from(new Set(tenantProducts.map((p: Product) => p.category)))];
+
+  const outOfStockCount = tenantProducts.filter((p: Product) => p.isActive && p.currentStock <= 0).length;
+  const lowStockCount = tenantProducts.filter((p: Product) => p.isActive && p.currentStock > 0 && p.currentStock <= p.minStockAlert).length;
 
   const filteredProducts = tenantProducts.filter((p: Product) => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -118,10 +121,18 @@ export const PosContainer: React.FC = () => {
     if (e.key === 'Enter') {
       const match = tenantProducts.find((p: Product) => (p.barcode === searchTerm || p.sku.toLowerCase() === searchTerm.toLowerCase()) && p.isActive);
       if (match) {
+        if (!tenant.allowNegativeStock && match.currentStock <= 0) {
+          toast.error(`"${match.name}" está AGOTADO. No se puede agregar al carrito.`);
+          return;
+        }
         addToCart({ product: match });
         toast.success(`+ ${match.name}`);
         setSearchTerm('');
       } else if (filteredProducts.length === 1) {
+        if (!tenant.allowNegativeStock && filteredProducts[0].currentStock <= 0) {
+          toast.error(`"${filteredProducts[0].name}" está AGOTADO. No se puede agregar al carrito.`);
+          return;
+        }
         addToCart({ product: filteredProducts[0] });
         toast.success(`+ ${filteredProducts[0].name}`);
         setSearchTerm('');
@@ -360,62 +371,108 @@ export const PosContainer: React.FC = () => {
           })}
         </div>
 
+        {/* Inventory Warning Alert Banner */}
+        {(outOfStockCount > 0 || lowStockCount > 0) && (
+          <div style={{
+            background: outOfStockCount > 0 ? '#fef2f2' : '#fffbeb',
+            border: `1px solid ${outOfStockCount > 0 ? '#fecaca' : '#fde68a'}`,
+            borderRadius: '8px',
+            padding: '0.45rem 0.75rem',
+            fontSize: '0.78rem',
+            color: outOfStockCount > 0 ? '#991b1b' : '#92400e',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+          }}>
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>
+              <strong>Alerta de Inventario:</strong>{' '}
+              {outOfStockCount > 0 ? `${outOfStockCount} producto(s) AGOTADO(S)` : ''}
+              {outOfStockCount > 0 && lowStockCount > 0 ? ' • ' : ''}
+              {lowStockCount > 0 ? `${lowStockCount} producto(s) con STOCK BAJO` : ''}
+              {!tenant.allowNegativeStock && outOfStockCount > 0 && (
+                <span style={{ marginLeft: '0.4rem', fontWeight: 600, opacity: 0.85 }}>(Ventas sin stock bloqueadas)</span>
+              )}
+            </span>
+          </div>
+        )}
+
         {/* Product Cards Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
           {filteredProducts.map((product: Product) => {
             const hasTiers = product.tiers && product.tiers.length > 0;
-            const isLowStock = product.currentStock <= product.minStockAlert;
+            const isOutOfStock = product.currentStock <= 0;
+            const isLowStock = product.currentStock > 0 && product.currentStock <= product.minStockAlert;
+            const isDisabled = isOutOfStock && !tenant.allowNegativeStock;
 
             return (
               <div
                 key={product.id}
                 onClick={() => {
+                  if (isDisabled) {
+                    toast.error(`"${product.name}" está AGOTADO. Habilite "Venta con Stock Negativo" en Configuración para vender sin existencia.`);
+                    return;
+                  }
                   addToCart({ product });
                   toast.success(`+ ${product.name}`);
                 }}
                 style={{
                   padding: '0.85rem',
-                  cursor: 'pointer',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: isDisabled ? '#f8fafc' : '#ffffff',
+                  border: `1px solid ${isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0')}`,
                   borderRadius: '10px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                   transition: 'transform 0.1s ease, border-color 0.1s ease',
-                  position: 'relative'
+                  position: 'relative',
+                  opacity: isDisabled ? 0.7 : 1
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  if (!isDisabled) {
+                    e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#e2e8f0';
-                  e.currentTarget.style.transform = 'translateY(0)';
+                  if (!isDisabled) {
+                    e.currentTarget.style.borderColor = isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0');
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }
                 }}
               >
-                {hasTiers && (
+                {isOutOfStock ? (
+                  <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 700 }}>
+                    Agotado
+                  </span>
+                ) : isLowStock ? (
+                  <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>
+                    Poco Stock
+                  </span>
+                ) : hasTiers ? (
                   <span className="badge badge-wholesale" style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.6rem', padding: '0.15rem 0.4rem' }}>
                     Mayoreo
                   </span>
-                )}
+                ) : null}
 
                 <div>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: '#64748b' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: isOutOfStock ? '#fee2e2' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: isOutOfStock ? '#ef4444' : '#64748b' }}>
                     <Package size={20} />
                   </div>
 
-                  <h4 style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 600, lineHeight: '1.25', height: '2.5em', overflow: 'hidden', marginBottom: '0.4rem' }}>
+                  <h4 style={{ fontSize: '0.85rem', color: isDisabled ? '#64748b' : '#0f172a', fontWeight: 600, lineHeight: '1.25', height: '2.5em', overflow: 'hidden', marginBottom: '0.4rem' }}>
                     {product.name}
                   </h4>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-primary)' }}>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isDisabled ? '#94a3b8' : 'var(--accent-primary)' }}>
                     {formatCurrency(product.salePrice, tenant.currencySymbol)}
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: isLowStock ? '#ef4444' : '#64748b', marginTop: '0.15rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: isOutOfStock ? '#ef4444' : (isLowStock ? '#d97706' : '#64748b'), fontWeight: isOutOfStock || isLowStock ? 700 : 400, marginTop: '0.15rem' }}>
                     Stock: {product.currentStock} {product.unitOfMeasure}
                   </div>
                 </div>
