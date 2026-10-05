@@ -458,17 +458,17 @@ export const SettingsView: React.FC = () => {
               </p>
             </div>
 
-            <button
-              className={`btn ${tenant.isFiscalEnabled ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => {
-                updateTenantSettings({ isFiscalEnabled: !tenant.isFiscalEnabled });
-                toast.info(`Facturación SAR ${!tenant.isFiscalEnabled ? 'ACTIVADA' : 'DESACTIVADA'}`);
-              }}
-              style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
-            >
-              {tenant.isFiscalEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-              <span>{tenant.isFiscalEnabled ? 'ACTIVADO' : 'DESACTIVADO'}</span>
-            </button>
+            <span style={{
+              padding: '0.35rem 0.65rem',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              borderRadius: '6px',
+              background: tenant.isFiscalEnabled ? '#dcfce7' : '#f1f5f9',
+              color: tenant.isFiscalEnabled ? '#15803d' : '#64748b',
+              border: tenant.isFiscalEnabled ? '1px solid #bbf7d0' : '1px solid #cbd5e1'
+            }}>
+              {tenant.isFiscalEnabled ? 'MÓDULO ACTIVO' : 'MÓDULO NO CONTRATADO'}
+            </span>
           </div>
 
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -527,17 +527,17 @@ export const SettingsView: React.FC = () => {
                 </p>
               </div>
 
-              <button
-                className={`btn ${tenant.isLoyaltyEnabled ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => {
-                  updateTenantSettings({ isLoyaltyEnabled: !tenant.isLoyaltyEnabled });
-                  toast.info(`Programa de Puntos ${!tenant.isLoyaltyEnabled ? 'ACTIVADO' : 'DESACTIVADO'}`);
-                }}
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
-              >
-                {tenant.isLoyaltyEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                <span>{tenant.isLoyaltyEnabled ? 'ACTIVADO' : 'DESACTIVADO'}</span>
-              </button>
+              <span style={{
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                borderRadius: '6px',
+                background: (tenant.isLoyaltyEnabled ?? true) ? '#dcfce7' : '#f1f5f9',
+                color: (tenant.isLoyaltyEnabled ?? true) ? '#15803d' : '#64748b',
+                border: (tenant.isLoyaltyEnabled ?? true) ? '1px solid #bbf7d0' : '1px solid #cbd5e1'
+              }}>
+                {(tenant.isLoyaltyEnabled ?? true) ? 'MÓDULO ACTIVO' : 'MÓDULO NO CONTRATADO'}
+              </span>
             </div>
 
             {tenant.isLoyaltyEnabled && (

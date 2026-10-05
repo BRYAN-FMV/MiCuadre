@@ -116,7 +116,10 @@ export async function fetchTenantFromSupabase(tenantId: string): Promise<Tenant 
     email: data.email,
     address: data.address,
     businessType: data.business_type,
-    isFiscalEnabled: data.is_fiscal_enabled,
+    isFiscalEnabled: data.is_fiscal_enabled ?? false,
+    isServicesEnabled: data.is_services_enabled ?? true,
+    isWholesaleEnabled: data.is_wholesale_enabled ?? true,
+    isLoyaltyEnabled: data.is_loyalty_enabled ?? true,
     allowNegativeStock: data.allow_negative_stock,
     currencySymbol: data.currency_symbol || 'L.',
     accessPassword: data.access_password || undefined
@@ -143,7 +146,10 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
     email: t.email,
     address: t.address,
     businessType: t.business_type,
-    isFiscalEnabled: t.is_fiscal_enabled,
+    isFiscalEnabled: t.is_fiscal_enabled ?? false,
+    isServicesEnabled: t.is_services_enabled ?? true,
+    isWholesaleEnabled: t.is_wholesale_enabled ?? true,
+    isLoyaltyEnabled: t.is_loyalty_enabled ?? true,
     allowNegativeStock: t.allow_negative_stock,
     currencySymbol: t.currency_symbol || 'L.',
     accessPassword: t.access_password || undefined
@@ -166,6 +172,9 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
       address: tenant.address || null,
       business_type: tenant.businessType,
       is_fiscal_enabled: tenant.isFiscalEnabled,
+      is_services_enabled: tenant.isServicesEnabled ?? true,
+      is_wholesale_enabled: tenant.isWholesaleEnabled ?? true,
+      is_loyalty_enabled: tenant.isLoyaltyEnabled ?? true,
       allow_negative_stock: tenant.allowNegativeStock,
       currency_symbol: tenant.currencySymbol || 'L.',
       access_password: tenant.accessPassword || null

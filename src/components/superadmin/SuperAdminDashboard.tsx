@@ -52,6 +52,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
   const [newMonthlyPrice, setNewMonthlyPrice] = useState('950');
   const [newAccessPassword, setNewAccessPassword] = useState('');
 
+  // New Module Switch States
+  const [newIsServices, setNewIsServices] = useState(true);
+  const [newIsWholesale, setNewIsWholesale] = useState(true);
+  const [newIsLoyalty, setNewIsLoyalty] = useState(true);
+
+  // Master Key Change Modal State
+  const [isMasterKeyModalOpen, setIsMasterKeyModalOpen] = useState(false);
+  const [customMasterKey, setCustomMasterKey] = useState('');
+
   // Supabase Counts
   const [tableCounts, setTableCounts] = useState<{
     tenants: number;
@@ -100,16 +109,31 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
     }
   }, [isAuthenticatedSaaS]);
 
+  const getExpectedSaaSKey = () => {
+    return localStorage.getItem('micuadre_custom_saas_key') || import.meta.env.VITE_SAAS_ADMIN_KEY || 'superadmin123';
+  };
+
   const handleMasterLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const expectedKey = import.meta.env.VITE_SAAS_ADMIN_KEY || 'superadmin123';
-    if (masterPasswordInput === expectedKey) {
+    if (masterPasswordInput === getExpectedSaaSKey()) {
       sessionStorage.setItem('micuadre_saas_admin_auth', 'true');
       setIsAuthenticatedSaaS(true);
       toast.success('Bienvenido al Portal de Administración SaaS MiCuadre');
     } else {
       toast.error('Contraseña maestra de SaaS incorrecta');
     }
+  };
+
+  const handleSaveMasterKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customMasterKey.trim()) {
+      toast.error('Ingresa la nueva contraseña maestra');
+      return;
+    }
+    localStorage.setItem('micuadre_custom_saas_key', customMasterKey.trim());
+    toast.success('Contraseña Maestra SaaS actualizada exitosamente');
+    setIsMasterKeyModalOpen(false);
+    setCustomMasterKey('');
   };
 
   const handleMasterLogout = () => {
@@ -147,6 +171,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
       address: newAddress.trim() || undefined,
       businessType: newBusinessType,
       isFiscalEnabled: newIsFiscal,
+      isServicesEnabled: newIsServices,
+      isWholesaleEnabled: newIsWholesale,
+      isLoyaltyEnabled: newIsLoyalty,
       accessPassword: newAccessPassword.trim() || undefined,
       allowNegativeStock: false,
       currencySymbol: 'L.',
@@ -179,6 +206,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
         address: newTenantObj.address || null,
         business_type: newTenantObj.businessType,
         is_fiscal_enabled: newTenantObj.isFiscalEnabled,
+        is_services_enabled: newTenantObj.isServicesEnabled,
+        is_wholesale_enabled: newTenantObj.isWholesaleEnabled,
+        is_loyalty_enabled: newTenantObj.isLoyaltyEnabled,
+        access_password: newTenantObj.accessPassword || null,
         allow_negative_stock: false
       });
 
@@ -244,7 +275,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
           email: editingTenant.email || null,
           address: editingTenant.address || null,
           business_type: editingTenant.businessType,
-          is_fiscal_enabled: editingTenant.isFiscalEnabled
+          is_fiscal_enabled: editingTenant.isFiscalEnabled,
+          is_services_enabled: editingTenant.isServicesEnabled ?? true,
+          is_wholesale_enabled: editingTenant.isWholesaleEnabled ?? true,
+          is_loyalty_enabled: editingTenant.isLoyaltyEnabled ?? true,
+          access_password: editingTenant.accessPassword || null,
+          subscription_status: editingTenant.subscriptionStatus || 'ACTIVE',
+          subscription_plan: editingTenant.subscriptionPlan || 'MONTHLY',
+          subscription_expires_at: editingTenant.subscriptionExpiresAt || null,
+          monthly_price: editingTenant.monthlyPrice || 950
         })
         .eq('id', editingTenant.id);
 
@@ -422,6 +461,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
             <Plus size={16} />
             <span>Afiliar Comercio</span>
           </button>
+          <button className="btn btn-secondary" onClick={() => setIsMasterKeyModalOpen(true)} style={{ background: '#334155', color: '#ffffff', borderColor: '#475569', fontSize: '0.82rem', padding: '0.45rem 0.75rem' }}>
+            <Key size={15} />
+            <span>Clave Maestra</span>
+          </button>
           <button className="btn" onClick={handleMasterLogout} style={{ background: '#ef4444', color: '#ffffff', border: 'none' }}>
             <LogOut size={16} />
             <span>Salir</span>
@@ -561,6 +604,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
                     >
                       <Calendar size={13} /> Renovar 1 Año
                     </button>
+                    {t.phone && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          const clean = t.phone!.replace(/[^0-9]/g, '');
+                          const text = encodeURIComponent(`Hola ${t.name}, le saludamos de la administración de MiCuadre.app. Le recordamos sobre su suscripción del sistema.`);
+                          window.open(`https://wa.me/504${clean}?text=${text}`, '_blank');
+                        }}
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: '#15803d', borderColor: '#86efac', background: '#ecfdf5' }}
+                        title="Enviar recordatorio de cobro por WhatsApp"
+                      >
+                        <ExternalLink size={13} /> WhatsApp
+                      </button>
+                    )}
                     <button
                       className="btn btn-secondary"
                       onClick={() => copyTenantLink(t)}
@@ -772,16 +829,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
                 />
               </div>
 
-              <div className="form-group" style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <input
-                  type="checkbox"
-                  id="newIsFiscalCheck"
-                  checked={newIsFiscal}
-                  onChange={(e) => setNewIsFiscal(e.target.checked)}
-                />
-                <label htmlFor="newIsFiscalCheck" style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, cursor: 'pointer' }}>
-                  Habilitar Facturación Fiscal SAR (Honduras)
-                </label>
+              <div className="form-group" style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '0.85rem', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label className="form-label" style={{ fontWeight: 700, color: '#0f172a', marginBottom: '0.2rem' }}>Permisos & Módulos Habilitados para este Comercio:</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={newIsFiscal} onChange={(e) => setNewIsFiscal(e.target.checked)} />
+                    Facturación SAR CAI
+                  </label>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={newIsServices} onChange={(e) => setNewIsServices(e.target.checked)} />
+                    Servicios & Citas
+                  </label>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={newIsWholesale} onChange={(e) => setNewIsWholesale(e.target.checked)} />
+                    Mayoreo & Escalas
+                  </label>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={newIsLoyalty} onChange={(e) => setNewIsLoyalty(e.target.checked)} />
+                    Clientes & Lealtad
+                  </label>
+                </div>
               </div>
 
               <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
@@ -796,9 +863,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
       {/* MODAL: Edit Tenant & Subscription */}
       {editingTenant && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: '520px' }}>
+          <div className="modal-content" style={{ maxWidth: '540px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ color: '#0f172a', fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>Editar Suscripción de "{editingTenant.name}"</h3>
+              <h3 style={{ color: '#0f172a', fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>Editar Suscripción y Módulos de "{editingTenant.name}"</h3>
               <button className="btn btn-secondary" onClick={() => setEditingTenant(null)} style={{ padding: '0.2rem 0.5rem' }}>
                 <X size={16} />
               </button>
@@ -826,7 +893,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
                   <option value="ACTIVE">Activa</option>
                   <option value="TRIAL">En Prueba</option>
                   <option value="EXPIRED">Vencida</option>
-                  <option value="CANCELLED">Cancelada</option>
+                  <option value="CANCELLED">Cancelada (Suspendida)</option>
                 </select>
               </div>
 
@@ -851,16 +918,36 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
               </div>
 
               <div className="form-group">
-                <label className="form-label">Giro de Negocio</label>
-                <select
+                <label className="form-label">Contraseña del Comercio</label>
+                <input
+                  type="password"
                   className="input-control"
-                  value={editingTenant.businessType}
-                  onChange={(e) => setEditingTenant({ ...editingTenant, businessType: e.target.value as BusinessType })}
-                >
-                  <option value="RETAIL">Retail / Supermercado</option>
-                  <option value="SERVICES">Servicios / Barbería</option>
-                  <option value="MIXED">Mixto</option>
-                </select>
+                  placeholder="Sin contraseña"
+                  value={editingTenant.accessPassword || ''}
+                  onChange={(e) => setEditingTenant({ ...editingTenant, accessPassword: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '0.85rem', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label className="form-label" style={{ fontWeight: 700, color: '#0f172a', marginBottom: '0.2rem' }}>Módulos Habilitados para este Comercio:</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!editingTenant.isFiscalEnabled} onChange={(e) => setEditingTenant({ ...editingTenant, isFiscalEnabled: e.target.checked })} />
+                    Facturación SAR CAI
+                  </label>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={editingTenant.isServicesEnabled ?? true} onChange={(e) => setEditingTenant({ ...editingTenant, isServicesEnabled: e.target.checked })} />
+                    Servicios & Citas
+                  </label>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={editingTenant.isWholesaleEnabled ?? true} onChange={(e) => setEditingTenant({ ...editingTenant, isWholesaleEnabled: e.target.checked })} />
+                    Mayoreo & Escalas
+                  </label>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={editingTenant.isLoyaltyEnabled ?? true} onChange={(e) => setEditingTenant({ ...editingTenant, isLoyaltyEnabled: e.target.checked })} />
+                    Clientes & Lealtad
+                  </label>
+                </div>
               </div>
 
               <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
@@ -889,6 +976,40 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
               <button className="btn btn-secondary" onClick={() => setDeletingTenant(null)} style={{ flex: 1 }}>Cancelar</button>
               <button className="btn btn-danger" onClick={handleDeleteTenant} style={{ flex: 1 }}>Eliminar Comercio</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Change Master Key SaaS */}
+      {isMasterKeyModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '440px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ color: '#0f172a', fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>Cambiar Clave Maestra SaaS</h3>
+              <button className="btn btn-secondary" onClick={() => setIsMasterKeyModalOpen(false)} style={{ padding: '0.2rem 0.5rem' }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMasterKey} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">Nueva Contraseña Maestra *</label>
+                <input
+                  type="password"
+                  className="input-control"
+                  placeholder="Ingrese la nueva contraseña de acceso al portal..."
+                  value={customMasterKey}
+                  onChange={(e) => setCustomMasterKey(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsMasterKeyModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Actualizar Clave Maestra</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

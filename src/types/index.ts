@@ -18,6 +18,8 @@ export interface Tenant {
   allowNegativeStock: boolean;
   currencySymbol: string;
   isLoyaltyEnabled?: boolean;
+  isServicesEnabled?: boolean;
+  isWholesaleEnabled?: boolean;
   loyaltyEarnRate?: number; // Spend amount to earn 1 point (default 100)
   loyaltyPointValue?: number; // Currency value of 1 point (default 1.00)
   subscriptionStatus?: 'ACTIVE' | 'EXPIRED' | 'TRIAL' | 'CANCELLED';

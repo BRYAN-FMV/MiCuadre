@@ -17,6 +17,9 @@ CREATE TABLE tenants (
     logo_url TEXT,
     business_type VARCHAR(50) DEFAULT 'RETAIL', -- 'RETAIL' | 'SERVICES' | 'WHOLESALE' | 'MIXED'
     is_fiscal_enabled BOOLEAN DEFAULT FALSE,     -- Module 4 Switch (SAR Honduras)
+    is_services_enabled BOOLEAN DEFAULT TRUE,
+    is_wholesale_enabled BOOLEAN DEFAULT TRUE,
+    is_loyalty_enabled BOOLEAN DEFAULT TRUE,
     allow_negative_stock BOOLEAN DEFAULT FALSE,
     currency_symbol VARCHAR(5) DEFAULT 'L.',
     access_password VARCHAR(100),                -- Store master access password

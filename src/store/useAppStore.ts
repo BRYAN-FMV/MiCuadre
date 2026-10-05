@@ -347,6 +347,9 @@ export const useAppStore = create<AppState>()(
             address: updatedTenant.address || null,
             business_type: updatedTenant.businessType,
             is_fiscal_enabled: updatedTenant.isFiscalEnabled,
+            is_services_enabled: updatedTenant.isServicesEnabled ?? true,
+            is_wholesale_enabled: updatedTenant.isWholesaleEnabled ?? true,
+            is_loyalty_enabled: updatedTenant.isLoyaltyEnabled ?? true,
             access_password: updatedTenant.accessPassword || null
           }).eq('id', updatedTenant.id).then(({ error }) => {
             if (error) console.warn('Supabase update tenant info:', error.message);

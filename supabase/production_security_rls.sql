@@ -64,8 +64,11 @@ CREATE TABLE IF NOT EXISTS account_payments (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Migration: Ensure access_password column exists on tenants table
+-- Migration: Ensure module control & access_password columns exist on tenants table
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS access_password VARCHAR(100);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_services_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_wholesale_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_loyalty_enabled BOOLEAN DEFAULT TRUE;
 
 -- Enable RLS on all sensitive tables
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
