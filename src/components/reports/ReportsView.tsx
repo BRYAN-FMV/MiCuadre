@@ -95,6 +95,11 @@ export const ReportsView: React.FC = () => {
   // Filter Sales based on Selected Time Period & Search & Filters & Tenant ID
   const getFilteredSales = () => {
     const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
     // Multi-tenant sales filtering
     const tenantSales = sales.filter((s: Sale) => s.tenantId === tenant.id);
 
@@ -103,12 +108,11 @@ export const ReportsView: React.FC = () => {
       const saleDate = new Date(s.createdAt);
       let matchesDate = true;
       if (dateFilter === 'TODAY') {
-        matchesDate = saleDate.toDateString() === now.toDateString();
+        matchesDate = saleDate >= startOfToday && saleDate <= endOfToday;
       } else if (dateFilter === 'WEEK') {
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        matchesDate = saleDate >= oneWeekAgo;
+        matchesDate = saleDate >= startOfWeek;
       } else if (dateFilter === 'MONTH') {
-        matchesDate = saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
+        matchesDate = saleDate >= startOfMonth;
       }
 
       // 2. Search term (document number, customer name, rtn, item names)
@@ -151,9 +155,11 @@ export const ReportsView: React.FC = () => {
   const totalExempt = filteredSales.reduce((acc, s) => acc + (s.exemptAmount || 0) + (s.exoneratedAmount || 0), 0);
   const avgTicket = filteredSales.length > 0 ? totalSalesAmount / filteredSales.length : 0;
 
-  // Calculate COGS and Gross Profit
+  // Calculate COGS and Gross Profit (subtracting discount amounts)
   let estimatedCOGS = 0;
+  let totalDiscounts = 0;
   filteredSales.forEach(s => {
+    totalDiscounts += (s.discountAmount || 0) + (s.loyaltyDiscountAmount || 0);
     s.items?.forEach(line => {
       if (line.productId) {
         const prod = products.find(p => p.id === line.productId);
@@ -163,7 +169,7 @@ export const ReportsView: React.FC = () => {
       }
     });
   });
-  const grossProfit = totalSubtotal - estimatedCOGS;
+  const grossProfit = (totalSubtotal - totalDiscounts) - estimatedCOGS;
 
   // Payment Method Breakdown
   const paymentMethods = {
@@ -171,6 +177,7 @@ export const ReportsView: React.FC = () => {
     CARD: filteredSales.filter(s => s.paymentMethod === 'CARD').reduce((acc, s) => acc + s.total, 0),
     TRANSFER: filteredSales.filter(s => s.paymentMethod === 'TRANSFER').reduce((acc, s) => acc + s.total, 0),
     MIXED: filteredSales.filter(s => s.paymentMethod === 'MIXED').reduce((acc, s) => acc + s.total, 0),
+    CREDIT: filteredSales.filter(s => s.paymentMethod === 'CREDIT').reduce((acc, s) => acc + s.total, 0),
   };
 
   // Top Selling Products Calculation

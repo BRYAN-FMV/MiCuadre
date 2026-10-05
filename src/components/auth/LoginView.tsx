@@ -114,8 +114,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
     };
   }, [storeInput, tenant.id, profiles, selectedProfileId]);
 
+  const [failedAttempts, setFailedAttempts] = useState<number>(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const remainingSecs = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      toast.error(`Acceso bloqueado por seguridad. Intente de nuevo en ${remainingSecs} segundos.`);
+      return;
+    }
+
     if (!storeInput.trim()) {
       toast.error('Ingresa el nombre o RTN de tu comercio');
       return;
@@ -166,10 +176,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       // 4. Verify password / PIN code securely
       const isMatch = await verifyPinCode(passwordInput, selectedProfile.pinCode || '1234');
       if (!isMatch) {
-        toast.error('Contraseña o PIN de acceso incorrecto.');
+        const nextFailed = failedAttempts + 1;
+        setFailedAttempts(nextFailed);
+        if (nextFailed >= 5) {
+          const lockTime = Date.now() + 30000;
+          setLockoutUntil(lockTime);
+          toast.error('Demasiados intentos fallidos. Inicio de sesión bloqueado por 30 segundos.');
+        } else {
+          toast.error(`Contraseña o PIN incorrecto. Intentos restantes: ${5 - nextFailed}`);
+        }
         setIsLoading(false);
         return;
       }
+
+      setFailedAttempts(0);
+      setLockoutUntil(null);
 
       // Ensure profile is in store profiles list
       if (!profiles.some(p => p.id === selectedProfile!.id)) {

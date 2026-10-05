@@ -101,7 +101,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
 
   const handleMasterLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (masterPasswordInput === 'superadmin123' || masterPasswordInput === 'admin' || masterPasswordInput === '1234') {
+    const expectedKey = import.meta.env.VITE_SAAS_ADMIN_KEY || 'superadmin123';
+    if (masterPasswordInput === expectedKey) {
       sessionStorage.setItem('micuadre_saas_admin_auth', 'true');
       setIsAuthenticatedSaaS(true);
       toast.success('Bienvenido al Portal de Administración SaaS MiCuadre');

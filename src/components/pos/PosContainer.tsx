@@ -197,6 +197,8 @@ export const PosContainer: React.FC = () => {
 
     const isOverrideFiscal = tenant.isFiscalEnabled ? (selectedDocType === 'FISCAL') : false;
     const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
+    if (!completedSale) return;
+
     setLastCompletedSale(completedSale);
     setIsPaymentModalOpen(false);
     setCashTendered('');

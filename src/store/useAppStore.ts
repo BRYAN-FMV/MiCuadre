@@ -27,6 +27,15 @@ export interface HeldOrder {
   createdAt: string;
 }
 
+export interface OfflineQueueItem {
+  id: string; // idempotencyKey / UUID
+  tenantId: string;
+  type: 'SALE' | 'SHIFT' | 'MOVEMENT' | 'EXPENSE';
+  payload: any;
+  createdAt: string;
+  retryCount?: number;
+}
+
 interface AppState {
   // Auth & Tenant
   isAuthenticated: boolean;
@@ -34,6 +43,7 @@ interface AppState {
   tenants: Tenant[];
   currentUser: UserProfile;
   profiles: UserProfile[];
+  offlineQueue: OfflineQueueItem[];
 
   // Fiscal
   fiscalRanges: FiscalRange[];
@@ -80,6 +90,10 @@ interface AppState {
   isOnboardingOpen: boolean;
 
   // Actions
+  enqueueOfflineItem: (item: Omit<OfflineQueueItem, 'createdAt'> & { createdAt?: string }) => void;
+  removeOfflineItem: (id: string) => void;
+  clearOfflineQueue: () => void;
+
   logout: () => void;
   setActiveTab: (tab: AppState['activeTab']) => void;
   setDevMode: (enabled: boolean) => void;
@@ -127,7 +141,7 @@ interface AppState {
   addCashMovement: (type: 'ENTRADA' | 'SALIDA', amount: number, concept: string, referenceId?: string) => void;
 
   // Sales Action
-  processSale: (paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT', loyaltyPointsRedeemed?: number, overrideIsFiscal?: boolean) => Sale;
+  processSale: (paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT', loyaltyPointsRedeemed?: number, overrideIsFiscal?: boolean) => Sale | null;
 
   // Purchase & Supplier Actions
   addSupplier: (supplier: Omit<Supplier, 'id' | 'tenantId'>) => void;
@@ -176,6 +190,7 @@ export const useAppStore = create<AppState>()(
       tenants: [INITIAL_TENANT],
       currentUser: INITIAL_PROFILES[0],
       profiles: INITIAL_PROFILES,
+      offlineQueue: [],
       fiscalRanges: INITIAL_FISCAL_RANGES,
       selectedFiscalRangeId: INITIAL_FISCAL_RANGES[0].id,
       fiscalRange: INITIAL_FISCAL_RANGES[0],
@@ -206,6 +221,23 @@ export const useAppStore = create<AppState>()(
       isOnboardingOpen: false,
       isMobileSidebarOpen: false,
 
+      // Offline Sync Queue Actions
+      enqueueOfflineItem: (itemData) => set((s) => {
+        const newItem: OfflineQueueItem = {
+          ...itemData,
+          id: itemData.id || generateUUID(),
+          createdAt: itemData.createdAt || new Date().toISOString(),
+          retryCount: itemData.retryCount || 0
+        };
+        const exists = (s.offlineQueue || []).some(i => i.id === newItem.id);
+        if (exists) return s;
+        return { offlineQueue: [...(s.offlineQueue || []), newItem] };
+      }),
+      removeOfflineItem: (id) => set((s) => ({
+        offlineQueue: (s.offlineQueue || []).filter(i => i.id !== id)
+      })),
+      clearOfflineQueue: () => set({ offlineQueue: [] }),
+
       setMobileSidebarOpen: (open) => set({ isMobileSidebarOpen: open }),
       toggleMobileSidebar: () => set((s) => ({ isMobileSidebarOpen: !s.isMobileSidebarOpen })),
 
@@ -221,11 +253,17 @@ export const useAppStore = create<AppState>()(
           return;
         }
 
+        try {
+          localStorage.removeItem('micuadre_active_shift_id');
+        } catch (e) {}
+
         set({ 
           isAuthenticated: false, 
           isDevMode: false,
+          activeShift: null,
           cartLines: [],
-          cartCustomer: { name: 'Consumidor Final' }
+          cartCustomer: { name: 'Consumidor Final' },
+          heldOrders: []
         });
       },
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -240,7 +278,12 @@ export const useAppStore = create<AppState>()(
           shift => shift.tenantId === user.tenantId && shift.status === 'OPEN' && shift.fiscalRangeId === nextFiscalRangeId
         ) || null;
 
+        const targetTenant = isTenantChanged
+          ? ((s.tenants || []).find(t => t.id === user.tenantId) || { ...s.tenant, id: user.tenantId })
+          : s.tenant;
+
         return {
+          tenant: targetTenant,
           currentUser: user,
           isAuthenticated: true,
           activeShift: nextFiscalRangeId === 'VIEW_MODE_ADMIN' ? null : openShiftForCaja,
@@ -778,6 +821,11 @@ export const useAppStore = create<AppState>()(
   }),
 
   addCashMovement: (type, amount, concept, referenceId) => set((state) => {
+    if (!state.activeShift || state.activeShift.status !== 'OPEN') {
+      toast.error('Debes abrir un turno de caja registradora para registrar un movimiento.');
+      return state;
+    }
+
     const shift = (state.activeShift && state.activeShift.tenantId === state.tenant.id) ? state.activeShift : null;
     const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
     const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
@@ -797,7 +845,15 @@ export const useAppStore = create<AppState>()(
     };
 
     if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
-      saveCashMovementToSupabase(movement).catch(err => console.warn('Supabase save movement info:', err));
+      saveCashMovementToSupabase(movement).catch(err => {
+        console.warn('Supabase save movement info:', err);
+        get().enqueueOfflineItem({
+          id: movement.id,
+          tenantId: movement.tenantId || state.tenant.id,
+          type: 'MOVEMENT',
+          payload: movement
+        });
+      });
     }
 
     return {
@@ -836,12 +892,20 @@ export const useAppStore = create<AppState>()(
     } catch (err) {}
 
     set((s) => ({
-      activeShift: closedShift,
+      activeShift: null,
       shiftHistory: [closedShift, ...(s.shiftHistory || []).filter(sh => sh.id !== closedShift.id)]
     }));
 
     if (isSupabaseConfigured() && isValidUUID(shift.tenantId)) {
-      saveCashShiftToSupabase(closedShift).catch(err => console.warn('Supabase save shift info:', err));
+      saveCashShiftToSupabase(closedShift).catch(err => {
+        console.warn('Supabase save shift info:', err);
+        get().enqueueOfflineItem({
+          id: closedShift.id,
+          tenantId: closedShift.tenantId,
+          type: 'SHIFT',
+          payload: closedShift
+        });
+      });
       closeCashShiftSupabase(shift.id, declaredCash).catch(err => console.warn('Supabase close shift info:', err));
     }
 
@@ -850,6 +914,11 @@ export const useAppStore = create<AppState>()(
 
   processSale: (paymentMethod, loyaltyPointsRedeemed = 0, overrideIsFiscal?: boolean) => {
     const state = get();
+    if (!state.activeShift || state.activeShift.status !== 'OPEN') {
+      toast.error('Debes abrir un turno de caja registradora antes de realizar una venta.');
+      return null;
+    }
+
     const isFiscal = overrideIsFiscal !== undefined ? overrideIsFiscal : state.tenant.isFiscalEnabled;
     const totals = calculateCartTotals(state.cartLines);
 
@@ -876,6 +945,22 @@ export const useAppStore = create<AppState>()(
       const selectedId = state.selectedFiscalRangeId || state.fiscalRange?.id;
       const targetRange = ranges.find(r => r.id === selectedId) || ranges[0] || state.fiscalRange;
 
+      if (!targetRange) {
+        toast.error('No hay un rango fiscal activo configurado para este comercio.');
+        return null;
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (targetRange.deadline && targetRange.deadline < todayStr) {
+        toast.error(`El rango fiscal ${targetRange.name || ''} venció el ${targetRange.deadline}. Revisa la configuración de CAI.`);
+        return null;
+      }
+
+      if (targetRange.currentNumber >= targetRange.rangeEnd) {
+        toast.error(`El rango fiscal ${targetRange.name || ''} alcanzó el límite máximo de emisión (${targetRange.rangeEnd}).`);
+        return null;
+      }
+
       const nextNum = targetRange.currentNumber + 1;
       const padded = String(nextNum).padStart(8, '0');
       docNumber = `${targetRange.prefix}${padded}`;
@@ -887,7 +972,7 @@ export const useAppStore = create<AppState>()(
       const updatedRange: FiscalRange = {
         ...targetRange,
         currentNumber: nextNum,
-        isActive: nextNum < targetRange.rangeEnd
+        isActive: nextNum <= targetRange.rangeEnd
       };
 
       const updatedRanges = (state.fiscalRanges || [state.fiscalRange]).map(r =>
@@ -898,6 +983,9 @@ export const useAppStore = create<AppState>()(
         fiscalRanges: updatedRanges,
         fiscalRange: updatedRange
       });
+
+      // Persist updated range to cloud immediately
+      saveFiscalRangeToSupabase(updatedRange).catch(err => console.warn('Error al guardar correlativo fiscal:', err));
     }
 
     const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
@@ -1029,7 +1117,24 @@ export const useAppStore = create<AppState>()(
     }));
 
     if (isSupabaseConfigured() && isValidUUID(newSale.tenantId)) {
-      saveSaleToSupabase(newSale).catch(err => console.warn('Supabase process sale info:', err));
+      saveSaleToSupabase(newSale).then(res => {
+        if (!res) {
+          get().enqueueOfflineItem({
+            id: newSale.id,
+            tenantId: newSale.tenantId,
+            type: 'SALE',
+            payload: newSale
+          });
+        }
+      }).catch(err => {
+        console.warn('Supabase process sale info:', err);
+        get().enqueueOfflineItem({
+          id: newSale.id,
+          tenantId: newSale.tenantId,
+          type: 'SALE',
+          payload: newSale
+        });
+      });
     }
 
     return newSale;
@@ -1517,6 +1622,7 @@ export const useAppStore = create<AppState>()(
     tenants: state.tenants,
     currentUser: state.currentUser,
     profiles: state.profiles,
+    offlineQueue: state.offlineQueue,
     fiscalRanges: state.fiscalRanges,
     selectedFiscalRangeId: state.selectedFiscalRangeId,
     fiscalRange: state.fiscalRange,

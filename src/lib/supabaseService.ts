@@ -239,17 +239,6 @@ export async function updateProfilePinInSupabase(
       return { success: true, profile: updatedProfile };
     }
 
-    // 3. Try updating any profile for this tenant
-    const { data: tenantUpdateData, error: tenantError } = await supabase
-      .from('profiles')
-      .update({ pin_code: newPin })
-      .eq('tenant_id', profile.tenantId)
-      .select();
-
-    if (!tenantError && tenantUpdateData && tenantUpdateData.length > 0) {
-      console.log('PIN actualizado por tenant en Supabase:', tenantUpdateData);
-      return { success: true, profile: updatedProfile };
-    }
 
     // 4. If no profile row exists in Supabase, insert a new profile row (letting Postgres generate ID)
     const { error: insertError } = await supabase
@@ -477,7 +466,8 @@ export async function saveSaleToSupabase(sale: Sale) {
       await supabase.from('sale_items').delete().eq('sale_id', insertedSale.id);
       const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToInsert);
       if (itemsErr) {
-        console.warn('Supabase sale_items insert info:', itemsErr.message);
+        console.error('Error insertando sale_items en Supabase:', itemsErr.message);
+        return null;
       }
 
       // Synchronize shared product stock in Supabase so all Cajas (Caja 1, Caja 2) share 1 unified inventory
@@ -680,7 +670,7 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
           subtotal: Number(i.subtotal || 0),
           taxClassification: i.tax_classification || 'EXENTO',
           taxAmount: Number(i.tax_amount || 0),
-          total: Number(i.subtotal + (i.tax_amount || 0))
+          total: Number(i.subtotal || 0) + Number(i.tax_amount || 0)
         }));
       })()
     }));
@@ -1323,6 +1313,44 @@ export async function syncAllCloudData(tenantId: string) {
     });
   } catch (err) {
     console.warn('Error en syncAllCloudData:', err);
+  }
+}
+
+/**
+ * Processes any items currently queued in offlineQueue and pushes them to Supabase
+ */
+export async function processOfflineQueue() {
+  if (!isSupabaseConfigured()) return;
+
+  const state = useAppStore.getState();
+  const queue = state.offlineQueue || [];
+  if (queue.length === 0) return;
+
+  console.log(`Procesando cola offline (${queue.length} elementos)...`);
+
+  for (const item of queue) {
+    try {
+      let success = false;
+      if (item.type === 'SALE') {
+        const res = await saveSaleToSupabase(item.payload);
+        if (res) success = true;
+      } else if (item.type === 'SHIFT') {
+        const res = await saveCashShiftToSupabase(item.payload);
+        if (res) success = true;
+      } else if (item.type === 'MOVEMENT') {
+        const res = await saveCashMovementToSupabase(item.payload);
+        if (res) success = true;
+      } else if (item.type === 'EXPENSE') {
+        const res = await saveExpenseToSupabase(item.payload);
+        if (res) success = true;
+      }
+
+      if (success) {
+        state.removeOfflineItem(item.id);
+      }
+    } catch (err) {
+      console.warn(`Error procesando elemento offline ${item.id}:`, err);
+    }
   }
 }
 

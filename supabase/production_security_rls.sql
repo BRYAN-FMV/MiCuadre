@@ -21,6 +21,10 @@ ALTER TABLE services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_commissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cash_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE account_payments ENABLE ROW LEVEL SECURITY;
 
 -- Drop loose development policies if present
 DROP POLICY IF EXISTS "Allow public full access tenants" ON tenants;
@@ -115,6 +119,30 @@ CREATE POLICY "Strict Tenant Isolation Services" ON services
 
 DROP POLICY IF EXISTS "Strict Tenant Isolation Fiscal Ranges" ON fiscal_ranges;
 CREATE POLICY "Strict Tenant Isolation Fiscal Ranges" ON fiscal_ranges
+    FOR ALL
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+    WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+
+DROP POLICY IF EXISTS "Strict Tenant Isolation Cash Movements" ON cash_movements;
+CREATE POLICY "Strict Tenant Isolation Cash Movements" ON cash_movements
+    FOR ALL
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+    WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+
+DROP POLICY IF EXISTS "Strict Tenant Isolation Expenses" ON expenses;
+CREATE POLICY "Strict Tenant Isolation Expenses" ON expenses
+    FOR ALL
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+    WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+
+DROP POLICY IF EXISTS "Strict Tenant Isolation Customers" ON customers;
+CREATE POLICY "Strict Tenant Isolation Customers" ON customers
+    FOR ALL
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+    WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+
+DROP POLICY IF EXISTS "Strict Tenant Isolation Account Payments" ON account_payments;
+CREATE POLICY "Strict Tenant Isolation Account Payments" ON account_payments
     FOR ALL
     USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
     WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);

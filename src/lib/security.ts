@@ -57,7 +57,14 @@ export async function hashPinCode(pin: string): Promise<string> {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   } catch (err) {
     console.warn('Fallback PIN hashing:', err);
-    return pin;
+    let hash = 0;
+    const str = `micuadre_salt_2026_${pin}`;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0;
+    }
+    return `digest_fallback_${Math.abs(hash)}`;
   }
 }
 

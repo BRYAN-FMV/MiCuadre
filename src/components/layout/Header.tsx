@@ -1,17 +1,38 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { User, HelpCircle, LogOut, Menu } from 'lucide-react';
+import { User, HelpCircle, LogOut, Menu, RefreshCw } from 'lucide-react';
+import { processOfflineQueue, syncAllCloudData } from '../../lib/supabaseService';
+import { toast } from 'sonner';
 
 export const Header: React.FC = () => {
   const currentUser = useAppStore(state => state.currentUser);
   const tenant = useAppStore(state => state.tenant);
+  const offlineQueue = useAppStore(state => state.offlineQueue) || [];
   const setActiveTab = useAppStore(state => state.setActiveTab);
   const toggleMobileSidebar = useAppStore(state => state.toggleMobileSidebar);
   const logout = useAppStore(state => state.logout);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleStartTour = () => {
     setActiveTab('pos');
     window.dispatchEvent(new CustomEvent('start-onboarding-tour'));
+  };
+
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    toast.info('Sincronizando operaciones pendientes...');
+    try {
+      await processOfflineQueue();
+      if (tenant?.id) {
+        await syncAllCloudData(tenant.id);
+      }
+      toast.success('Sincronización completada.');
+    } catch (err) {
+      toast.error('Error al sincronizar datos offline.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
@@ -51,6 +72,20 @@ export const Header: React.FC = () => {
       </div>
 
       <div className="top-bar-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+        {/* Offline Queue Status Badge & Manual Sync Button */}
+        {offlineQueue.length > 0 && (
+          <button
+            className="btn"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            title="Sincronizar operaciones offline a la nube"
+            style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem', background: '#d97706', color: '#ffffff', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+            <span>{offlineQueue.length} pendiente{offlineQueue.length > 1 ? 's' : ''} [Sincronizar Ahora]</span>
+          </button>
+        )}
+
         {/* Onboarding Tour Trigger */}
         <button
           className="btn"

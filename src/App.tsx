@@ -25,7 +25,8 @@ import {
   fetchSalesFromSupabase,
   fetchFiscalRangesFromSupabase,
   pushLocalDataToCloud,
-  syncAllCloudData
+  syncAllCloudData,
+  processOfflineQueue
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -166,14 +167,23 @@ export const App: React.FC = () => {
       if (state.isAuthenticated && isNonAdmin && isShiftOpen) {
         e.preventDefault();
         e.returnValue = 'Tienes un turno de caja registradora abierto. Debes realizar el Arqueo Ciego y Cierre Z antes de salir o cerrar la ventana.';
-        return e.returnValue;
+      }
+    };
+
+    const handleOnline = () => {
+      toast.success('Conexión restablecida. Sincronizando datos offline...');
+      processOfflineQueue();
+      if (tenant?.id) {
+        syncAllCloudData(tenant.id);
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('online', handleOnline);
 
     if (isSupabaseConfigured() && tenant?.id) {
-      // 1. Push any local test/offline records to cloud
+      // 1. Process offline queue and push any local records to cloud
+      processOfflineQueue();
       pushLocalDataToCloud(tenant.id).then(() => {
         // 2. Initial cloud state hydration
         syncAllCloudData(tenant.id);
@@ -186,11 +196,15 @@ export const App: React.FC = () => {
 
       return () => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
+        window.removeEventListener('online', handleOnline);
         clearInterval(syncInterval);
       };
     }
 
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('online', handleOnline);
+    };
   }, [tenant?.id, isAuthenticated]);
 
   // Handle dedicated SuperAdmin Route (/admin)
