@@ -4,6 +4,20 @@ import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
 import { useAppStore } from '../store/useAppStore';
 
+export const DEMO_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+export const DEMO_SKUS = ['BEB-HAR-5LB', 'ACE-COC-1L', 'SHAM-BARB-250', 'LIC-RUM-750'];
+export const DEMO_PRODUCT_IDS = [
+  '00000000-0000-0000-0000-000000000101',
+  '00000000-0000-0000-0000-000000000102',
+  '00000000-0000-0000-0000-000000000103',
+  '00000000-0000-0000-0000-000000000104'
+];
+
+export function isDemoProduct(p: { id?: string; sku?: string }): boolean {
+  return (p.id ? DEMO_PRODUCT_IDS.includes(p.id) : false) || (p.sku ? DEMO_SKUS.includes(p.sku) : false);
+}
+
+
 /**
  * Seed initial sample products and tenant to Supabase when database is empty
  */
@@ -287,7 +301,19 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
       return null;
     }
 
-    return data.map((p: any) => ({
+    let filteredData = data;
+    if (tenantId !== DEMO_TENANT_ID) {
+      const leakedDemoRows = data.filter((p: any) => DEMO_SKUS.includes(p.sku) || DEMO_PRODUCT_IDS.includes(p.id));
+      if (leakedDemoRows.length > 0) {
+        const leakedIds = leakedDemoRows.map((p: any) => p.id);
+        supabase.from('products').delete().eq('tenant_id', tenantId).in('id', leakedIds).then(({ error }) => {
+          if (error) console.warn('Supabase purge leaked demo products info:', error.message);
+        });
+      }
+      filteredData = data.filter((p: any) => !DEMO_SKUS.includes(p.sku) && !DEMO_PRODUCT_IDS.includes(p.id));
+    }
+
+    return filteredData.map((p: any) => ({
       id: p.id,
       tenantId: p.tenant_id,
       sku: p.sku,
@@ -319,6 +345,7 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
  */
 export async function saveProductToSupabase(product: Product) {
   if (!isSupabaseConfigured() || !isValidUUID(product.tenantId)) return null;
+  if (product.tenantId !== DEMO_TENANT_ID && isDemoProduct(product)) return null;
 
   try {
     const prodUuid = isValidUUID(product.id) ? product.id : generateUUID();
@@ -1092,7 +1119,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
 
     // 1. Push local sales (re-assigning non-UUID local IDs if needed)
     const localSales = (state.sales || []).map(s => {
-      const isThisTenant = !s.tenantId || s.tenantId === tenantId || s.tenantId === '00000000-0000-0000-0000-000000000001';
+      const isThisTenant = s.tenantId ? s.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
       if (!isThisTenant) return s;
       return {
         ...s,
@@ -1101,7 +1128,6 @@ export async function pushLocalDataToCloud(tenantId: string) {
       };
     });
 
-    // Update state sales with fixed UUIDs if modified
     useAppStore.setState({ sales: localSales });
 
     const tenantSales = localSales.filter(s => s.tenantId === tenantId);
@@ -1111,7 +1137,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
 
     // 2. Push local shifts
     const localShifts = (state.shiftHistory || []).map(s => {
-      const isThisTenant = !s.tenantId || s.tenantId === tenantId || s.tenantId === '00000000-0000-0000-0000-000000000001';
+      const isThisTenant = s.tenantId ? s.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
       if (!isThisTenant) return s;
       return {
         ...s,
@@ -1129,7 +1155,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
 
     // 3. Push local fiscal ranges
     const localRanges = (state.fiscalRanges || []).map(r => {
-      const isThisTenant = !r.tenantId || r.tenantId === tenantId || r.tenantId === '00000000-0000-0000-0000-000000000001';
+      const isThisTenant = r.tenantId ? r.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
       if (!isThisTenant) return r;
       return {
         ...r,
@@ -1147,7 +1173,10 @@ export async function pushLocalDataToCloud(tenantId: string) {
 
     // 4. Push local products
     const localProds = (state.products || []).map(p => {
-      const isThisTenant = !p.tenantId || p.tenantId === tenantId || p.tenantId === '00000000-0000-0000-0000-000000000001';
+      if (tenantId !== DEMO_TENANT_ID && isDemoProduct(p)) {
+        return p;
+      }
+      const isThisTenant = p.tenantId ? p.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
       if (!isThisTenant) return p;
       return {
         ...p,
@@ -1158,7 +1187,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
 
     useAppStore.setState({ products: localProds });
 
-    const tenantProds = localProds.filter(p => p.tenantId === tenantId);
+    const tenantProds = localProds.filter(p => p.tenantId === tenantId && (tenantId === DEMO_TENANT_ID || !isDemoProduct(p)));
     for (const prod of tenantProds) {
       await saveProductToSupabase(prod);
     }
@@ -1189,10 +1218,14 @@ export async function syncAllCloudData(tenantId: string) {
       // 1. Products
       let products = state.products;
       if (liveProducts !== null) {
-        const liveIds = new Set(liveProducts.map(p => p.id));
-        const localOnly = state.products.filter(p => p.tenantId === tenantId && !liveIds.has(p.id));
+        const cleanLiveProducts = tenantId === DEMO_TENANT_ID 
+          ? liveProducts 
+          : liveProducts.filter(p => !isDemoProduct(p));
+
+        const liveIds = new Set(cleanLiveProducts.map(p => p.id));
+        const localOnly = state.products.filter(p => p.tenantId === tenantId && !liveIds.has(p.id) && (tenantId === DEMO_TENANT_ID || !isDemoProduct(p)));
         const otherTenantProds = state.products.filter(p => p.tenantId && p.tenantId !== tenantId);
-        products = [...liveProducts, ...localOnly, ...otherTenantProds];
+        products = [...cleanLiveProducts, ...localOnly, ...otherTenantProds];
       }
 
       // 2. Suppliers
