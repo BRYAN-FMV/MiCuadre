@@ -35,6 +35,7 @@ export const SettingsView: React.FC = () => {
   const [phone, setPhone] = useState(tenant.phone || '');
   const [address, setAddress] = useState(tenant.address || '');
   const [businessType, setBusinessType] = useState<BusinessType>(tenant.businessType || 'RETAIL');
+  const [accessPassword, setAccessPassword] = useState(tenant.accessPassword || '');
 
   // Loyalty Settings State
   const [loyaltyEarnRate, setLoyaltyEarnRate] = useState(String(tenant.loyaltyEarnRate || 100));
@@ -298,6 +299,7 @@ export const SettingsView: React.FC = () => {
       phone,
       address,
       businessType,
+      accessPassword: accessPassword.trim() || undefined,
       logoUrl: logoUrl || undefined
     });
     toast.success('Datos del comercio e identidad de marca actualizados');
@@ -637,6 +639,20 @@ export const SettingsView: React.FC = () => {
               <option value="SERVICES">Servicios / Barbería / Salón de Belleza / Taller</option>
               <option value="MIXED">Mixto (Productos + Servicios de Barbería/Citas)</option>
             </select>
+          </div>
+
+          <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Key size={15} style={{ color: 'var(--accent-primary)' }} />
+              Contraseña Maestra de Comercio <span style={{ fontWeight: 400, color: '#64748b' }}>(Opcional para proteger la modal "Acceso a tu Comercio")</span>
+            </label>
+            <input
+              type="password"
+              className="input-control"
+              placeholder="Dejar en blanco si no deseas requerir contraseña para buscar tu tienda"
+              value={accessPassword}
+              onChange={(e) => setAccessPassword(e.target.value)}
+            />
           </div>
 
           {/* Logo Upload & Brand Identity Section */}

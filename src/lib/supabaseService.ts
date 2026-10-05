@@ -118,7 +118,8 @@ export async function fetchTenantFromSupabase(tenantId: string): Promise<Tenant 
     businessType: data.business_type,
     isFiscalEnabled: data.is_fiscal_enabled,
     allowNegativeStock: data.allow_negative_stock,
-    currencySymbol: data.currency_symbol || 'L.'
+    currencySymbol: data.currency_symbol || 'L.',
+    accessPassword: data.access_password || undefined
   };
 }
 
@@ -144,8 +145,41 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
     businessType: t.business_type,
     isFiscalEnabled: t.is_fiscal_enabled,
     allowNegativeStock: t.allow_negative_stock,
-    currencySymbol: t.currency_symbol || 'L.'
+    currencySymbol: t.currency_symbol || 'L.',
+    accessPassword: t.access_password || undefined
   }));
+}
+
+/**
+ * Save / Update tenant settings to Supabase
+ */
+export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenant.id)) return false;
+
+  try {
+    const { error } = await supabase.from('tenants').upsert({
+      id: tenant.id,
+      name: tenant.name,
+      rtn: tenant.rtn || null,
+      phone: tenant.phone || null,
+      email: tenant.email || null,
+      address: tenant.address || null,
+      business_type: tenant.businessType,
+      is_fiscal_enabled: tenant.isFiscalEnabled,
+      allow_negative_stock: tenant.allowNegativeStock,
+      currency_symbol: tenant.currencySymbol || 'L.',
+      access_password: tenant.accessPassword || null
+    }, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Error guardando tenant en Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Error general guardando tenant en Supabase:', err);
+    return false;
+  }
 }
 
 /**

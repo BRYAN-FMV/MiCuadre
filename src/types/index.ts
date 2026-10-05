@@ -24,6 +24,7 @@ export interface Tenant {
   subscriptionPlan?: 'MONTHLY' | 'ANNUAL' | 'FREE_TRIAL' | 'ENTERPRISE';
   subscriptionExpiresAt?: string; // ISO date string e.g. "2026-12-31"
   monthlyPrice?: number;
+  accessPassword?: string; // Master store entrance password for access modal
 }
 
 export interface UserProfile {

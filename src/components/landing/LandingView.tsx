@@ -18,6 +18,7 @@ interface LandingViewProps {
 export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnterDemo }) => {
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [storeInput, setStoreInput] = useState('');
+  const [storePasswordInput, setStorePasswordInput] = useState('');
   const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
 
   const toggleFaq = (index: number) => {
@@ -34,7 +35,14 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
     const matched = await findTenantInSupabase(storeInput);
 
     if (matched) {
+      if (matched.accessPassword && matched.accessPassword.trim() !== '') {
+        if (matched.accessPassword !== storePasswordInput.trim()) {
+          toast.error('Contraseña de acceso al comercio incorrecta');
+          return;
+        }
+      }
       setIsAccessModalOpen(false);
+      setStorePasswordInput('');
       const slug = normalizeSlug(matched.name);
       window.history.pushState({}, '', `/?comercio=${slug}`);
       onSelectStore(matched);
@@ -539,6 +547,19 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
                   style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#0f172a', padding: '0.8rem 1rem', borderRadius: '10px', fontSize: '0.98rem', outline: 'none', fontWeight: 600 }}
                   autoFocus
                   required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.84rem', color: '#334155', fontWeight: 700, marginBottom: '0.45rem' }}>
+                  Contraseña de Comercio <span style={{ fontWeight: 400, color: '#94a3b8' }}>(Si tu negocio la requiere)</span>
+                </label>
+                <input
+                  type="password"
+                  placeholder="Ingresa la contraseña del comercio"
+                  value={storePasswordInput}
+                  onChange={(e) => setStorePasswordInput(e.target.value)}
+                  style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', color: '#0f172a', padding: '0.8rem 1rem', borderRadius: '10px', fontSize: '0.98rem', outline: 'none', fontWeight: 600 }}
                 />
               </div>
 

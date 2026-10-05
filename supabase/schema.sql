@@ -19,6 +19,7 @@ CREATE TABLE tenants (
     is_fiscal_enabled BOOLEAN DEFAULT FALSE,     -- Module 4 Switch (SAR Honduras)
     allow_negative_stock BOOLEAN DEFAULT FALSE,
     currency_symbol VARCHAR(5) DEFAULT 'L.',
+    access_password VARCHAR(100),                -- Store master access password
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

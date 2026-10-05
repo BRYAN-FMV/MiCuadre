@@ -50,6 +50,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
   const [newPlan, setNewPlan] = useState<'MONTHLY' | 'ANNUAL' | 'FREE_TRIAL' | 'ENTERPRISE'>('MONTHLY');
   const [newTrialDays, setNewTrialDays] = useState('30');
   const [newMonthlyPrice, setNewMonthlyPrice] = useState('950');
+  const [newAccessPassword, setNewAccessPassword] = useState('');
 
   // Supabase Counts
   const [tableCounts, setTableCounts] = useState<{
@@ -146,6 +147,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
       address: newAddress.trim() || undefined,
       businessType: newBusinessType,
       isFiscalEnabled: newIsFiscal,
+      accessPassword: newAccessPassword.trim() || undefined,
       allowNegativeStock: false,
       currencySymbol: 'L.',
       subscriptionStatus: newPlan === 'FREE_TRIAL' ? 'TRIAL' : 'ACTIVE',
@@ -687,6 +689,17 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
                   placeholder="1234"
                   value={newAdminPin}
                   onChange={(e) => setNewAdminPin(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Contraseña Maestra de Acceso al Comercio (Opcional)</label>
+                <input
+                  type="password"
+                  className="input-control"
+                  placeholder="Contraseña para proteger la búsqueda de la tienda"
+                  value={newAccessPassword}
+                  onChange={(e) => setNewAccessPassword(e.target.value)}
                 />
               </div>
 

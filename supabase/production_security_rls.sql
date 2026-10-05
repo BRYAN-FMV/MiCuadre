@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS account_payments (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Migration: Ensure access_password column exists on tenants table
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS access_password VARCHAR(100);
+
 -- Enable RLS on all sensitive tables
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
