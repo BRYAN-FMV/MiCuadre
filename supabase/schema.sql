@@ -240,8 +240,69 @@ CREATE TABLE staff_commissions (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 10. FINANCIAL CALENDAR & EVENTS
-CREATE TABLE financial_events (
+-- 10. CUSTOMERS, CASH MOVEMENTS, EXPENSES & ACCOUNT PAYMENTS
+CREATE TABLE IF NOT EXISTS customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL,
+    rtn VARCHAR(14),
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    address TEXT,
+    loyalty_points INT DEFAULT 0,
+    total_spent NUMERIC(12, 2) DEFAULT 0.00,
+    credit_limit NUMERIC(12, 2) DEFAULT 2000.00,
+    credit_balance NUMERIC(12, 2) DEFAULT 0.00,
+    credit_days INT DEFAULT 30,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS cash_movements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    cash_shift_id UUID REFERENCES cash_shifts(id) ON DELETE CASCADE,
+    fiscal_range_id UUID,
+    type VARCHAR(20) NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL,
+    concept TEXT NOT NULL,
+    registered_by VARCHAR(150),
+    reference_id UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    cash_shift_id UUID REFERENCES cash_shifts(id),
+    category VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL,
+    payment_method VARCHAR(20) DEFAULT 'CASH',
+    registered_by VARCHAR(150),
+    receipt_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS account_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    type VARCHAR(30) NOT NULL,
+    customer_id UUID REFERENCES customers(id),
+    customer_name VARCHAR(150),
+    supplier_id UUID REFERENCES suppliers(id),
+    supplier_name VARCHAR(150),
+    purchase_invoice_id UUID REFERENCES purchase_invoices(id),
+    sale_id UUID REFERENCES sales(id),
+    amount NUMERIC(12, 2) NOT NULL,
+    payment_method VARCHAR(20) NOT NULL DEFAULT 'CASH',
+    notes TEXT,
+    cash_shift_id UUID REFERENCES cash_shifts(id),
+    created_by VARCHAR(150),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11. FINANCIAL CALENDAR & EVENTS
+CREATE TABLE IF NOT EXISTS financial_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_type VARCHAR(30) NOT NULL,        -- 'SUPPLIER_PAYMENT' | 'SAR_DECLARATION' | 'SAR_CAI_EXPIRY' | 'COMMISSION_PAYOUT'
