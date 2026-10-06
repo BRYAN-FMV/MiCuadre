@@ -457,19 +457,14 @@ export async function saveSaleToSupabase(sale: Sale) {
 
   try {
     const saleUuid = isValidUUID(sale.id) ? sale.id : generateUUID();
-    let shiftIdParam: string | null = null;
-
-    if (sale.cashShiftId && isValidUUID(sale.cashShiftId)) {
-      const { data: existingShift } = await supabase.from('cash_shifts').select('id').eq('id', sale.cashShiftId).maybeSingle();
-      if (existingShift) {
-        shiftIdParam = existingShift.id;
-      }
-    }
+    const shiftIdParam = (sale.cashShiftId && isValidUUID(sale.cashShiftId)) ? sale.cashShiftId : null;
 
     const payload: any = {
       id: saleUuid,
       tenant_id: sale.tenantId,
       cash_shift_id: shiftIdParam,
+      fiscal_range_id: (sale.fiscalRangeId && isValidUUID(sale.fiscalRangeId)) ? sale.fiscalRangeId : null,
+      caja_name: sale.cajaName || null,
       document_number: sale.documentNumber,
       is_fiscal: sale.isFiscal,
       cai: sale.cai || null,
@@ -704,7 +699,7 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
       caiRangeStart: s.cai_range_start,
       caiRangeEnd: s.cai_range_end,
       fiscalRangeId: s.fiscal_range_id,
-      cajaName: (s.cai && caiRangeMap.get(s.cai)) || s.caja_name || defaultCajaName,
+      cajaName: s.caja_name || (s.cai && caiRangeMap.get(s.cai)) || defaultCajaName,
       customerId: s.customer_id,
       customerName: s.customer_name || 'Consumidor Final',
       customerRtn: s.customer_rtn,

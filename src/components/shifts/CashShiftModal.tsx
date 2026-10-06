@@ -105,15 +105,24 @@ export const CashShiftModal: React.FC = () => {
 
     const result = closeCashShift(declared);
     const shiftOpenedTime = activeShift?.openedAt ? new Date(activeShift.openedAt).getTime() : 0;
+    const shiftClosedTime = activeShift?.closedAt ? new Date(activeShift.closedAt).getTime() : 0;
 
     const shiftSales = sales.filter((s: Sale) => {
       const matchesTenant = !s.tenantId || s.tenantId === tenant.id;
       if (!matchesTenant) return false;
 
+      // 1. Direct ID match
       if (activeShift?.id && s.cashShiftId === activeShift.id) return true;
-      if (shiftOpenedTime > 0) {
+
+      // 2. Strict Caja terminal matching (Caja 1 vs Caja 2 separation)
+      const matchesCaja = (s.cajaName && activeShift?.cajaName && s.cajaName === activeShift.cajaName) ||
+                          (s.fiscalRangeId && activeShift?.fiscalRangeId && s.fiscalRangeId === activeShift.fiscalRangeId);
+
+      if (matchesCaja && shiftOpenedTime > 0) {
         const saleTime = new Date(s.createdAt).getTime();
-        return saleTime >= shiftOpenedTime;
+        const afterOpen = saleTime >= shiftOpenedTime;
+        const beforeClose = shiftClosedTime > 0 ? saleTime <= shiftClosedTime : true;
+        return afterOpen && beforeClose;
       }
       return false;
     });
@@ -131,10 +140,17 @@ export const CashShiftModal: React.FC = () => {
       .reduce((acc: number, s: Sale) => acc + s.total, 0);
 
     const shiftMovs = (cashMovements || []).filter(m => {
+      const matchesTenant = !m.tenantId || m.tenantId === tenant.id;
+      if (!matchesTenant) return false;
+
       if (activeShift?.id && m.cashShiftId === activeShift.id) return true;
-      if (shiftOpenedTime > 0) {
+
+      const matchesCaja = (m.fiscalRangeId && activeShift?.fiscalRangeId && m.fiscalRangeId === activeShift.fiscalRangeId);
+      if (matchesCaja && shiftOpenedTime > 0) {
         const movTime = new Date(m.createdAt).getTime();
-        return movTime >= shiftOpenedTime;
+        const afterOpen = movTime >= shiftOpenedTime;
+        const beforeClose = shiftClosedTime > 0 ? movTime <= shiftClosedTime : true;
+        return afterOpen && beforeClose;
       }
       return false;
     });

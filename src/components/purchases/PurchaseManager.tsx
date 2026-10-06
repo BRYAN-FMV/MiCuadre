@@ -43,7 +43,7 @@ export const PurchaseManager: React.FC = () => {
   const [expCategory, setExpCategory] = useState<ExpenseCategory>('LIMPIEZA');
   const [expDescription, setExpDescription] = useState('');
   const [expAmount, setExpAmount] = useState('');
-  const [expFundId, setExpFundId] = useState(tenantFunds[0]?.id || '');
+  const [expFundId, setExpFundId] = useState('ACTIVE_CASH_SHIFT');
   const [expReceiptNumber, setExpReceiptNumber] = useState('');
   const [expDate, setExpDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedExpenseCategoryFilter, setSelectedExpenseCategoryFilter] = useState<string>('ALL');
@@ -346,14 +346,15 @@ export const PurchaseManager: React.FC = () => {
       toast.error('Ingresa una descripción clara del gasto');
       return;
     }
-    const isCashShift = expFundId === 'ACTIVE_CASH_SHIFT';
+    const targetFundId = currentUser?.role !== 'ADMIN' ? 'ACTIVE_CASH_SHIFT' : expFundId;
+    const isCashShift = targetFundId === 'ACTIVE_CASH_SHIFT';
     if (isCashShift) {
       if (!activeShift || activeShift.status !== 'OPEN') {
         toast.error('No hay una caja registradora abierta en este terminal para realizar egresos en efectivo.');
         return;
       }
     } else {
-      const selectedFund = tenantFunds.find(f => f.id === expFundId);
+      const selectedFund = tenantFunds.find(f => f.id === targetFundId);
       if (!selectedFund) {
         toast.error('Selecciona un fondo de pago');
         return;
@@ -363,13 +364,13 @@ export const PurchaseManager: React.FC = () => {
       }
     }
 
-    const selectedFund = tenantFunds.find(f => f.id === expFundId);
+    const selectedFund = tenantFunds.find(f => f.id === targetFundId);
 
     addExpense({
       category: expCategory,
       description: expDescription.trim(),
       amount,
-      fundId: expFundId,
+      fundId: targetFundId,
       fundName: isCashShift ? `Caja Registradora (${activeShift?.cajaName || 'Turno Activo'})` : (selectedFund?.name || 'Fondo'),
       paymentSource: isCashShift ? 'ACTIVE_CASH_SHIFT' : 'FUND',
       receiptNumber: expReceiptNumber.trim() || undefined,
@@ -495,7 +496,10 @@ export const PurchaseManager: React.FC = () => {
 
           {activeSubTab === 'expenses' && (
             <button className="btn btn-primary" onClick={() => {
-              setExpFundId(tenantFunds[0]?.id || '');
+              setExpFundId('ACTIVE_CASH_SHIFT');
+              setExpDescription('');
+              setExpAmount('');
+              setExpReceiptNumber('');
               setIsExpenseModalOpen(true);
             }} style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
               <Plus size={16} />

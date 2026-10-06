@@ -900,15 +900,24 @@ export const useAppStore = create<AppState>()(
     if (!shift) return { difference: 0, closingSystem: 0 };
 
     const shiftOpenedTime = shift.openedAt ? new Date(shift.openedAt).getTime() : 0;
+    const shiftClosedTime = shift.closedAt ? new Date(shift.closedAt).getTime() : 0;
 
     const shiftSales = state.sales.filter(s => {
       const matchesTenant = !s.tenantId || s.tenantId === shift.tenantId;
       if (!matchesTenant) return false;
 
-      if (s.cashShiftId === shift.id) return true;
-      if (shiftOpenedTime > 0) {
+      // 1. Direct ID match
+      if (s.cashShiftId && s.cashShiftId === shift.id) return true;
+
+      // 2. Terminal-scoped matching (so Caja 1 and Caja 2 never mix sales)
+      const matchesCaja = (s.cajaName && shift.cajaName && s.cajaName === shift.cajaName) ||
+                          (s.fiscalRangeId && shift.fiscalRangeId && s.fiscalRangeId === shift.fiscalRangeId);
+
+      if (matchesCaja && shiftOpenedTime > 0) {
         const saleTime = new Date(s.createdAt).getTime();
-        return saleTime >= shiftOpenedTime;
+        const afterOpen = saleTime >= shiftOpenedTime;
+        const beforeClose = shiftClosedTime > 0 ? saleTime <= shiftClosedTime : true;
+        return afterOpen && beforeClose;
       }
       return false;
     });
@@ -918,10 +927,17 @@ export const useAppStore = create<AppState>()(
       .reduce((acc, s) => acc + s.total, 0);
 
     const shiftMovements = (state.cashMovements || []).filter(m => {
-      if (m.cashShiftId === shift.id) return true;
-      if (shiftOpenedTime > 0) {
+      const matchesTenant = !m.tenantId || m.tenantId === shift.tenantId;
+      if (!matchesTenant) return false;
+
+      if (m.cashShiftId && m.cashShiftId === shift.id) return true;
+
+      const matchesCaja = (m.fiscalRangeId && shift.fiscalRangeId && m.fiscalRangeId === shift.fiscalRangeId);
+      if (matchesCaja && shiftOpenedTime > 0) {
         const movTime = new Date(m.createdAt).getTime();
-        return movTime >= shiftOpenedTime;
+        const afterOpen = movTime >= shiftOpenedTime;
+        const beforeClose = shiftClosedTime > 0 ? movTime <= shiftClosedTime : true;
+        return afterOpen && beforeClose;
       }
       return false;
     });
