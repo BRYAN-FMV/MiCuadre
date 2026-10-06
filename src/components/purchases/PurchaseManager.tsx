@@ -3,7 +3,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { formatCurrency, calculateCPP } from '../../lib/monetary';
 import { toast } from 'sonner';
 import { Truck, Plus, CheckCircle, Calendar, DollarSign, Package, Users, Wallet, CreditCard, AlertCircle, Edit2, Trash2, Receipt, Filter, Info, Search } from 'lucide-react';
-import { PurchaseInvoice, Supplier, FinancialFund, Expense, ExpenseCategory } from '../../types';
+import { PurchaseInvoice, Supplier, FinancialFund, Expense, ExpenseCategory, Product } from '../../types';
 
 const EXPENSE_CATEGORIES: Array<{ value: ExpenseCategory; label: string }> = [
   { value: 'LIMPIEZA', label: 'Limpieza (Detergente, cloro, escobas, bolsas)' },
@@ -56,6 +56,13 @@ export const PurchaseManager: React.FC = () => {
     return d.toISOString().split('T')[0];
   });
 
+  // Purchase Modal Search & Autocomplete state
+  const [modalSupplierQuery, setModalSupplierQuery] = useState('');
+  const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+
+  const [modalProductQuery, setModalProductQuery] = useState('');
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+
   // New Purchase Modal state
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState(tenantSuppliers[0]?.id || '');
@@ -76,7 +83,50 @@ export const PurchaseManager: React.FC = () => {
 
   const [selectedProdId, setSelectedProdId] = useState(tenantProducts[0]?.id || '');
   const [itemQty, setItemQty] = useState('10');
-  const [itemCost, setItemCost] = useState('50.00');
+  const [itemCost, setItemCost] = useState(tenantProducts[0]?.costPrice ? tenantProducts[0].costPrice.toFixed(2) : '0.00');
+
+  const handleOpenPurchaseModal = () => {
+    const firstSupp = tenantSuppliers[0];
+    const firstProd = tenantProducts[0];
+    setSelectedSupplierId(firstSupp?.id || '');
+    setModalSupplierQuery(firstSupp?.companyName || '');
+    setSelectedProdId(firstProd?.id || '');
+    setModalProductQuery(firstProd?.name || '');
+    setItemCost(firstProd?.costPrice ? firstProd.costPrice.toFixed(2) : '0.00');
+    setInvoiceNumber('');
+    setPurchaseItems([]);
+    setIsPurchaseModalOpen(true);
+  };
+
+  const handleSelectSupplier = (supp: Supplier) => {
+    setSelectedSupplierId(supp.id);
+    setModalSupplierQuery(supp.companyName);
+    setIsSupplierDropdownOpen(false);
+  };
+
+  const handleSelectProduct = (prod: Product) => {
+    setSelectedProdId(prod.id);
+    setModalProductQuery(prod.name);
+    setItemCost(prod.costPrice ? prod.costPrice.toFixed(2) : '0.00');
+    setIsProductDropdownOpen(false);
+  };
+
+  const handleProductQueryChange = (query: string) => {
+    setModalProductQuery(query);
+    const cleanQ = query.trim().toLowerCase();
+    if (cleanQ) {
+      // Barcode scanner or exact SKU match
+      const exactMatch = tenantProducts.find(p =>
+        (p.barcode && p.barcode.toLowerCase() === cleanQ) ||
+        (p.sku && p.sku.toLowerCase() === cleanQ)
+      );
+      if (exactMatch) {
+        handleSelectProduct(exactMatch);
+        return;
+      }
+    }
+    setIsProductDropdownOpen(true);
+  };
 
   // Supplier Modal state
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -781,13 +831,15 @@ export const PurchaseManager: React.FC = () => {
                       </td>
                       <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{exp.registeredBy || 'Usuario'}</td>
                       <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                        <button
-                          onClick={() => handleDeleteExpenseClick(exp)}
-                          title="Eliminar Gasto (Reintegra saldo al fondo)"
-                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {currentUser?.role === 'ADMIN' && (
+                          <button
+                            onClick={() => handleDeleteExpenseClick(exp)}
+                            title="Eliminar Gasto (Reintegra saldo al fondo)"
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -920,16 +972,53 @@ export const PurchaseManager: React.FC = () => {
             <h3 style={{ color: '#0f172a', marginBottom: '1rem' }}>Ingresar Factura de Compra</h3>
             <form onSubmit={handleSavePurchase} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
-                <div className="form-group">
+                <div className="form-group" style={{ position: 'relative' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label className="form-label">Proveedor *</label>
                     <button type="button" onClick={() => setIsSupplierModalOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>+ Nuevo</button>
                   </div>
-                  <select className="input-control" value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)}>
-                    {tenantSuppliers.map(s => (
-                      <option key={s.id} value={s.id}>{s.companyName}</option>
-                    ))}
-                  </select>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      className="input-control"
+                      placeholder="Buscar proveedor por empresa o RTN..."
+                      value={modalSupplierQuery}
+                      onChange={(e) => {
+                        setModalSupplierQuery(e.target.value);
+                        setIsSupplierDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsSupplierDropdownOpen(true)}
+                      required
+                    />
+                    {isSupplierDropdownOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', zIndex: 100, maxHeight: '180px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                        {tenantSuppliers.filter(s =>
+                          !modalSupplierQuery ||
+                          s.companyName.toLowerCase().includes(modalSupplierQuery.toLowerCase()) ||
+                          (s.rtn && s.rtn.includes(modalSupplierQuery))
+                        ).length === 0 ? (
+                          <div style={{ padding: '0.6rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>
+                            No se encontraron proveedores.
+                          </div>
+                        ) : (
+                          tenantSuppliers.filter(s =>
+                            !modalSupplierQuery ||
+                            s.companyName.toLowerCase().includes(modalSupplierQuery.toLowerCase()) ||
+                            (s.rtn && s.rtn.includes(modalSupplierQuery))
+                          ).map(s => (
+                            <div
+                              key={s.id}
+                              onClick={() => handleSelectSupplier(s)}
+                              style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.82rem', borderBottom: '1px solid #f1f5f9', background: selectedSupplierId === s.id ? '#f0fdf4' : '#ffffff' }}
+                            >
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{s.companyName}</div>
+                              {s.rtn && <div style={{ fontSize: '0.72rem', color: '#64748b' }}>RTN: {s.rtn}</div>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -969,18 +1058,61 @@ export const PurchaseManager: React.FC = () => {
 
               {/* Items Selector */}
               <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <label className="form-label">Agregar Producto Recibido</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.4rem', marginTop: '0.3rem' }}>
-                  <select className="input-control" value={selectedProdId} onChange={(e) => setSelectedProdId(e.target.value)}>
-                    {tenantProducts.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} (Stock: {p.currentStock})</option>
-                    ))}
-                  </select>
+                <label className="form-label" style={{ fontWeight: 700 }}>Agregar Producto Recibido (Escaneo o Nombre)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.4rem', marginTop: '0.3rem', alignItems: 'start' }}>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      className="input-control"
+                      placeholder="Escanear código o buscar nombre..."
+                      value={modalProductQuery}
+                      onChange={(e) => handleProductQueryChange(e.target.value)}
+                      onFocus={() => setIsProductDropdownOpen(true)}
+                    />
+                    {isProductDropdownOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', zIndex: 100, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                        {tenantProducts.filter(p =>
+                          !modalProductQuery ||
+                          p.name.toLowerCase().includes(modalProductQuery.toLowerCase()) ||
+                          (p.barcode && p.barcode.toLowerCase().includes(modalProductQuery.toLowerCase())) ||
+                          (p.sku && p.sku.toLowerCase().includes(modalProductQuery.toLowerCase()))
+                        ).length === 0 ? (
+                          <div style={{ padding: '0.6rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>
+                            No se encontraron productos.
+                          </div>
+                        ) : (
+                          tenantProducts.filter(p =>
+                            !modalProductQuery ||
+                            p.name.toLowerCase().includes(modalProductQuery.toLowerCase()) ||
+                            (p.barcode && p.barcode.toLowerCase().includes(modalProductQuery.toLowerCase())) ||
+                            (p.sku && p.sku.toLowerCase().includes(modalProductQuery.toLowerCase()))
+                          ).map(p => (
+                            <div
+                              key={p.id}
+                              onClick={() => handleSelectProduct(p)}
+                              style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.82rem', borderBottom: '1px solid #f1f5f9', background: selectedProdId === p.id ? '#f0fdf4' : '#ffffff' }}
+                            >
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.name}</div>
+                              <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Stock: {p.currentStock} {p.unitOfMeasure}</span>
+                                <span style={{ fontWeight: 700, color: '#059669' }}>Costo actual: {formatCurrency(p.costPrice, tenant.currencySymbol)}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                  <input type="number" placeholder="Cant." className="input-control" value={itemQty} onChange={(e) => setItemQty(e.target.value)} />
-                  <input type="number" step="0.01" placeholder="Costo Unit." className="input-control" value={itemCost} onChange={(e) => setItemCost(e.target.value)} />
+                  <div>
+                    <input type="number" placeholder="Cant." className="input-control" value={itemQty} onChange={(e) => setItemQty(e.target.value)} min="1" />
+                  </div>
 
-                  <button type="button" className="btn btn-secondary" onClick={handleAddItem} style={{ fontSize: '0.8rem' }}>
+                  <div>
+                    <input type="number" step="0.01" placeholder="Costo Unit." className="input-control" value={itemCost} onChange={(e) => setItemCost(e.target.value)} title="Costo unitario (muestra automáticamente el costo actual)" />
+                  </div>
+
+                  <button type="button" className="btn btn-secondary" onClick={handleAddItem} style={{ fontSize: '0.8rem', height: '36px' }}>
                     + Agregar
                   </button>
                 </div>
@@ -1250,19 +1382,26 @@ export const PurchaseManager: React.FC = () => {
 
                 <div className="form-group">
                   <label className="form-label">Fondo / Cuenta Pagadora *</label>
-                  <select
-                    className="input-control"
-                    value={expFundId}
-                    onChange={(e) => setExpFundId(e.target.value)}
-                    required
-                  >
-                    <option value="ACTIVE_CASH_SHIFT">
-                      💵 Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
-                    </option>
-                    {tenantFunds.map(f => (
-                      <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
-                    ))}
-                  </select>
+                  {currentUser?.role === 'ADMIN' ? (
+                    <select
+                      className="input-control"
+                      value={expFundId}
+                      onChange={(e) => setExpFundId(e.target.value)}
+                      required
+                    >
+                      <option value="ACTIVE_CASH_SHIFT">
+                        💵 Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
+                      </option>
+                      {tenantFunds.map(f => (
+                        <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="input-control" style={{ background: '#f8fafc', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Wallet size={15} style={{ color: '#059669' }} />
+                      <span>Caja Registradora en Turno (Gaveta Activa)</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -899,11 +899,33 @@ export const useAppStore = create<AppState>()(
 
     if (!shift) return { difference: 0, closingSystem: 0 };
 
-    const shiftCashSales = state.sales
-      .filter(s => s.cashShiftId === shift.id && (s.paymentMethod === 'CASH' || s.paymentMethod === 'MIXED'))
+    const shiftOpenedTime = shift.openedAt ? new Date(shift.openedAt).getTime() : 0;
+
+    const shiftSales = state.sales.filter(s => {
+      const matchesTenant = !s.tenantId || s.tenantId === shift.tenantId;
+      if (!matchesTenant) return false;
+
+      if (s.cashShiftId === shift.id) return true;
+      if (shiftOpenedTime > 0) {
+        const saleTime = new Date(s.createdAt).getTime();
+        return saleTime >= shiftOpenedTime;
+      }
+      return false;
+    });
+
+    const shiftCashSales = shiftSales
+      .filter(s => s.paymentMethod === 'CASH' || s.paymentMethod === 'MIXED')
       .reduce((acc, s) => acc + s.total, 0);
 
-    const shiftMovements = (state.cashMovements || []).filter(m => m.cashShiftId === shift.id);
+    const shiftMovements = (state.cashMovements || []).filter(m => {
+      if (m.cashShiftId === shift.id) return true;
+      if (shiftOpenedTime > 0) {
+        const movTime = new Date(m.createdAt).getTime();
+        return movTime >= shiftOpenedTime;
+      }
+      return false;
+    });
+
     const totalIngresos = shiftMovements.filter(m => m.type === 'ENTRADA').reduce((acc, m) => acc + m.amount, 0);
     const totalEgresos = shiftMovements.filter(m => m.type === 'SALIDA').reduce((acc, m) => acc + m.amount, 0);
 

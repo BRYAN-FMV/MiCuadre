@@ -633,19 +633,39 @@ export async function processPurchaseSupabase(payload: {
  * Close Cash Shift via Supabase RPC function
  */
 export async function closeCashShiftSupabase(shiftId: string, declaredCash: number) {
-  if (!isSupabaseConfigured()) return null;
+  if (!isSupabaseConfigured() || !isValidUUID(shiftId)) return null;
 
-  const { data, error } = await supabase.rpc('close_cash_shift', {
-    p_shift_id: shiftId,
-    p_declared_cash: declaredCash
-  });
+  try {
+    // Check if shift is already closed in Supabase to maintain idempotency
+    const { data: existingShift } = await supabase
+      .from('cash_shifts')
+      .select('status')
+      .eq('id', shiftId)
+      .maybeSingle();
 
-  if (error) {
-    console.error('Error al cerrar caja en Supabase:', error);
-    throw new Error(error.message);
+    if (existingShift && existingShift.status === 'CLOSED') {
+      return existingShift;
+    }
+
+    const { data, error } = await supabase.rpc('close_cash_shift', {
+      p_shift_id: shiftId,
+      p_declared_cash: declaredCash
+    });
+
+    if (error) {
+      if (error.message.includes('cerrado') || error.code === '400' || error.message.includes('no existe')) {
+        console.info('El turno de caja ya se encontraba cerrado en Supabase.');
+        return null;
+      }
+      console.warn('Error al cerrar caja en Supabase:', error.message);
+      return null;
+    }
+
+    return data;
+  } catch (err: any) {
+    console.warn('Error idempotente al cerrar turno de caja en Supabase:', err?.message || err);
+    return null;
   }
-
-  return data;
 }
 
 /**

@@ -206,7 +206,7 @@ export const PosContainer: React.FC = () => {
       }
     }
 
-    const isOverrideFiscal = tenant.isFiscalEnabled ? (selectedDocType === 'FISCAL') : false;
+    const isOverrideFiscal = Boolean(tenant.isFiscalEnabled);
     const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
     if (!completedSale) return;
 
@@ -928,42 +928,15 @@ export const PosContainer: React.FC = () => {
       {isPaymentModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-content" style={{ maxWidth: '440px' }}>
-            {/* Document Type Selector (Factura Fiscal vs Ticket Interno) */}
-            {tenant.isFiscalEnabled && (
-              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '0.75rem', borderRadius: '8px', marginBottom: '0.85rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                    Tipo de Comprobante / Documento:
-                  </label>
-                  <span className="badge" style={{ background: selectedDocType === 'TICKET' ? '#e0f2fe' : '#ecfdf5', color: selectedDocType === 'TICKET' ? '#0369a1' : '#047857', fontSize: '0.68rem', fontWeight: 700 }}>
-                    {selectedDocType === 'TICKET' ? 'Venta Pequeña / Ticket' : 'Factura SAR CAI'}
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                  <button
-                    type="button"
-                    className={`btn ${selectedDocType === 'FISCAL' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setSelectedDocType('FISCAL')}
-                    style={{ fontSize: '0.75rem', padding: '0.45rem 0.3rem', fontWeight: 700 }}
-                  >
-                    Factura Fiscal (CAI)
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${selectedDocType === 'TICKET' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setSelectedDocType('TICKET')}
-                    style={{ fontSize: '0.75rem', padding: '0.45rem 0.3rem', fontWeight: 700 }}
-                  >
-                    Ticket Interno (Sin CAI)
-                  </button>
-                </div>
-                <p style={{ fontSize: '0.7rem', color: '#64748b', margin: '0.35rem 0 0 0', fontWeight: 500 }}>
-                  {selectedDocType === 'TICKET'
-                    ? 'Registra la venta, descuenta inventario y suma dinero a caja sin gastar correlativo fiscal SAR.'
-                    : 'Emite factura oficial SAR con correlativo CAI asignado.'}
-                </p>
-              </div>
-            )}
+            {/* Document Header Info */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.65rem 0.85rem', borderRadius: '8px', marginBottom: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                Comprobante: {tenant.isFiscalEnabled ? 'Factura Fiscal SAR (CAI)' : 'Ticket de Venta POS'}
+              </span>
+              <span className={`badge ${tenant.isFiscalEnabled ? 'badge-success' : 'badge-wholesale'}`} style={{ fontSize: '0.68rem', fontWeight: 700 }}>
+                {tenant.isFiscalEnabled ? 'SAR CAI' : 'TICKET'}
+              </span>
+            </div>
 
             <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '0.85rem', borderRadius: '8px', marginBottom: '1rem', textAlign: 'center' }}>
               <p style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 600 }}>Total a Cobrar:</p>

@@ -104,10 +104,22 @@ export const CashShiftModal: React.FC = () => {
     }
 
     const result = closeCashShift(declared);
-    const shiftSales = sales.filter((s: Sale) => s.tenantId === tenant.id && s.cashShiftId === activeShift?.id);
+    const shiftOpenedTime = activeShift?.openedAt ? new Date(activeShift.openedAt).getTime() : 0;
+
+    const shiftSales = sales.filter((s: Sale) => {
+      const matchesTenant = !s.tenantId || s.tenantId === tenant.id;
+      if (!matchesTenant) return false;
+
+      if (activeShift?.id && s.cashShiftId === activeShift.id) return true;
+      if (shiftOpenedTime > 0) {
+        const saleTime = new Date(s.createdAt).getTime();
+        return saleTime >= shiftOpenedTime;
+      }
+      return false;
+    });
 
     const shiftCashSales = shiftSales
-      .filter((s: Sale) => s.paymentMethod === 'CASH')
+      .filter((s: Sale) => s.paymentMethod === 'CASH' || s.paymentMethod === 'MIXED')
       .reduce((acc: number, s: Sale) => acc + s.total, 0);
 
     const shiftCardSales = shiftSales
@@ -118,7 +130,14 @@ export const CashShiftModal: React.FC = () => {
       .filter((s: Sale) => s.paymentMethod === 'TRANSFER')
       .reduce((acc: number, s: Sale) => acc + s.total, 0);
 
-    const shiftMovs = (cashMovements || []).filter(m => m.cashShiftId === activeShift?.id);
+    const shiftMovs = (cashMovements || []).filter(m => {
+      if (activeShift?.id && m.cashShiftId === activeShift.id) return true;
+      if (shiftOpenedTime > 0) {
+        const movTime = new Date(m.createdAt).getTime();
+        return movTime >= shiftOpenedTime;
+      }
+      return false;
+    });
     const totalIngresos = shiftMovs.filter(m => m.type === 'ENTRADA').reduce((acc, m) => acc + m.amount, 0);
     const totalEgresos = shiftMovs.filter(m => m.type === 'SALIDA').reduce((acc, m) => acc + m.amount, 0);
 
