@@ -4,7 +4,7 @@ import { formatCurrency } from '../../lib/monetary';
 import { toast } from 'sonner';
 import {
   Scissors, Calendar, User, Plus, ShoppingCart, DollarSign, CheckCircle,
-  Clock, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Grid, List, Filter, Lock, AlertTriangle
+  Clock, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Grid, List, Filter, Lock, AlertTriangle, Search
 } from 'lucide-react';
 import { Appointment, Service } from '../../types';
 
@@ -55,6 +55,7 @@ export const ServicesAppointments: React.FC = () => {
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [staffFilterId, setStaffFilterId] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | Appointment['status']>('ALL');
+  const [appSearchTerm, setAppSearchTerm] = useState('');
 
   // New Appointment Form State
   const [isAppModalOpen, setIsAppModalOpen] = useState(false);
@@ -559,6 +560,13 @@ export const ServicesAppointments: React.FC = () => {
     .filter(app => {
       if (staffFilterId !== 'ALL' && app.staffId !== staffFilterId) return false;
       if (statusFilter !== 'ALL' && app.status !== statusFilter) return false;
+      if (appSearchTerm.trim() !== '') {
+        const q = appSearchTerm.toLowerCase().trim();
+        const matchName = app.customerName.toLowerCase().includes(q);
+        const matchPhone = app.customerPhone ? app.customerPhone.includes(q) : false;
+        const matchNotes = app.notes ? app.notes.toLowerCase().includes(q) : false;
+        if (!matchName && !matchPhone && !matchNotes) return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -746,6 +754,19 @@ export const ServicesAppointments: React.FC = () => {
                   <option value="COMPLETED">Completadas (Cobradas)</option>
                   <option value="CANCELLED">Canceladas</option>
                 </select>
+              </div>
+
+              {/* Customer Search Bar */}
+              <div style={{ position: 'relative', width: '220px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  className="input-control"
+                  placeholder="Buscar Cliente o Teléfono..."
+                  value={appSearchTerm}
+                  onChange={(e) => setAppSearchTerm(e.target.value)}
+                  style={{ paddingLeft: '2rem', fontSize: '0.8rem', padding: '0.35rem 0.5rem 0.35rem 2rem' }}
+                />
               </div>
             </div>
 

@@ -10,6 +10,7 @@ export const InventoryManager: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('TODOS');
+  const [stockFilter, setStockFilter] = useState<'ALL' | 'LOW' | 'OUT' | 'WHOLESALE'>('ALL');
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -132,16 +133,28 @@ export const InventoryManager: React.FC = () => {
     }
   };
 
-  // Multi-tenant product filtering
+  // Multi-tenant product filtering & Stock counters
   const tenantProducts = products.filter((p: Product) => p.tenantId === tenant.id);
   const categories = ['TODOS', ...Array.from(new Set(tenantProducts.map((p: Product) => p.category)))];
+
+  const lowStockCount = tenantProducts.filter(p => p.currentStock > 0 && p.currentStock <= p.minStockAlert).length;
+  const outOfStockCount = tenantProducts.filter(p => p.currentStock <= 0).length;
+  const wholesaleCount = tenantProducts.filter(p => p.tiers && p.tiers.length > 0).length;
 
   const filteredProducts = tenantProducts.filter((p: Product) => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (p.barcode && p.barcode.includes(searchTerm));
     const matchesCat = selectedCategory === 'TODOS' || p.category === selectedCategory;
-    return matchesSearch && matchesCat;
+    let matchesStock = true;
+    if (stockFilter === 'LOW') {
+      matchesStock = p.currentStock > 0 && p.currentStock <= p.minStockAlert;
+    } else if (stockFilter === 'OUT') {
+      matchesStock = p.currentStock <= 0;
+    } else if (stockFilter === 'WHOLESALE') {
+      matchesStock = !!(p.tiers && p.tiers.length > 0);
+    }
+    return matchesSearch && matchesCat && matchesStock;
   });
 
   const currentUser = useAppStore(state => state.currentUser);
@@ -176,7 +189,7 @@ export const InventoryManager: React.FC = () => {
 
       {/* Filter Toolbar */}
       <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem 1rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', width: '320px' }}>
+        <div style={{ position: 'relative', width: '280px' }}>
           <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
           <input
             type="text"
@@ -188,6 +201,77 @@ export const InventoryManager: React.FC = () => {
           />
         </div>
 
+        {/* Stock Status Pills */}
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', borderRight: '1px solid #e2e8f0', paddingRight: '0.75rem' }}>
+          <button
+            type="button"
+            onClick={() => setStockFilter('ALL')}
+            style={{
+              padding: '0.35rem 0.65rem',
+              fontSize: '0.78rem',
+              borderRadius: '16px',
+              background: stockFilter === 'ALL' ? '#0f172a' : '#f1f5f9',
+              color: stockFilter === 'ALL' ? '#ffffff' : '#475569',
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Todos ({tenantProducts.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStockFilter('LOW')}
+            style={{
+              padding: '0.35rem 0.65rem',
+              fontSize: '0.78rem',
+              borderRadius: '16px',
+              background: stockFilter === 'LOW' ? '#d97706' : '#fef3c7',
+              color: stockFilter === 'LOW' ? '#ffffff' : '#92400e',
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Poco Stock ({lowStockCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStockFilter('OUT')}
+            style={{
+              padding: '0.35rem 0.65rem',
+              fontSize: '0.78rem',
+              borderRadius: '16px',
+              background: stockFilter === 'OUT' ? '#dc2626' : '#fee2e2',
+              color: stockFilter === 'OUT' ? '#ffffff' : '#991b1b',
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Agotados ({outOfStockCount})
+          </button>
+          {wholesaleCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setStockFilter('WHOLESALE')}
+              style={{
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.78rem',
+                borderRadius: '16px',
+                background: stockFilter === 'WHOLESALE' ? '#7c3aed' : '#f3e8ff',
+                color: stockFilter === 'WHOLESALE' ? '#ffffff' : '#6b21a8',
+                border: 'none',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Mayoreo ({wholesaleCount})
+            </button>
+          )}
+        </div>
+
+        {/* Category Pills */}
         <div style={{ display: 'flex', gap: '0.4rem', flex: 1, overflowX: 'auto' }}>
           {categories.map((cat) => {
             const isActive = selectedCategory === cat;
