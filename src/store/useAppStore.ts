@@ -15,7 +15,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 export interface HeldOrder {
@@ -1278,6 +1278,31 @@ export const useAppStore = create<AppState>()(
         status: 'PENDING',
         referenceId: newInvoice.id
       });
+    }
+
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      // 1. Sync updated product stock & CPP cost to Supabase
+      for (const item of items) {
+        const prod = updatedProducts.find(p => p.id === item.productId);
+        if (prod) {
+          saveProductToSupabase(prod).catch(err => console.warn('Supabase save product on purchase:', err));
+        }
+      }
+
+      // 2. Sync purchase invoice to Supabase
+      processPurchaseSupabase({
+        tenantId: state.tenant.id,
+        supplierId: purchaseData.supplierId,
+        invoiceNumber: purchaseData.invoiceNumber,
+        cai: purchaseData.cai,
+        issueDate: purchaseData.issueDate,
+        dueDate: purchaseData.dueDate,
+        paymentTerms: purchaseData.paymentTerms,
+        subtotal: purchaseData.subtotal,
+        taxAmount: purchaseData.taxAmount,
+        total: purchaseData.total,
+        items: items
+      }).catch(err => console.warn('Supabase process purchase info:', err));
     }
 
     return {

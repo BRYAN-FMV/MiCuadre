@@ -16,7 +16,8 @@ import { CashShiftModal } from './components/shifts/CashShiftModal';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { Toaster, toast } from 'sonner';
 import { AlertTriangle } from 'lucide-react';
-import { isSupabaseConfigured } from './lib/supabase';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { isValidUUID } from './lib/security';
 import {
   fetchProductsFromSupabase,
   fetchSuppliersFromSupabase,
@@ -24,6 +25,7 @@ import {
   fetchTenantsFromSupabase,
   fetchSalesFromSupabase,
   fetchFiscalRangesFromSupabase,
+  fetchShiftsFromSupabase,
   pushLocalDataToCloud,
   syncAllCloudData,
   processOfflineQueue
@@ -181,7 +183,9 @@ export const App: React.FC = () => {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('online', handleOnline);
 
-    if (isSupabaseConfigured() && isAuthenticated && !showLanding && !isAdminRoute && tenant?.id) {
+    let realtimeChannel: any = null;
+
+    if (isSupabaseConfigured() && isAuthenticated && !showLanding && !isAdminRoute && tenant?.id && isValidUUID(tenant.id)) {
       // 1. Process offline queue and push any local records to cloud
       processOfflineQueue();
       pushLocalDataToCloud(tenant.id).then(() => {
@@ -189,17 +193,78 @@ export const App: React.FC = () => {
         syncAllCloudData(tenant.id);
       });
 
-      // 3. Periodic cloud polling every 8 seconds for real-time multi-device sync
+      // 3. Periodic cloud polling every 8 seconds for multi-device backup sync
       const syncInterval = setInterval(() => {
         if (navigator.onLine) {
           syncAllCloudData(tenant.id);
         }
       }, 8000);
 
+      // 4. Instant Realtime Subscription for Product Stock & Multi-Device Sales
+      try {
+        realtimeChannel = supabase
+          .channel(`micuadre-realtime-${tenant.id}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'products', filter: `tenant_id=eq.${tenant.id}` },
+            () => {
+              fetchProductsFromSupabase(tenant.id).then(liveProds => {
+                if (liveProds) {
+                  useAppStore.setState(s => {
+                    const liveMap = new Map(liveProds.map(lp => [lp.id, lp]));
+                    const merged = s.products.map(p => liveMap.get(p.id) || p);
+                    const existingIds = new Set(s.products.map(p => p.id));
+                    for (const lp of liveProds) {
+                      if (!existingIds.has(lp.id)) merged.push(lp);
+                    }
+                    return { products: merged };
+                  });
+                }
+              });
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'sales', filter: `tenant_id=eq.${tenant.id}` },
+            () => {
+              fetchSalesFromSupabase(tenant.id).then(liveSales => {
+                if (liveSales) {
+                  useAppStore.setState(s => {
+                    const liveIds = new Set(liveSales.map(ls => ls.id));
+                    const localOnly = (s.sales || []).filter(item => !liveIds.has(item.id));
+                    return { sales: [...liveSales, ...localOnly] };
+                  });
+                }
+              });
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'cash_shifts', filter: `tenant_id=eq.${tenant.id}` },
+            () => {
+              fetchShiftsFromSupabase(tenant.id).then(liveShifts => {
+                if (liveShifts) {
+                  useAppStore.setState(s => {
+                    const liveIds = new Set(liveShifts.map(ls => ls.id));
+                    const localOnly = (s.shiftHistory || []).filter(item => !liveIds.has(item.id));
+                    return { shiftHistory: [...liveShifts, ...localOnly] };
+                  });
+                }
+              });
+            }
+          )
+          .subscribe();
+      } catch (rtErr) {
+        console.warn('Realtime subscription error:', rtErr);
+      }
+
       return () => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
         window.removeEventListener('online', handleOnline);
         clearInterval(syncInterval);
+        if (realtimeChannel) {
+          supabase.removeChannel(realtimeChannel);
+        }
       };
     }
 
