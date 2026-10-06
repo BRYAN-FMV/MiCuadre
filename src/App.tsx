@@ -181,7 +181,7 @@ export const App: React.FC = () => {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('online', handleOnline);
 
-    if (isSupabaseConfigured() && tenant?.id) {
+    if (isSupabaseConfigured() && isAuthenticated && !showLanding && !isAdminRoute && tenant?.id) {
       // 1. Process offline queue and push any local records to cloud
       processOfflineQueue();
       pushLocalDataToCloud(tenant.id).then(() => {
@@ -191,7 +191,9 @@ export const App: React.FC = () => {
 
       // 3. Periodic cloud polling every 8 seconds for real-time multi-device sync
       const syncInterval = setInterval(() => {
-        syncAllCloudData(tenant.id);
+        if (navigator.onLine) {
+          syncAllCloudData(tenant.id);
+        }
       }, 8000);
 
       return () => {
@@ -205,7 +207,7 @@ export const App: React.FC = () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('online', handleOnline);
     };
-  }, [tenant?.id, isAuthenticated]);
+  }, [tenant?.id, isAuthenticated, showLanding, isAdminRoute]);
 
   // Handle dedicated SuperAdmin Route (/admin)
   if (isAdminRoute) {

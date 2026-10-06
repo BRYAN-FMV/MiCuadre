@@ -1251,7 +1251,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
  * Downloads and synchronizes full business state across devices
  */
 export async function syncAllCloudData(tenantId: string) {
-  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return;
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId) || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
 
   try {
     const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts, liveMovements, liveExpenses] = await Promise.all([
@@ -1381,7 +1381,7 @@ export async function syncAllCloudData(tenantId: string) {
  * Processes any items currently queued in offlineQueue and pushes them to Supabase
  */
 export async function processOfflineQueue() {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured() || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
 
   const state = useAppStore.getState();
   const queue = state.offlineQueue || [];
