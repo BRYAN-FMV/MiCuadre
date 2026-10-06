@@ -145,6 +145,8 @@ CREATE TABLE sales (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     cash_shift_id UUID REFERENCES cash_shifts(id),
+    fiscal_range_id UUID REFERENCES fiscal_ranges(id),
+    caja_name VARCHAR(100),
     document_number VARCHAR(32) NOT NULL,
     is_fiscal BOOLEAN DEFAULT FALSE,
     cai VARCHAR(40),
