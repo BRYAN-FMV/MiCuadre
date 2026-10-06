@@ -1016,3 +1016,30 @@ select.input-control, input.input-control, select, input {
   }
 }
 
+/* Print Media Styles for Thermal Receipt Printers (58mm / 80mm) */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .printable-receipt, .printable-receipt * {
+    visibility: visible;
+  }
+  .printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  @page {
+    margin: 0;
+    size: auto;
+  }
+}
+
+

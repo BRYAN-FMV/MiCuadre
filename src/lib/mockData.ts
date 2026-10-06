@@ -18,7 +18,8 @@ export const INITIAL_TENANT: Tenant = {
   subscriptionStatus: 'ACTIVE',
   subscriptionPlan: 'MONTHLY',
   subscriptionExpiresAt: '2026-12-31',
-  monthlyPrice: 950
+  monthlyPrice: 950,
+  ticketPaperWidth: '58mm'
 };
 
 export const INITIAL_CUSTOMERS: Customer[] = [

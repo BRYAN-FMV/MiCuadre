@@ -27,6 +27,7 @@ export interface Tenant {
   subscriptionExpiresAt?: string; // ISO date string e.g. "2026-12-31"
   monthlyPrice?: number;
   accessPassword?: string; // Master store entrance password for access modal
+  ticketPaperWidth?: '58mm' | '80mm'; // Receipt thermal paper width selector (58mm e.g. PT-210 vs 80mm desktop)
 }
 
 export interface UserProfile {
