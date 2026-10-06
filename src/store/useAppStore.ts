@@ -623,8 +623,9 @@ export const useAppStore = create<AppState>()(
     if (product) {
       const existingQty = existingIndex >= 0 ? newLines[existingIndex].quantity : 0;
       const currentQty = existingQty + quantity;
+      const allowNegative = state.tenant.allowNegativeStock === true;
 
-      if (!state.tenant.allowNegativeStock) {
+      if (!allowNegative) {
         if (product.currentStock <= 0) {
           toast.error(`Producto "${product.name}" sin existencias (Stock: ${product.currentStock}).`);
           return state;
@@ -633,6 +634,8 @@ export const useAppStore = create<AppState>()(
           toast.error(`Stock insuficiente para "${product.name}". Disponible: ${product.currentStock}, en carrito: ${existingQty}`);
           return state;
         }
+      } else if (currentQty > product.currentStock) {
+        toast.warning(`Atención: La cantidad (${currentQty}) supera el stock disponible (${product.currentStock}).`);
       }
 
       const lineCalculations = calculateLineTotals(
@@ -709,12 +712,17 @@ export const useAppStore = create<AppState>()(
     }
 
     const targetLine = state.cartLines[index];
-    const product = state.products.find(p => p.id === targetLine.productId);
+    const product = state.products.find(p => String(p.id).trim() === String(targetLine.productId).trim() || p.sku === targetLine.sku);
+    const allowNegative = state.tenant.allowNegativeStock === true;
 
-    if (product && !state.tenant.allowNegativeStock) {
-      if (qty > product.currentStock) {
-        toast.error(`Stock insuficiente para "${product.name}". Disponible: ${product.currentStock}`);
-        return state;
+    if (product) {
+      if (!allowNegative) {
+        if (qty > product.currentStock) {
+          toast.error(`Stock insuficiente para "${product.name}". Disponible: ${product.currentStock}`);
+          return state;
+        }
+      } else if (qty > product.currentStock) {
+        toast.warning(`Atención: La cantidad (${qty}) supera el stock disponible (${product.currentStock}).`);
       }
     }
 

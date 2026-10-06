@@ -457,10 +457,19 @@ export async function saveSaleToSupabase(sale: Sale) {
 
   try {
     const saleUuid = isValidUUID(sale.id) ? sale.id : generateUUID();
+    let shiftIdParam: string | null = null;
+
+    if (sale.cashShiftId && isValidUUID(sale.cashShiftId)) {
+      const { data: existingShift } = await supabase.from('cash_shifts').select('id').eq('id', sale.cashShiftId).maybeSingle();
+      if (existingShift) {
+        shiftIdParam = existingShift.id;
+      }
+    }
+
     const payload: any = {
       id: saleUuid,
       tenant_id: sale.tenantId,
-      cash_shift_id: (sale.cashShiftId && isValidUUID(sale.cashShiftId)) ? sale.cashShiftId : null,
+      cash_shift_id: shiftIdParam,
       document_number: sale.documentNumber,
       is_fiscal: sale.isFiscal,
       cai: sale.cai || null,
@@ -730,15 +739,23 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
   if (!isSupabaseConfigured() || !isValidUUID(shift.tenantId)) return null;
 
   try {
-    let validUserId = (shift.userId && isValidUUID(shift.userId)) ? shift.userId : null;
-    if (!validUserId) {
-      const profiles = await fetchProfilesFromSupabase(shift.tenantId);
-      if (profiles && profiles.length > 0) {
-        validUserId = profiles[0].id;
-      }
+    let validUserId: string | null = null;
+
+    // Verify existing profiles in Supabase table profiles for this tenant
+    const { data: existingProfiles } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tenant_id', shift.tenantId);
+
+    if (existingProfiles && existingProfiles.length > 0) {
+      const match = shift.userId ? existingProfiles.find(p => p.id === shift.userId) : null;
+      validUserId = match ? match.id : existingProfiles[0].id;
     }
+
     if (!validUserId) {
+      const newProfId = (shift.userId && isValidUUID(shift.userId)) ? shift.userId : generateUUID();
       const { data: newProf } = await supabase.from('profiles').insert({
+        id: newProfId,
         tenant_id: shift.tenantId,
         full_name: shift.userName || 'Administrador POS',
         role: 'ADMIN',
@@ -747,6 +764,7 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
       }).select().single();
       if (newProf) validUserId = newProf.id;
     }
+
     if (!validUserId) return null;
 
     const shiftUuid = isValidUUID(shift.id) ? shift.id : generateUUID();
