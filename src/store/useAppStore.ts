@@ -976,7 +976,6 @@ export const useAppStore = create<AppState>()(
           payload: closedShift
         });
       });
-      closeCashShiftSupabase(shift.id, declaredCash).catch(err => console.warn('Supabase close shift info:', err));
     }
 
     return { difference, closingSystem };
