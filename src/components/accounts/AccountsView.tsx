@@ -23,7 +23,8 @@ export const AccountsView: React.FC = () => {
 
   const [activeSubTab, setActiveSubTab] = useState<'customers' | 'suppliers' | 'history'>('customers');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'OVERDUE'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'PAID' | 'OVERDUE'>('ALL');
+  const [sortOrder, setSortOrder] = useState<'DEBT_DESC' | 'NAME'>('DEBT_DESC');
 
   // Modals state
   const [isAbonoModalOpen, setIsAbonoModalOpen] = useState(false);
@@ -60,17 +61,25 @@ export const AccountsView: React.FC = () => {
   const tenantPurchaseInvoices = purchaseInvoices.filter(p => p.tenantId === tenant.id);
   const tenantAccountPayments = accountPayments.filter(p => p.tenantId === tenant.id);
 
-  // Filtered lists
-  const filteredCustomers = tenantCustomers.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.rtn && c.rtn.includes(searchTerm)) ||
-      (c.phone && c.phone.includes(searchTerm));
-    
-    const balance = c.creditBalance || 0;
-    if (filterStatus === 'PENDING') return matchesSearch && balance > 0;
-    if (filterStatus === 'OVERDUE') return matchesSearch && balance >= (c.creditLimit || 2000);
-    return matchesSearch;
-  });
+  // Filtered and sorted lists
+  const filteredCustomers = tenantCustomers
+    .filter(c => {
+      const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.rtn && c.rtn.includes(searchTerm)) ||
+        (c.phone && c.phone.includes(searchTerm));
+      
+      const balance = c.creditBalance || 0;
+      if (filterStatus === 'PENDING') return matchesSearch && balance > 0;
+      if (filterStatus === 'PAID') return matchesSearch && balance <= 0;
+      if (filterStatus === 'OVERDUE') return matchesSearch && balance >= (c.creditLimit || 2000);
+      return matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sortOrder === 'DEBT_DESC') {
+        return (b.creditBalance || 0) - (a.creditBalance || 0);
+      }
+      return a.name.localeCompare(b.name);
+    });
 
   const creditPurchases = tenantPurchaseInvoices.filter(p => p.paymentTerms === 'CREDIT' && p.paymentStatus !== 'PAID');
 
@@ -357,29 +366,50 @@ export const AccountsView: React.FC = () => {
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filtrar:</span>
               <button
+                type="button"
                 className={`btn ${filterStatus === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setFilterStatus('ALL')}
-                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}
               >
-                Todos
+                Todos ({tenantCustomers.length})
               </button>
               <button
+                type="button"
                 className={`btn ${filterStatus === 'PENDING' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setFilterStatus('PENDING')}
-                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', background: filterStatus === 'PENDING' ? '#d97706' : '#fef3c7', color: filterStatus === 'PENDING' ? '#ffffff' : '#92400e', border: 'none', fontWeight: 700 }}
               >
-                Con Saldo Pendiente
+                Con Saldo ({customersWithBalanceCount})
               </button>
               <button
+                type="button"
+                className={`btn ${filterStatus === 'PAID' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('PAID')}
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', background: filterStatus === 'PAID' ? '#16a34a' : '#dcfce7', color: filterStatus === 'PAID' ? '#ffffff' : '#15803d', border: 'none', fontWeight: 700 }}
+              >
+                Al Día ({tenantCustomers.length - customersWithBalanceCount})
+              </button>
+              <button
+                type="button"
                 className={`btn ${filterStatus === 'OVERDUE' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setFilterStatus('OVERDUE')}
-                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', background: filterStatus === 'OVERDUE' ? '#dc2626' : '#fee2e2', color: filterStatus === 'OVERDUE' ? '#ffffff' : '#991b1b', border: 'none', fontWeight: 700 }}
               >
                 Límite Excedido
               </button>
+
+              <select
+                className="input-control"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as any)}
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.5rem', width: 'auto', marginLeft: '0.4rem' }}
+              >
+                <option value="DEBT_DESC">Mayor Deuda Primero</option>
+                <option value="NAME">Nombre Alfabético</option>
+              </select>
             </div>
           </div>
 

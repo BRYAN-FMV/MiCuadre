@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { formatCurrency, calculateCPP } from '../../lib/monetary';
 import { toast } from 'sonner';
-import { Truck, Plus, CheckCircle, Calendar, DollarSign, Package, Users, Wallet, CreditCard, AlertCircle, Edit2, Trash2, Receipt, Filter, Info } from 'lucide-react';
+import { Truck, Plus, CheckCircle, Calendar, DollarSign, Package, Users, Wallet, CreditCard, AlertCircle, Edit2, Trash2, Receipt, Filter, Info, Search } from 'lucide-react';
 import { PurchaseInvoice, Supplier, FinancialFund, Expense, ExpenseCategory } from '../../types';
 
 const EXPENSE_CATEGORIES: Array<{ value: ExpenseCategory; label: string }> = [
@@ -29,6 +29,14 @@ export const PurchaseManager: React.FC = () => {
   const tenantExpenses = (expenses || []).filter(e => e.tenantId === tenant.id);
 
   const [activeSubTab, setActiveSubTab] = useState<'invoices' | 'expenses' | 'suppliers' | 'funds'>('invoices');
+
+  // Search & Filtering states across sub-tabs
+  const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
+  const [invoiceSupplierFilter, setInvoiceSupplierFilter] = useState<string>('ALL');
+
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
+  const [expenseSearchTerm, setExpenseSearchTerm] = useState('');
 
   // Expense Modal & Filter state
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -369,9 +377,47 @@ export const PurchaseManager: React.FC = () => {
     }
   };
 
-  const filteredExpenses = tenantExpenses.filter(e =>
-    selectedExpenseCategoryFilter === 'ALL' ? true : e.category === selectedExpenseCategoryFilter
-  );
+  // Filtered Invoices
+  const filteredInvoices = tenantInvoices.filter(inv => {
+    const query = invoiceSearchTerm.trim().toLowerCase();
+    const matchesSearch = !query ||
+      inv.invoiceNumber.toLowerCase().includes(query) ||
+      (inv.supplierName && inv.supplierName.toLowerCase().includes(query));
+
+    const matchesStatus =
+      invoiceStatusFilter === 'ALL' ||
+      (invoiceStatusFilter === 'PAID' && inv.paymentStatus === 'PAID') ||
+      (invoiceStatusFilter === 'PENDING' && (inv.paymentStatus === 'UNPAID' || inv.paymentStatus === 'PARTIAL'));
+
+    const matchesSupplier =
+      invoiceSupplierFilter === 'ALL' || inv.supplierId === invoiceSupplierFilter;
+
+    return matchesSearch && matchesStatus && matchesSupplier;
+  });
+
+  // Filtered Suppliers
+  const filteredSuppliers = tenantSuppliers.filter(s => {
+    const query = supplierSearchTerm.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      s.companyName.toLowerCase().includes(query) ||
+      (s.rtn && s.rtn.toLowerCase().includes(query)) ||
+      (s.contactName && s.contactName.toLowerCase().includes(query)) ||
+      (s.phone && s.phone.toLowerCase().includes(query))
+    );
+  });
+
+  // Filtered Expenses
+  const filteredExpenses = tenantExpenses.filter(e => {
+    const matchesCat = selectedExpenseCategoryFilter === 'ALL' || e.category === selectedExpenseCategoryFilter;
+    const query = expenseSearchTerm.trim().toLowerCase();
+    const matchesSearch = !query ||
+      e.description.toLowerCase().includes(query) ||
+      (e.receiptNumber && e.receiptNumber.toLowerCase().includes(query)) ||
+      (e.registeredBy && e.registeredBy.toLowerCase().includes(query));
+    return matchesCat && matchesSearch;
+  });
+
   const totalExpensesAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   return (
@@ -520,30 +566,86 @@ export const PurchaseManager: React.FC = () => {
 
       {/* TAB 1: Invoices */}
       {activeSubTab === 'invoices' && (
-        <div className="table-responsive" style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-          <table className="table" style={{ width: '100%', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-                <th style={{ padding: '0.75rem 1rem' }}>No. Factura</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Proveedor</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Condición</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Fecha Emisión</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Vencimiento</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Total</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Pagado</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Estado</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenantInvoices.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
-                    No hay facturas de compras registradas.
-                  </td>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* Invoice Filter Toolbar */}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', background: '#ffffff', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+            <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                className="input-control"
+                placeholder="Buscar por N° factura o proveedor..."
+                value={invoiceSearchTerm}
+                onChange={(e) => setInvoiceSearchTerm(e.target.value)}
+                style={{ paddingLeft: '2.2rem', fontSize: '0.85rem' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <Filter size={15} style={{ color: '#64748b' }} />
+              <select
+                className="input-control"
+                value={invoiceStatusFilter}
+                onChange={(e) => setInvoiceStatusFilter(e.target.value as any)}
+                style={{ fontSize: '0.85rem', width: 'auto' }}
+              >
+                <option value="ALL">Estado: Todos</option>
+                <option value="PENDING">Pendientes / Parciales</option>
+                <option value="PAID">Pagadas</option>
+              </select>
+
+              <select
+                className="input-control"
+                value={invoiceSupplierFilter}
+                onChange={(e) => setInvoiceSupplierFilter(e.target.value)}
+                style={{ fontSize: '0.85rem', width: 'auto' }}
+              >
+                <option value="ALL">Proveedor: Todos</option>
+                {tenantSuppliers.map(s => (
+                  <option key={s.id} value={s.id}>{s.companyName}</option>
+                ))}
+              </select>
+
+              {(invoiceSearchTerm || invoiceStatusFilter !== 'ALL' || invoiceSupplierFilter !== 'ALL') && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setInvoiceSearchTerm('');
+                    setInvoiceStatusFilter('ALL');
+                    setInvoiceSupplierFilter('ALL');
+                  }}
+                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem' }}
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="table-responsive" style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <table className="table" style={{ width: '100%', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
+                  <th style={{ padding: '0.75rem 1rem' }}>No. Factura</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Proveedor</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Condición</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Fecha Emisión</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Vencimiento</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Total</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Pagado</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Estado</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Acciones</th>
                 </tr>
-              ) : (
-                tenantInvoices.map(p => {
+              </thead>
+              <tbody>
+                {filteredInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                      No hay facturas de compras registradas con los filtros seleccionados.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInvoices.map(p => {
                   return (
                     <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}><code>{p.invoiceNumber}</code></td>
@@ -585,6 +687,7 @@ export const PurchaseManager: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
       )}
 
       {/* TAB 2: Expenses & Outlays */}
@@ -601,6 +704,20 @@ export const PurchaseManager: React.FC = () => {
               <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0.2rem 0 0 0' }}>
                 {filteredExpenses.length} egreso(s) registrado(s)
               </p>
+            </div>
+
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Search size={14} /> Buscar Gasto
+              </span>
+              <input
+                type="text"
+                className="input-control"
+                style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}
+                placeholder="Buscar descripción, N° recibo..."
+                value={expenseSearchTerm}
+                onChange={(e) => setExpenseSearchTerm(e.target.value)}
+              />
             </div>
 
             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
@@ -683,28 +800,53 @@ export const PurchaseManager: React.FC = () => {
 
       {/* TAB 3: Suppliers */}
       {activeSubTab === 'suppliers' && (
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-          <table className="table" style={{ width: '100%', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
-                <th style={{ padding: '0.75rem 1rem' }}>Empresa</th>
-                <th style={{ padding: '0.75rem 1rem' }}>RTN</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Contacto</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Teléfono</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Email</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Días Crédito</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenantSuppliers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
-                    No hay proveedores registrados.
-                  </td>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* Supplier Search Bar */}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', background: '#ffffff', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                className="input-control"
+                placeholder="Buscar por empresa, RTN, contacto o teléfono..."
+                value={supplierSearchTerm}
+                onChange={(e) => setSupplierSearchTerm(e.target.value)}
+                style={{ paddingLeft: '2.2rem', fontSize: '0.85rem' }}
+              />
+            </div>
+            {supplierSearchTerm && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => setSupplierSearchTerm('')}
+                style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem' }}
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <table className="table" style={{ width: '100%', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
+                  <th style={{ padding: '0.75rem 1rem' }}>Empresa</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>RTN</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Contacto</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Teléfono</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Email</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Días Crédito</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Estado</th>
                 </tr>
-              ) : (
-                tenantSuppliers.map(s => (
+              </thead>
+              <tbody>
+                {filteredSuppliers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                      No hay proveedores registrados con ese criterio.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSuppliers.map(s => (
                   <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#0f172a' }}>{s.companyName}</td>
                     <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}><code>{s.rtn || 'N/D'}</code></td>
@@ -723,6 +865,7 @@ export const PurchaseManager: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
       )}
 
       {/* TAB 3: Funds */}

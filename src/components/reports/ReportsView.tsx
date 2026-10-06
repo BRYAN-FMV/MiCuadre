@@ -750,12 +750,68 @@ export const ReportsView: React.FC = () => {
 
           {/* FULL SALES HISTORY TABLE */}
           <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <h3 style={{ fontSize: '1.05rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Receipt size={20} style={{ color: 'var(--accent-primary)' }} />
                 Listado de Ventas Realizadas ({filteredSales.length})
               </h3>
               <span className="badge badge-wholesale">{filteredSales.length} Registros Encontrados</span>
+            </div>
+
+            {/* Filter Controls Toolbar */}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', background: '#f8fafc', padding: '0.75rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Buscar por N° documento, cliente, RTN o producto..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ paddingLeft: '2.2rem', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <Filter size={15} style={{ color: '#64748b' }} />
+                <select
+                  className="form-control"
+                  value={docTypeFilter}
+                  onChange={(e) => setDocTypeFilter(e.target.value as any)}
+                  style={{ fontSize: '0.85rem', width: 'auto' }}
+                >
+                  <option value="ALL">Tipo: Todos</option>
+                  <option value="FISCAL">Fiscal SAR</option>
+                  <option value="TICKET">Ticket Interno</option>
+                </select>
+
+                <select
+                  className="form-control"
+                  value={paymentFilter}
+                  onChange={(e) => setPaymentFilter(e.target.value as any)}
+                  style={{ fontSize: '0.85rem', width: 'auto' }}
+                >
+                  <option value="ALL">Método: Todos</option>
+                  <option value="CASH">Efectivo</option>
+                  <option value="CARD">Tarjeta</option>
+                  <option value="TRANSFER">Transferencia</option>
+                  <option value="MIXED">Mixto</option>
+                </select>
+
+                {(searchTerm || docTypeFilter !== 'ALL' || paymentFilter !== 'ALL') && (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setSearchTerm('');
+                      setDocTypeFilter('ALL');
+                      setPaymentFilter('ALL');
+                    }}
+                    style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem' }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="table-responsive">
