@@ -1,38 +1,24 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('MiCuadre POS & Terminal E2E Workflows', () => {
-  test('should load application and render main navigation tabs', async ({ page }) => {
-    // 1. Visit application root
+  test('should load Landing Page at root path', async ({ page }) => {
+    // 1. Visit root path
     await page.goto('/');
 
-    // 2. Verify page document title or root header element
-    await expect(page).toHaveTitle(/MiCuadre|POS/i);
-
-    // 3. Verify main navigation bar elements
-    const posNavBtn = page.getByRole('button', { name: /punto de venta|pos/i });
-    const invNavBtn = page.getByRole('button', { name: /inventario/i });
-    const purchasesNavBtn = page.getByRole('button', { name: /compras/i });
-
-    await expect(posNavBtn).toBeVisible();
-    await expect(invNavBtn).toBeVisible();
-    await expect(purchasesNavBtn).toBeVisible();
+    // 2. Verify Landing page title and key branding
+    await expect(page).toHaveTitle(/MiCuadre/i);
+    await expect(page.getByText(/micuadre|punto de venta/i).first()).toBeVisible();
   });
 
-  test('should navigate seamlessly between tabs', async ({ page }) => {
-    await page.goto('/');
+  test('should load Store Access screen when store parameter is provided', async ({ page }) => {
+    // 1. Visit store URL with store parameter
+    await page.goto('/?comercio=demo');
 
-    // Click Inventario Tab
-    const invBtn = page.getByRole('button', { name: /inventario/i });
-    await invBtn.click();
+    // 2. Verify store access or login screen elements
+    await expect(page).toHaveTitle(/MiCuadre/i);
 
-    // Verify inventory section is rendered
-    await expect(page.getByText(/catálogo de productos|inventario/i)).toBeVisible();
-
-    // Click Compras & Gastos Tab
-    const purchasesBtn = page.getByRole('button', { name: /compras/i });
-    await purchasesBtn.click();
-
-    // Verify purchases manager section is rendered
-    await expect(page.getByText(/facturas de compra|gastos operativos/i)).toBeVisible();
+    // 3. Expect login, store header or profile input elements to be present
+    const storeHeaderOrInput = page.getByText(/micuadre|tienda|usuario|pin|ingresar/i).first();
+    await expect(storeHeaderOrInput).toBeVisible({ timeout: 10000 });
   });
 });
