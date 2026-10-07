@@ -137,4 +137,84 @@ describe('App Zustand Store Business Logic', () => {
     expect(movements[0].type).toBe('SALIDA');
     expect(movements[0].amount).toBe(45.00);
   });
+
+  it('should strictly isolate sales and cash counts between Caja 1 and Caja 2 terminals', () => {
+    const store = useAppStore.getState();
+
+    const testProduct: Product = {
+      id: 'prod-iso-1',
+      tenantId: store.tenant.id,
+      sku: 'ISO-01',
+      name: 'Item Aislado',
+      category: 'General',
+      unitOfMeasure: 'UND',
+      salePrice: 100,
+      costPrice: 50,
+      currentStock: 100,
+      minStockAlert: 5,
+      taxClassification: 'EXENTO',
+      isActive: true
+    };
+
+    useAppStore.setState({
+      products: [testProduct],
+      fiscalRanges: [
+        {
+          id: 'caja-1-id',
+          tenantId: store.tenant.id,
+          name: 'Caja 1 - Principal',
+          cai: 'CAI-001',
+          prefix: '000-001-01-',
+          rangeStart: 1,
+          rangeEnd: 1000,
+          currentNumber: 1,
+          deadline: '2027-12-31',
+          documentType: '01',
+          isActive: true
+        },
+        {
+          id: 'caja-2-id',
+          tenantId: store.tenant.id,
+          name: 'Caja 2 - Expreso',
+          cai: 'CAI-002',
+          prefix: '000-002-01-',
+          rangeStart: 1,
+          rangeEnd: 1000,
+          currentNumber: 1,
+          deadline: '2027-12-31',
+          documentType: '01',
+          isActive: true
+        }
+      ]
+    });
+
+    // 1. Open Shift on CAJA 1 with L. 1000 opening amount
+    useAppStore.setState({ selectedFiscalRangeId: 'caja-1-id' });
+    store.openCashShift(1000);
+
+    // Make a sale of L. 300 on Caja 1
+    store.addToCart({ product: testProduct, quantity: 3 });
+    const saleCaja1 = store.processSale('CASH');
+    expect(saleCaja1?.cajaName).toBe('Caja 1 - Principal');
+
+    // Close Shift on CAJA 1 (Declared L. 1300 -> Perfect balance)
+    const resultCaja1 = store.closeCashShift(1300);
+    expect(resultCaja1.closingSystem).toBe(1300); // 1000 opening + 300 sales
+    expect(resultCaja1.difference).toBe(0);
+
+    // 2. Open Shift on CAJA 2 with L. 500 opening amount
+    useAppStore.setState({ selectedFiscalRangeId: 'caja-2-id' });
+    store.openCashShift(500);
+
+    // Make a sale of L. 200 on Caja 2
+    store.addToCart({ product: testProduct, quantity: 2 });
+    const saleCaja2 = store.processSale('CASH');
+    expect(saleCaja2?.cajaName).toBe('Caja 2 - Expreso');
+
+    // Close Shift on CAJA 2 (Declared L. 700)
+    // CRITICAL ASSERTION: System cash MUST be 700 (500 opening + 200 Caja 2 sale) and MUST NOT include the 300 from Caja 1!
+    const resultCaja2 = store.closeCashShift(700);
+    expect(resultCaja2.closingSystem).toBe(700);
+    expect(resultCaja2.difference).toBe(0);
+  });
 });
