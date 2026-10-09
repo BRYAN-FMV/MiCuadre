@@ -1185,11 +1185,11 @@ export const PosContainer: React.FC = () => {
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Importe Exonerado:</span>
-                  <span>{tenant.currencySymbol} 0.00</span>
+                  <span>{formatCurrency(lastCompletedSale.exoneratedAmount || 0, tenant.currencySymbol)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Importe Exento:</span>
-                  <span>{tenant.currencySymbol} 0.00</span>
+                  <span>{formatCurrency(lastCompletedSale.exemptAmount || 0, tenant.currencySymbol)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Importe Gravado 15%:</span>
