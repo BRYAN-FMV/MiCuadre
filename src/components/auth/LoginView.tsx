@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { ArrowRight, Store, ShieldAlert, Lock, User, Building2 } from 'lucide-react';
+import { ArrowRight, Store, ShieldAlert, Lock, User, Building2, Download } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
 import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase } from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
+import { setRememberedStore, updateDynamicManifest, isPwaStandalone, promptPwaInstall } from '../../lib/pwa';
 
 interface LoginViewProps {
   onBackToLanding?: () => void;
@@ -146,7 +147,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
         return;
       }
 
-      // Update active tenant in store
+      // Update active tenant in store and pin for device PWA
+      const slug = normalizeSlug(matchedTenant.name);
+      setRememberedStore(slug, matchedTenant.id);
+      updateDynamicManifest(matchedTenant.name, slug);
       useAppStore.setState({ tenant: matchedTenant });
 
       // 2. Fetch profiles for this tenant
@@ -404,21 +408,39 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
             {!isLoading && <ArrowRight size={18} />}
           </button>
 
-          {/* Navigation Links */}
-          {onBackToLanding && (
-            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center' }}>
+          {/* Navigation Links & PWA Pinning */}
+          <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.65rem', alignItems: 'center' }}>
+            {!isPwaStandalone() && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await promptPwaInstall();
+                  if (res.outcome === 'accepted') {
+                    toast.success('MiCuadre se ha instalado en tu dispositivo');
+                  } else {
+                    toast.info('Para instalar MiCuadre: haz clic en el icono de instalación en la barra superior del navegador o en el menú "Instalar aplicación".');
+                  }
+                }}
+                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.45rem 0.85rem', borderRadius: '6px', fontSize: '0.8rem', color: '#0f172a', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <Download size={14} style={{ color: '#059669' }} />
+                <span>Instalar App en este equipo (PWA)</span>
+              </button>
+            )}
+
+            {onBackToLanding && (
               <button
                 type="button"
                 onClick={() => {
                   window.history.pushState({}, '', '/');
                   onBackToLanding();
                 }}
-                style={{ background: 'none', border: 'none', fontSize: '0.82rem', color: '#059669', cursor: 'pointer', fontWeight: 700 }}
+                style={{ background: 'none', border: 'none', fontSize: '0.82rem', color: '#64748b', cursor: 'pointer', fontWeight: 600 }}
               >
-                ← Ir a la Página Principal (micuadre.app)
+                &larr; Cambiar de Comercio / Volver a Inicio
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
         </form>
 

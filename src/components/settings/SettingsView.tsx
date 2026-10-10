@@ -601,14 +601,42 @@ export const SettingsView: React.FC = () => {
             type="button"
             className="btn btn-secondary"
             onClick={() => {
-              const slug = tenant.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-              const link = `${window.location.origin}/?tienda=${slug}`;
+              const cleanSlug = tenant.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const link = `${window.location.origin}/?tienda=${cleanSlug}`;
               navigator.clipboard.writeText(link);
               toast.success(`Enlace copiado: ${link}`);
             }}
             style={{ fontSize: '0.78rem', padding: '0.4rem 0.75rem' }}
           >
             <span>Copiar Enlace para Cajeros</span>
+          </button>
+        </div>
+
+        {/* PWA Direct Link & Installation Banner */}
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+              Enlace Permanente & Aplicación PWA para este Comercio:
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', fontFamily: 'monospace', marginTop: '0.2rem' }}>
+              {typeof window !== 'undefined' ? `${window.location.origin}/?tienda=${tenant.name.toLowerCase().replace(/[^a-z0-9]/g, '')}` : `/?tienda=${tenant.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: '0.2rem' }}>
+              Al instalar MiCuadre desde este enlace en tu computadora o tableta, la aplicación siempre abrirá directamente en este comercio (tipo Netflix).
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              const cleanSlug = tenant.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const link = `${window.location.origin}/?tienda=${cleanSlug}`;
+              navigator.clipboard.writeText(link);
+              toast.success(`Enlace copiado: ${link}`);
+            }}
+            style={{ fontSize: '0.78rem', padding: '0.4rem 0.75rem' }}
+          >
+            <span>Copiar Enlace PWA</span>
           </button>
         </div>
 

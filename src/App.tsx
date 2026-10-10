@@ -33,6 +33,14 @@ import {
 
 import { LandingView } from './components/landing/LandingView';
 import { MobileBottomNav } from './components/layout/MobileBottomNav';
+import { normalizeSlug } from './lib/security';
+import {
+  isPwaStandalone,
+  getRememberedStoreSlug,
+  setRememberedStore,
+  clearRememberedStore,
+  updateDynamicManifest
+} from './lib/pwa';
 
 export const App: React.FC = () => {
   const activeTab = useAppStore(state => state.activeTab);
@@ -43,7 +51,12 @@ export const App: React.FC = () => {
   // Determine if landing page should be shown (root path '/' with no store param)
   const urlParamsOnLoad = new URLSearchParams(window.location.search);
   const hasStoreParamOnLoad = urlParamsOnLoad.has('comercio') || urlParamsOnLoad.has('tienda') || urlParamsOnLoad.has('store') || urlParamsOnLoad.has('id');
-  const [showLanding, setShowLanding] = useState(!hasStoreParamOnLoad && (window.location.pathname === '/' || window.location.pathname === '/index.html'));
+  const isPwa = isPwaStandalone();
+  const rememberedSlug = getRememberedStoreSlug();
+
+  // If running as an installed PWA or having an explicit store, bypass public landing page (Netflix style)
+  const shouldBypassLanding = hasStoreParamOnLoad || (isPwa && !!rememberedSlug);
+  const [showLanding, setShowLanding] = useState(!shouldBypassLanding && (window.location.pathname === '/' || window.location.pathname === '/index.html'));
 
   // Dedicated Route State for /admin URL
   const [isAdminRoute, setIsAdminRoute] = useState(
@@ -60,15 +73,21 @@ export const App: React.FC = () => {
 
       setIsAdminRoute(isAdmin);
       if (!hasStore && (window.location.pathname === '/' || window.location.pathname === '/index.html') && !isAdmin) {
-        useAppStore.setState({ isAuthenticated: false });
-        setShowLanding(true);
+        if (!isPwaStandalone()) {
+          clearRememberedStore();
+          useAppStore.setState({ isAuthenticated: false });
+          setShowLanding(true);
+        }
       }
     };
 
-    // Ensure root URL without params always starts at Landing Page unauthenticated
+    // Ensure fresh root URL without params and without remembered store starts at Landing Page unauthenticated
     const paramsOnStart = new URLSearchParams(window.location.search);
     const hasStoreOnStart = paramsOnStart.has('comercio') || paramsOnStart.has('tienda') || paramsOnStart.has('store') || paramsOnStart.has('id');
-    if (!hasStoreOnStart && (window.location.pathname === '/' || window.location.pathname === '/index.html')) {
+    const rememberedOnStart = getRememberedStoreSlug();
+    const isPwaOnStart = isPwaStandalone();
+
+    if (!hasStoreOnStart && !isPwaOnStart && !rememberedOnStart && (window.location.pathname === '/' || window.location.pathname === '/index.html')) {
       useAppStore.setState({ isAuthenticated: false });
       setShowLanding(true);
     }
@@ -77,14 +96,24 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 1. Synchronize URL tenant parameter (?comercio=slug, ?tienda=slug or /slug) on startup
+  // 1. Synchronize URL tenant parameter (?comercio=slug, ?tienda=slug) or remembered store on startup
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const rawSlug = urlParams.get('comercio') || urlParams.get('tienda') || urlParams.get('store');
+    let rawSlug = urlParams.get('comercio') || urlParams.get('tienda') || urlParams.get('store');
+
+    // Auto-restore remembered store for installed PWA or return visits
+    if (!rawSlug) {
+      const savedSlug = getRememberedStoreSlug();
+      if (savedSlug && (isPwaStandalone() || !showLanding)) {
+        rawSlug = savedSlug;
+        window.history.replaceState({}, '', `/?tienda=${savedSlug}`);
+      }
+    }
 
     if (rawSlug) {
       setShowLanding(false);
       const cleanSlug = rawSlug.toLowerCase().replace(/[^a-z0-9]/g, '');
+      setRememberedStore(rawSlug);
 
       fetchTenantsFromSupabase().then(cloudTenants => {
         const localTenants = useAppStore.getState().tenants || [];
@@ -103,12 +132,14 @@ export const App: React.FC = () => {
           );
 
           if (matched) {
+            setRememberedStore(rawSlug, matched.id);
             useAppStore.setState({ tenant: matched, isAuthenticated: false });
+            updateDynamicManifest(matched.name, rawSlug);
           }
         }
       });
     }
-  }, []);
+  }, [showLanding]);
 
   // 2. Hydrate real database data from Supabase strictly for active tenant
   const activeShift = useAppStore(state => state.activeShift);
@@ -296,11 +327,16 @@ export const App: React.FC = () => {
           <Toaster position="top-right" theme="light" richColors closeButton />
           <LandingView
             onSelectStore={(selectedTenant) => {
+              const slug = normalizeSlug(selectedTenant.name);
+              setRememberedStore(slug, selectedTenant.id);
+              updateDynamicManifest(selectedTenant.name, slug);
               useAppStore.setState({ tenant: selectedTenant, isAuthenticated: false });
               setShowLanding(false);
             }}
             onEnterDemo={() => {
               const demoTenant = useAppStore.getState().tenants?.find(t => t.id === '00000000-0000-0000-0000-000000000001') || useAppStore.getState().tenant;
+              setRememberedStore('demo', demoTenant.id);
+              updateDynamicManifest(demoTenant.name, 'demo');
               useAppStore.setState({ tenant: demoTenant, isAuthenticated: false });
               setShowLanding(false);
             }}
@@ -312,7 +348,13 @@ export const App: React.FC = () => {
     return (
       <>
         <Toaster position="top-right" theme="light" richColors closeButton />
-        <LoginView onBackToLanding={() => setShowLanding(true)} />
+        <LoginView
+          onBackToLanding={() => {
+            clearRememberedStore();
+            window.history.pushState({}, '', '/');
+            setShowLanding(true);
+          }}
+        />
       </>
     );
   }

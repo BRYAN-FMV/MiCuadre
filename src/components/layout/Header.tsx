@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { User, HelpCircle, LogOut, Menu, RefreshCw } from 'lucide-react';
+import { User, HelpCircle, LogOut, Menu, RefreshCw, Download } from 'lucide-react';
 import { processOfflineQueue, syncAllCloudData } from '../../lib/supabaseService';
+import { isPwaStandalone, promptPwaInstall } from '../../lib/pwa';
 import { toast } from 'sonner';
 
 export const Header: React.FC = () => {
@@ -96,6 +97,26 @@ export const Header: React.FC = () => {
           <HelpCircle size={16} />
           <span className="top-bar-btn-text">Tour Guiado</span>
         </button>
+
+        {/* PWA App Installation Trigger */}
+        {!isPwaStandalone() && (
+          <button
+            className="btn"
+            onClick={async () => {
+              const res = await promptPwaInstall();
+              if (res.outcome === 'accepted') {
+                toast.success('MiCuadre se ha instalado en tu equipo');
+              } else {
+                toast.info('Para instalar MiCuadre: haz clic en el icono de instalación en la barra del navegador (pantalla con flecha) o menú "Instalar aplicación".');
+              }
+            }}
+            title="Instalar MiCuadre como aplicación en este dispositivo"
+            style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem', background: 'rgba(255,255,255,0.2)', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <Download size={15} />
+            <span className="top-bar-btn-text">Instalar App</span>
+          </button>
+        )}
 
         {/* Static Active User Display Badge */}
         <div className="user-badge" style={{ padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)' }}>
