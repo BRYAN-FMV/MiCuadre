@@ -208,6 +208,61 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
 }
 
 /**
+ * Delete a tenant and its related records from Supabase
+ */
+export async function deleteTenantFromSupabase(tenantId: string): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) {
+    return { success: false, error: 'Configuracion o UUID invalido' };
+  }
+
+  try {
+    // 1. Proactively delete child tables to prevent foreign key constraint issues
+    await Promise.allSettled([
+      supabase.from('sale_items').delete().eq('tenant_id', tenantId),
+      supabase.from('sales_returns').delete().eq('tenant_id', tenantId),
+      supabase.from('sales').delete().eq('tenant_id', tenantId),
+      supabase.from('account_payments').delete().eq('tenant_id', tenantId),
+      supabase.from('purchase_invoices').delete().eq('tenant_id', tenantId),
+      supabase.from('suppliers').delete().eq('tenant_id', tenantId),
+      supabase.from('cash_movements').delete().eq('tenant_id', tenantId),
+      supabase.from('expenses').delete().eq('tenant_id', tenantId),
+      supabase.from('cash_shifts').delete().eq('tenant_id', tenantId),
+      supabase.from('fiscal_ranges').delete().eq('tenant_id', tenantId),
+      supabase.from('appointments').delete().eq('tenant_id', tenantId),
+      supabase.from('staff_commissions').delete().eq('tenant_id', tenantId),
+      supabase.from('financial_events').delete().eq('tenant_id', tenantId),
+      supabase.from('staff').delete().eq('tenant_id', tenantId),
+      supabase.from('services').delete().eq('tenant_id', tenantId),
+      supabase.from('customers').delete().eq('tenant_id', tenantId),
+      supabase.from('products').delete().eq('tenant_id', tenantId),
+      supabase.from('profiles').delete().eq('tenant_id', tenantId),
+    ]);
+
+    // 2. Delete tenant record
+    const { error } = await supabase.from('tenants').delete().eq('id', tenantId);
+    if (error) {
+      console.error('Error al eliminar tenant en Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    // 3. Verify deletion: check if row was actually deleted or if RLS silently blocked it
+    const { data: stillThere } = await supabase.from('tenants').select('id').eq('id', tenantId).maybeSingle();
+    if (stillThere) {
+      console.warn('El tenant sigue presente tras delete(). Probable politica RLS DELETE faltante en Supabase.');
+      return {
+        success: false,
+        error: 'El comercio no se elimino de Supabase. Requiere ejecutar el script SQL con la politica RLS DELETE en la tabla tenants.'
+      };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Excepcion al eliminar tenant en Supabase:', err);
+    return { success: false, error: err?.message || 'Error inesperado al eliminar el comercio' };
+  }
+}
+
+/**
  * Finds a tenant in Supabase or local store by name, RTN, UUID or slug with accent normalization
  */
 export async function findTenantInSupabase(searchTerm: string): Promise<Tenant | null> {

@@ -214,12 +214,18 @@ CREATE POLICY "Strict Tenant Isolation Account Payments" ON account_payments
     USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
     WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
 
--- 3. Tenants Policy: Allow public read so incognito visitors and users can search for their store by name or link
+-- 3. Tenants Policy: Allow full administrative access and public read for multi-tenant discovery
 DROP POLICY IF EXISTS "Allow public read tenants" ON tenants;
-CREATE POLICY "Allow public read tenants" ON tenants FOR SELECT USING (true);
-
 DROP POLICY IF EXISTS "Allow public insert tenants" ON tenants;
-CREATE POLICY "Allow public insert tenants" ON tenants FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow public update tenants" ON tenants;
+DROP POLICY IF EXISTS "Allow public delete tenants" ON tenants;
+DROP POLICY IF EXISTS "Allow public full access tenants" ON tenants;
+
+CREATE POLICY "Allow public full access tenants" ON tenants
+    FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
 
 
 

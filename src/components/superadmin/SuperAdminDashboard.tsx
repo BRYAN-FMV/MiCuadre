@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { isSupabaseConfigured, testSupabaseConnection } from '../../lib/supabase';
-import { fetchTenantsFromSupabase, seedInitialDataToSupabase } from '../../lib/supabaseService';
+import { fetchTenantsFromSupabase, seedInitialDataToSupabase, saveTenantToSupabase, deleteTenantFromSupabase } from '../../lib/supabaseService';
 import { supabase } from '../../lib/supabase';
 import { Tenant, BusinessType, UserProfile } from '../../types';
 import { toast } from 'sonner';
@@ -202,50 +202,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
 
     if (isSupabaseConfigured()) {
       toast.info('Registrando comercio en Supabase...');
-      let { error } = await supabase.from('tenants').insert({
-        id: newId,
-        name: newTenantObj.name,
-        rtn: newTenantObj.rtn || null,
-        phone: newTenantObj.phone || null,
-        email: newTenantObj.email || null,
-        address: newTenantObj.address || null,
-        business_type: newTenantObj.businessType,
-        is_fiscal_enabled: newTenantObj.isFiscalEnabled,
-        is_services_enabled: newTenantObj.isServicesEnabled,
-        is_wholesale_enabled: newTenantObj.isWholesaleEnabled,
-        is_loyalty_enabled: newTenantObj.isLoyaltyEnabled,
-        access_password: newTenantObj.accessPassword || null,
-        allow_negative_stock: false
-      });
+      const saved = await saveTenantToSupabase(newTenantObj);
 
-      // Resilient fallback if schema lacks newer columns (e.g. is_loyalty_enabled)
-      if (error && error.message.includes('column')) {
-        console.warn('Reintentando insercion de tenant con esquema base en Supabase:', error.message);
-        const retry = await supabase.from('tenants').insert({
-          id: newId,
-          name: newTenantObj.name,
-          rtn: newTenantObj.rtn || null,
-          phone: newTenantObj.phone || null,
-          email: newTenantObj.email || null,
-          address: newTenantObj.address || null,
-          business_type: newTenantObj.businessType,
-          is_fiscal_enabled: newTenantObj.isFiscalEnabled
-        });
-        error = retry.error;
-      }
-
-      if (error) {
-        toast.warning(`Comercio guardado localmente (${error.message})`);
+      if (!saved) {
+        toast.warning('Comercio guardado localmente (error al sincronizar con Supabase)');
       } else {
         toast.success(`Comercio "${newTenantObj.name}" registrado en Supabase`);
-        await supabase.from('profiles').insert({
+        await supabase.from('profiles').upsert({
           id: adminProfile.id,
           tenant_id: newId,
           full_name: adminProfile.fullName,
           role: 'ADMIN',
           pin_code: adminProfile.pinCode,
           is_active: true
-        });
+        }, { onConflict: 'id' });
       }
     } else {
       toast.success(`Comercio "${newTenantObj.name}" registrado localmente`);
@@ -270,39 +240,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
     }
 
     toast.info(`Sincronizando "${targetTenant.name}" con Supabase...`);
-    let { error } = await supabase.from('tenants').upsert({
-      id: targetTenant.id,
-      name: targetTenant.name,
-      rtn: targetTenant.rtn || null,
-      phone: targetTenant.phone || null,
-      email: targetTenant.email || null,
-      address: targetTenant.address || null,
-      business_type: targetTenant.businessType,
-      is_fiscal_enabled: targetTenant.isFiscalEnabled,
-      is_services_enabled: targetTenant.isServicesEnabled ?? true,
-      is_wholesale_enabled: targetTenant.isWholesaleEnabled ?? true,
-      is_loyalty_enabled: targetTenant.isLoyaltyEnabled ?? true,
-      access_password: targetTenant.accessPassword || null,
-      allow_negative_stock: targetTenant.allowNegativeStock ?? false
-    }, { onConflict: 'id' });
+    const saved = await saveTenantToSupabase(targetTenant);
 
-    if (error && error.message.includes('column')) {
-      console.warn('Reintentando sincronizacion de tenant con esquema base compatible:', error.message);
-      const retry = await supabase.from('tenants').upsert({
-        id: targetTenant.id,
-        name: targetTenant.name,
-        rtn: targetTenant.rtn || null,
-        phone: targetTenant.phone || null,
-        email: targetTenant.email || null,
-        address: targetTenant.address || null,
-        business_type: targetTenant.businessType,
-        is_fiscal_enabled: targetTenant.isFiscalEnabled
-      }, { onConflict: 'id' });
-      error = retry.error;
-    }
-
-    if (error) {
-      toast.error(`Error al sincronizar con Supabase: ${error.message}`);
+    if (!saved) {
+      toast.error(`Error al sincronizar "${targetTenant.name}" con Supabase`);
     } else {
       toast.success(`Comercio "${targetTenant.name}" sincronizado exitosamente en Supabase`);
       const adminProf = storeProfiles.find(p => p.tenantId === targetTenant.id && p.role === 'ADMIN');
@@ -344,44 +285,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
     updateTenant(editingTenant.id, editingTenant);
 
     if (isSupabaseConfigured()) {
-      let { error } = await supabase
-        .from('tenants')
-        .update({
-          name: editingTenant.name,
-          rtn: editingTenant.rtn || null,
-          phone: editingTenant.phone || null,
-          email: editingTenant.email || null,
-          address: editingTenant.address || null,
-          business_type: editingTenant.businessType,
-          is_fiscal_enabled: editingTenant.isFiscalEnabled,
-          is_services_enabled: editingTenant.isServicesEnabled ?? true,
-          is_wholesale_enabled: editingTenant.isWholesaleEnabled ?? true,
-          is_loyalty_enabled: editingTenant.isLoyaltyEnabled ?? true,
-          access_password: editingTenant.accessPassword || null
-        })
-        .eq('id', editingTenant.id);
-
-      if (error && error.message.includes('column')) {
-        console.warn('Reintentando actualizacion de tenant con columnas base:', error.message);
-        const retry = await supabase
-          .from('tenants')
-          .update({
-            name: editingTenant.name,
-            rtn: editingTenant.rtn || null,
-            phone: editingTenant.phone || null,
-            email: editingTenant.email || null,
-            address: editingTenant.address || null,
-            business_type: editingTenant.businessType,
-            is_fiscal_enabled: editingTenant.isFiscalEnabled
-          })
-          .eq('id', editingTenant.id);
-        error = retry.error;
-      }
-
-      if (error) {
-        toast.error(`Error al actualizar en Supabase: ${error.message}`);
-      } else {
+      const saved = await saveTenantToSupabase(editingTenant);
+      if (saved) {
         toast.success(`Comercio "${editingTenant.name}" actualizado en Supabase`);
+      } else {
+        toast.error(`Error al actualizar "${editingTenant.name}" en Supabase`);
       }
     } else {
       toast.success(`Comercio "${editingTenant.name}" actualizado`);
@@ -393,28 +301,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
 
   const handleDeleteTenant = async () => {
     if (!deletingTenant) return;
+    const target = deletingTenant;
+    setDeletingTenant(null);
 
-    deleteTenantAction(deletingTenant.id);
+    deleteTenantAction(target.id);
+    setTenants(prev => prev.filter(t => t.id !== target.id));
 
     if (isSupabaseConfigured()) {
-      await supabase.from('profiles').delete().eq('tenant_id', deletingTenant.id);
-      await supabase.from('products').delete().eq('tenant_id', deletingTenant.id);
-      await supabase.from('sales').delete().eq('tenant_id', deletingTenant.id);
-      await supabase.from('cash_shifts').delete().eq('tenant_id', deletingTenant.id);
-      const { error } = await supabase.from('tenants').delete().eq('id', deletingTenant.id);
+      toast.info(`Eliminando "${target.name}" de Supabase...`);
+      const result = await deleteTenantFromSupabase(target.id);
 
-      if (error) {
-        toast.error(`Error al eliminar en Supabase: ${error.message}`);
+      if (!result.success) {
+        toast.error(`Error al eliminar en Supabase: ${result.error}`);
       } else {
-        toast.success(`Comercio "${deletingTenant.name}" eliminado de Supabase`);
+        toast.success(`Comercio "${target.name}" eliminado de Supabase`);
       }
     } else {
-      toast.success(`Comercio "${deletingTenant.name}" eliminado`);
+      toast.success(`Comercio "${target.name}" eliminado`);
     }
 
-    setTenants(prev => prev.filter(t => t.id !== deletingTenant.id));
-    setDeletingTenant(null);
-    loadData();
+    await loadData();
   };
 
   const handleEmulateTenant = (targetTenant: Tenant) => {

@@ -387,22 +387,6 @@ export const useAppStore = create<AppState>()(
           ? existing.map(t => t.id === newTenant.id ? newTenant : t)
           : [newTenant, ...existing];
 
-        if (isSupabaseConfigured()) {
-          supabase.from('tenants').upsert({
-            id: newTenant.id,
-            name: newTenant.name,
-            rtn: newTenant.rtn || null,
-            phone: newTenant.phone || null,
-            email: newTenant.email || null,
-            address: newTenant.address || null,
-            business_type: newTenant.businessType,
-            is_fiscal_enabled: newTenant.isFiscalEnabled,
-            allow_negative_stock: newTenant.allowNegativeStock
-          }).then(({ error }) => {
-            if (error) console.warn('Supabase add tenant info:', error.message);
-          });
-        }
-
         return { tenants: updatedTenants, tenant: newTenant };
       }),
 
@@ -410,29 +394,10 @@ export const useAppStore = create<AppState>()(
         const updatedTenants = (state.tenants || [state.tenant]).map(t => t.id === id ? { ...t, ...tenantData } : t);
         const updatedActiveTenant = state.tenant.id === id ? { ...state.tenant, ...tenantData } : state.tenant;
 
-        if (isSupabaseConfigured()) {
-          supabase.from('tenants').update({
-            name: tenantData.name,
-            rtn: tenantData.rtn || null,
-            phone: tenantData.phone || null,
-            email: tenantData.email || null,
-            address: tenantData.address || null,
-            business_type: tenantData.businessType,
-            is_fiscal_enabled: tenantData.isFiscalEnabled
-          }).eq('id', id).then(({ error }) => {
-            if (error) console.warn('Supabase update tenant info:', error.message);
-          });
-        }
-
         return { tenants: updatedTenants, tenant: updatedActiveTenant };
       }),
 
       deleteTenant: (id) => set((state) => {
-        if (isSupabaseConfigured()) {
-          supabase.from('tenants').delete().eq('id', id).then(({ error }) => {
-            if (error) console.warn('Supabase delete tenant info:', error.message);
-          });
-        }
         return {
           tenants: (state.tenants || []).filter(t => t.id !== id),
           profiles: state.profiles.filter(p => p.tenantId !== id)
