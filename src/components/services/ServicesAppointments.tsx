@@ -4,9 +4,10 @@ import { formatCurrency } from '../../lib/monetary';
 import { toast } from 'sonner';
 import {
   Scissors, Calendar, User, Plus, ShoppingCart, DollarSign, CheckCircle,
-  Clock, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Grid, List, Filter, Lock, AlertTriangle, Search
+  Clock, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Grid, List, Filter, Lock, AlertTriangle, Search,
+  MessageSquare, Package
 } from 'lucide-react';
-import { Appointment, Service } from '../../types';
+import { Appointment, Service, Product } from '../../types';
 
 const MONTH_NAMES_ES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -18,10 +19,14 @@ const WEEKDAY_NAMES_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 export const ServicesAppointments: React.FC = () => {
   const {
     services, staff, profiles, currentUser, appointments, commissions, tenant,
+    funds, activeShift, products,
     addService, updateService, deleteService,
     addAppointment, updateAppointment, updateAppointmentStatus, deleteAppointment,
     sendAppointmentToPos, payStaffCommissions, payCommissionItem
   } = useAppStore();
+
+  const tenantProducts = (products || []).filter(p => p.tenantId === tenant.id && p.isActive);
+  const tenantFunds = (funds || []).filter(f => f.tenantId === tenant.id && f.isActive);
 
   const tenantServices = services.filter(s => s.tenantId === tenant.id);
   const tenantStaff = staff.filter(s => s.tenantId === tenant.id);
@@ -59,6 +64,9 @@ export const ServicesAppointments: React.FC = () => {
 
   // New Appointment Form State
   const [isAppModalOpen, setIsAppModalOpen] = useState(false);
+  const [appEntryType, setAppEntryType] = useState<'APPOINTMENT' | 'BLOCK'>('APPOINTMENT');
+  const [blockReason, setBlockReason] = useState<string>('Almuerzo');
+  const [blockDuration, setBlockDuration] = useState<number>(60);
   const [custName, setCustName] = useState('');
   const [custPhone, setCustPhone] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState(availableStaff[0]?.id || '');
@@ -66,6 +74,21 @@ export const ServicesAppointments: React.FC = () => {
   const [appDate, setAppDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [appTime, setAppTime] = useState<string>('10:00');
   const [appNotes, setAppNotes] = useState('');
+
+  // Commission Payout Modal State
+  const [payoutModal, setPayoutModal] = useState<{
+    isOpen: boolean;
+    staffId?: string;
+    staffName?: string;
+    commId?: string;
+    totalAmount: number;
+    destination: 'SHIFT' | 'FUND' | 'RECORD_ONLY';
+    fundId: string;
+  } | null>(null);
+
+  // Supplies for Services State
+  const [serviceSupplies, setServiceSupplies] = useState<Array<{ productId: string; quantity: number }>>([]);
+  const [editServiceSupplies, setEditServiceSupplies] = useState<Array<{ productId: string; quantity: number }>>([]);
 
   // Multi-service items state in appointment modals
   const [appServiceItems, setAppServiceItems] = useState<Array<{ serviceId: string; staffId: string }>>([]);
@@ -219,9 +242,9 @@ export const ServicesAppointments: React.FC = () => {
     return null;
   };
 
-  // Schedule Overlap Validation Helper for Staff
+  // Schedule Overlap Validation Helper for Staff and Schedule Blocks
   const checkStaffAppointmentOverlap = (
-    items: Array<{ serviceId: string; staffId: string }>,
+    items: Array<{ serviceId?: string; staffId: string; durationMinutes?: number; reason?: string }>,
     dateStr: string,
     timeStr: string,
     excludeAppointmentId?: string
@@ -230,9 +253,12 @@ export const ServicesAppointments: React.FC = () => {
     if (isNaN(startMs)) return null;
 
     for (const item of items) {
-      if (!item.staffId || !item.serviceId) continue;
-      const serviceObj = tenantServices.find(s => s.id === item.serviceId);
-      const durationMin = serviceObj?.durationMinutes || 30;
+      if (!item.staffId) continue;
+      let durationMin = item.durationMinutes || 30;
+      if (!item.durationMinutes && item.serviceId) {
+        const serviceObj = tenantServices.find(s => s.id === item.serviceId);
+        durationMin = serviceObj?.durationMinutes || 30;
+      }
       const endMs = startMs + durationMin * 60 * 1000;
       const staffObj = availableStaff.find(s => s.id === item.staffId);
 
@@ -243,6 +269,26 @@ export const ServicesAppointments: React.FC = () => {
         const existStartMs = new Date(existApp.scheduledAt).getTime();
         if (isNaN(existStartMs)) continue;
 
+        // If existing appointment is a BLOCK
+        if (existApp.type === 'BLOCK') {
+          if (existApp.staffId === item.staffId) {
+            const existDuration = existApp.durationMinutes || 60;
+            const existEndMs = existStartMs + existDuration * 60 * 1000;
+            if (startMs < existEndMs && endMs > existStartMs) {
+              const existStartStr = new Date(existStartMs).toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
+              const existEndStr = new Date(existEndMs).toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
+              return {
+                staffName: staffObj?.fullName || existApp.staffName || 'El colaborador',
+                serviceName: `[Bloqueo] ${existApp.blockReason || 'Fuera de Servicio'}`,
+                customerName: existApp.customerName,
+                existStartStr,
+                existEndStr
+              };
+            }
+          }
+          continue;
+        }
+
         const existItems = (existApp.items && existApp.items.length > 0)
           ? existApp.items
           : [{ serviceId: existApp.serviceId, staffId: existApp.staffId }];
@@ -250,7 +296,7 @@ export const ServicesAppointments: React.FC = () => {
         for (const existItem of existItems) {
           if (existItem.staffId === item.staffId) {
             const existServObj = tenantServices.find(s => s.id === existItem.serviceId);
-            const existDuration = existServObj?.durationMinutes || 30;
+            const existDuration = existServObj?.durationMinutes || existApp.durationMinutes || 30;
             const existEndMs = existStartMs + existDuration * 60 * 1000;
 
             // Overlap check: start < existEnd && end > existStart
@@ -260,7 +306,7 @@ export const ServicesAppointments: React.FC = () => {
               const existStaffName = ('staffName' in existItem ? existItem.staffName : undefined) || existApp.staffName;
               const existServiceName = ('serviceName' in existItem ? existItem.serviceName : undefined) || existApp.serviceName;
               return {
-                staffName: staffObj?.fullName || existStaffName || 'El empleado',
+                staffName: staffObj?.fullName || existStaffName || 'El colaborador',
                 serviceName: existServObj?.name || existServiceName || 'Servicio',
                 customerName: existApp.customerName,
                 existStartStr,
@@ -278,6 +324,9 @@ export const ServicesAppointments: React.FC = () => {
   const handleOpenNewAppointmentForDate = (dateStr?: string) => {
     const defaultStaff = availableStaff[0]?.id || '';
     const defaultService = tenantServices[0]?.id || '';
+    setAppEntryType('APPOINTMENT');
+    setBlockReason('Almuerzo');
+    setBlockDuration(60);
     setSelectedStaffId(defaultStaff);
     setSelectedServiceId(defaultService);
     setAppServiceItems([{ serviceId: defaultService, staffId: defaultStaff }]);
@@ -290,9 +339,80 @@ export const ServicesAppointments: React.FC = () => {
     setIsAppModalOpen(true);
   };
 
-  // Appointment creation
+  // WhatsApp Reminder Sender
+  const handleSendWhatsAppReminder = (app: Appointment) => {
+    const rawPhone = app.customerPhone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (!cleanPhone) {
+      toast.error('La cita no tiene número telefónico registrado.');
+      return;
+    }
+    const phoneWithCode = cleanPhone.length === 8 ? `504${cleanPhone}` : cleanPhone;
+    const timeStr = app.scheduledAt.includes('T') ? app.scheduledAt.split('T')[1].slice(0, 5) : '';
+    const dateStr = app.scheduledAt.split('T')[0];
+    const sName = app.serviceName || (app.items && app.items[0]?.serviceName) || 'Servicio';
+    const message = `Hola ${app.customerName}, le recordamos su cita para ${sName} programada para el día ${dateStr} a las ${timeStr} en ${tenant.name}. Por favor confírmenos su asistencia.`;
+    const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
+  // Commission Payout Execution Handler
+  const handleConfirmPayout = () => {
+    if (!payoutModal) return;
+    const options = {
+      payFromActiveShift: payoutModal.destination === 'SHIFT',
+      fundId: payoutModal.destination === 'FUND' ? payoutModal.fundId : undefined
+    };
+
+    if (payoutModal.staffId) {
+      payStaffCommissions(payoutModal.staffId, options);
+    } else if (payoutModal.commId) {
+      payCommissionItem(payoutModal.commId, options);
+    }
+    setPayoutModal(null);
+  };
+
+  // Appointment or Schedule Block creation
   const handleCreateAppointment = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (appEntryType === 'BLOCK') {
+      if (!selectedStaffId || !appDate || !appTime) {
+        toast.error('Completa los campos obligatorios del bloqueo');
+        return;
+      }
+      const conflict = checkStaffAppointmentOverlap(
+        [{ staffId: selectedStaffId, durationMinutes: blockDuration, reason: blockReason }],
+        appDate,
+        appTime
+      );
+      if (conflict) {
+        toast.error(`Empalme de horario: ${conflict.staffName} ya tiene programado "${conflict.serviceName}" (${conflict.existStartStr} - ${conflict.existEndStr}).`);
+        return;
+      }
+
+      const staffObj = availableStaff.find(s => s.id === selectedStaffId);
+      const scheduledIso = new Date(`${appDate}T${appTime}:00`).toISOString();
+      addAppointment({
+        type: 'BLOCK',
+        blockReason,
+        customerName: `[Bloqueo] ${blockReason}`,
+        staffId: selectedStaffId,
+        staffName: staffObj?.fullName || 'Colaborador',
+        serviceId: 'block',
+        serviceName: `Bloqueo: ${blockReason}`,
+        scheduledAt: scheduledIso,
+        durationMinutes: blockDuration,
+        status: 'SCHEDULED',
+        notes: appNotes || `Horario bloqueado: ${blockReason}`
+      });
+
+      toast.success(`Bloqueo de horario (${blockReason}) registrado para ${staffObj?.fullName || 'el colaborador'}`);
+      setIsAppModalOpen(false);
+      setAppNotes('');
+      return;
+    }
+
     const itemsToUse = appServiceItems.length > 0
       ? appServiceItems
       : [{ serviceId: selectedServiceId || tenantServices[0]?.id || '', staffId: selectedStaffId || availableStaff[0]?.id || '' }];
@@ -328,8 +448,10 @@ export const ServicesAppointments: React.FC = () => {
     const firstItem = finalItems[0];
     const serviceNamesCombined = finalItems.map(i => i.serviceName).filter(Boolean).join(' + ');
     const staffNamesCombined = Array.from(new Set(finalItems.map(i => i.staffName).filter(Boolean))).join(', ');
+    const totalDuration = finalItems.reduce((acc, it) => acc + (it.durationMinutes || 30), 0);
 
     addAppointment({
+      type: 'APPOINTMENT',
       customerName: custName,
       customerPhone: custPhone,
       staffId: firstItem?.staffId || selectedStaffId,
@@ -337,6 +459,7 @@ export const ServicesAppointments: React.FC = () => {
       serviceId: firstItem?.serviceId || selectedServiceId,
       serviceName: serviceNamesCombined,
       scheduledAt: scheduledIso,
+      durationMinutes: totalDuration,
       status: 'SCHEDULED',
       notes: appNotes,
       items: finalItems
@@ -484,13 +607,15 @@ export const ServicesAppointments: React.FC = () => {
       price: parseFloat(servicePrice) || 0,
       commissionType,
       commissionValue: parseFloat(commissionValue) || 0,
-      isActive: true
+      isActive: true,
+      supplies: serviceSupplies
     });
 
     toast.success(`Servicio "${serviceName}" creado`);
     setIsServiceModalOpen(false);
     setServiceName('');
     setServicePrice('250.00');
+    setServiceSupplies([]);
   };
 
   // Service editing
@@ -501,6 +626,7 @@ export const ServicesAppointments: React.FC = () => {
     setEditServicePrice(String(service.price));
     setEditCommissionType(service.commissionType || 'PERCENTAGE');
     setEditCommissionValue(String(service.commissionValue || 0));
+    setEditServiceSupplies(service.supplies || []);
   };
 
   const handleSaveEditedService = (e: React.FormEvent) => {
@@ -512,7 +638,8 @@ export const ServicesAppointments: React.FC = () => {
       durationMinutes: parseInt(editServiceDuration) || 30,
       price: parseFloat(editServicePrice) || 0,
       commissionType: editCommissionType,
-      commissionValue: parseFloat(editCommissionValue) || 0
+      commissionValue: parseFloat(editCommissionValue) || 0,
+      supplies: editServiceSupplies
     });
 
     toast.success('Servicio actualizado correctamente');
@@ -857,6 +984,47 @@ export const ServicesAppointments: React.FC = () => {
                         {dayApps.map(app => {
                           const urgency = getAppointmentUrgency(app.scheduledAt, app.status);
                           const isCompleted = app.status === 'COMPLETED';
+                          const isBlock = app.type === 'BLOCK';
+
+                          if (isBlock) {
+                            return (
+                              <div
+                                key={app.id}
+                                onClick={() => {
+                                  if (confirm(`¿Deseas eliminar el bloqueo de horario "${app.blockReason || 'Fuera de Servicio'}" de ${app.staffName}?`)) {
+                                    deleteAppointment(app.id);
+                                    toast.success('Bloqueo eliminado');
+                                  }
+                                }}
+                                style={{
+                                  background: '#fef3c7',
+                                  border: '1px solid #fde68a',
+                                  borderLeft: '3px solid #d97706',
+                                  borderRadius: '4px',
+                                  padding: '0.25rem 0.35rem',
+                                  fontSize: '0.72rem',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '0.1rem'
+                                }}
+                                title={`Bloqueo de horario: ${app.blockReason || 'Fuera de Servicio'} (${app.staffName}) - Clic para eliminar`}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontWeight: 700, color: '#92400e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '85px' }}>
+                                    [Bloqueo] {app.staffName}
+                                  </span>
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#b45309' }}>
+                                    {getIsoTimeString(app.scheduledAt)}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.68rem', color: '#92400e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {app.blockReason || 'Fuera de Servicio'} ({app.durationMinutes || 60}m)
+                                </div>
+                              </div>
+                            );
+                          }
 
                           return (
                             <div
@@ -918,6 +1086,61 @@ export const ServicesAppointments: React.FC = () => {
                 </div>
               ) : (
                 sortedAppointments.map((app) => {
+                  if (app.type === 'BLOCK') {
+                    return (
+                      <div
+                        key={app.id}
+                        style={{
+                          background: '#fffbeb',
+                          border: '1px solid #fde68a',
+                          borderRadius: '12px',
+                          padding: '1rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.6rem',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.55rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700 }}>
+                            Bloqueo de Horario
+                          </span>
+                          <span style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Clock size={12} /> {getIsoDateString(app.scheduledAt)} - {getIsoTimeString(app.scheduledAt)}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 style={{ fontSize: '1.05rem', color: '#78350f', fontWeight: 700, margin: '0' }}>{app.blockReason || 'Fuera de Servicio'}</h4>
+                          <p style={{ fontSize: '0.75rem', color: '#92400e', margin: '0.1rem 0 0 0' }}>Duración: {app.durationMinutes || 60} minutos</p>
+                        </div>
+
+                        <div style={{ background: '#ffffff', padding: '0.6rem', borderRadius: '8px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', border: '1px solid #fde68a' }}>
+                          <div><strong style={{ color: '#475569' }}>Colaborador:</strong> <span style={{ color: '#8b5cf6', fontWeight: 600 }}>{app.staffName}</span></div>
+                          {app.notes && (
+                            <div style={{ fontStyle: 'italic', color: '#64748b', marginTop: '0.2rem' }}>"{app.notes}"</div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.2rem' }}>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              if (confirm(`¿Eliminar el bloqueo de horario "${app.blockReason}" para ${app.staffName}?`)) {
+                                deleteAppointment(app.id);
+                                toast.success('Bloqueo eliminado');
+                              }
+                            }}
+                            style={{ padding: '0.45rem 0.6rem', fontSize: '0.8rem', color: '#ef4444', borderColor: '#fca5a5' }}
+                            title="Eliminar Bloqueo de Horario"
+                          >
+                            <Trash2 size={14} /> Eliminar Bloqueo
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const urgency = getAppointmentUrgency(app.scheduledAt, app.status);
                   const isCompleted = app.status === 'COMPLETED';
 
@@ -998,6 +1221,17 @@ export const ServicesAppointments: React.FC = () => {
                           <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.4rem 0.6rem', borderRadius: '6px', color: '#16a34a', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'center' }}>
                             <CheckCircle size={14} /> Cobrado en Ventas
                           </div>
+                        )}
+
+                        {app.customerPhone && (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => handleSendWhatsAppReminder(app)}
+                            style={{ padding: '0.45rem 0.6rem', fontSize: '0.8rem', color: '#16a34a', borderColor: '#bbf7d0' }}
+                            title="Enviar recordatorio por WhatsApp"
+                          >
+                            <MessageSquare size={14} />
+                          </button>
                         )}
 
                         {!isCompleted ? (
@@ -1236,8 +1470,14 @@ export const ServicesAppointments: React.FC = () => {
                                   type="button"
                                   className="btn btn-primary"
                                   onClick={() => {
-                                    payStaffCommissions(group.staffId);
-                                    toast.success(`Comisiones liquidadas con éxito para ${group.staffName}`);
+                                    setPayoutModal({
+                                      isOpen: true,
+                                      staffId: group.staffId,
+                                      staffName: group.staffName,
+                                      totalAmount: group.pendingCommissionAmount,
+                                      destination: activeShift ? 'SHIFT' : 'RECORD_ONLY',
+                                      fundId: tenantFunds[0]?.id || ''
+                                    });
                                   }}
                                   style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 700 }}
                                 >
@@ -1307,8 +1547,14 @@ export const ServicesAppointments: React.FC = () => {
                                               type="button"
                                               className="btn btn-secondary"
                                               onClick={() => {
-                                                payCommissionItem(item.id);
-                                                toast.success(`Comisión de ${formatCurrency(item.commissionAmount, tenant.currencySymbol)} marcada como pagada`);
+                                                setPayoutModal({
+                                                  isOpen: true,
+                                                  commId: item.id,
+                                                  staffName: group.staffName,
+                                                  totalAmount: item.commissionAmount,
+                                                  destination: activeShift ? 'SHIFT' : 'RECORD_ONLY',
+                                                  fundId: tenantFunds[0]?.id || ''
+                                                });
                                               }}
                                               style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
                                             >
@@ -1334,112 +1580,215 @@ export const ServicesAppointments: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: New Appointment */}
+      {/* MODAL: New Appointment or Schedule Block */}
       {isAppModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-content" style={{ maxWidth: '440px' }}>
-            <h3 style={{ color: '#0f172a', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Calendar size={18} style={{ color: 'var(--accent-primary)' }} /> Agendar Nueva Cita
+            <div style={{ display: 'flex', gap: '0.35rem', background: '#f1f5f9', padding: '0.25rem', borderRadius: '8px', marginBottom: '1rem' }}>
+              <button
+                type="button"
+                className={`btn ${appEntryType === 'APPOINTMENT' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setAppEntryType('APPOINTMENT')}
+                style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem', border: 'none', justifyContent: 'center' }}
+              >
+                <User size={14} /> Cita con Cliente
+              </button>
+              <button
+                type="button"
+                className={`btn ${appEntryType === 'BLOCK' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setAppEntryType('BLOCK')}
+                style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem', border: 'none', justifyContent: 'center' }}
+              >
+                <Clock size={14} /> Bloqueo / No Disponible
+              </button>
+            </div>
+
+            <h3 style={{ color: '#0f172a', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.05rem' }}>
+              {appEntryType === 'APPOINTMENT' ? (
+                <>
+                  <Calendar size={18} style={{ color: 'var(--accent-primary)' }} /> Agendar Nueva Cita
+                </>
+              ) : (
+                <>
+                  <Clock size={18} style={{ color: '#d97706' }} /> Bloqueo de Horario de Colaborador
+                </>
+              )}
             </h3>
+
             <form onSubmit={handleCreateAppointment} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div className="form-group">
-                <label className="form-label">Nombre del Cliente *</label>
-                <input type="text" className="input-control" value={custName} onChange={(e) => setCustName(e.target.value)} required autoFocus placeholder="Ej. Maria Lopez" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Teléfono Cliente</label>
-                <input type="text" className="input-control" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Ej. +504 9900-0000" />
-              </div>
+              {appEntryType === 'BLOCK' ? (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Personal / Colaborador *</label>
+                    <select
+                      className="input-control"
+                      value={selectedStaffId}
+                      onChange={(e) => setSelectedStaffId(e.target.value)}
+                      required
+                    >
+                      {availableStaff.map(st => (
+                        <option key={st.id} value={st.id}>{st.fullName}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div className="form-group">
-                  <label className="form-label">Fecha de la Cita *</label>
-                  <input type="date" className="input-control" value={appDate} onChange={(e) => setAppDate(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Hora *</label>
-                  <input type="time" className="input-control" value={appTime} onChange={(e) => setAppTime(e.target.value)} required />
-                </div>
-              </div>
+                  <div className="form-group">
+                    <label className="form-label">Motivo del Bloqueo *</label>
+                    <select
+                      className="input-control"
+                      value={blockReason}
+                      onChange={(e) => setBlockReason(e.target.value)}
+                    >
+                      <option value="Almuerzo">Almuerzo / Comida</option>
+                      <option value="Permiso Personal">Permiso Personal</option>
+                      <option value="Capacitación">Capacitación / Taller</option>
+                      <option value="Fuera de Servicio">Fuera de Servicio / Turno Concluido</option>
+                      <option value="Reunión Interna">Reunión Interna</option>
+                    </select>
+                  </div>
 
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                  <label className="form-label" style={{ margin: 0 }}>Servicios y Personal *</label>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setAppServiceItems([...appServiceItems, { serviceId: tenantServices[0]?.id || '', staffId: availableStaff[0]?.id || '' }])}
-                    style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
-                  >
-                    <Plus size={12} /> Agregar Servicio
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {appServiceItems.map((item, idx) => (
-                    <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                        <div>
-                          <label style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Servicio #{idx + 1}</label>
-                          <select
-                            className="input-control"
-                            style={{ fontSize: '0.78rem', padding: '0.3rem' }}
-                            value={item.serviceId}
-                            onChange={(e) => {
-                              const updated = [...appServiceItems];
-                              updated[idx].serviceId = e.target.value;
-                              setAppServiceItems(updated);
-                            }}
-                            required
-                          >
-                            {tenantServices.map(s => (
-                              <option key={s.id} value={s.id}>{s.name} ({s.durationMinutes} min - {formatCurrency(s.price, tenant.currencySymbol)})</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Atendido por</label>
-                          <select
-                            className="input-control"
-                            style={{ fontSize: '0.78rem', padding: '0.3rem' }}
-                            value={item.staffId}
-                            onChange={(e) => {
-                              const updated = [...appServiceItems];
-                              updated[idx].staffId = e.target.value;
-                              setAppServiceItems(updated);
-                            }}
-                            required
-                          >
-                            {availableStaff.map(st => (
-                              <option key={st.id} value={st.id}>{st.fullName}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {appServiceItems.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setAppServiceItems(appServiceItems.filter((_, i) => i !== idx))}
-                          style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: '#ef4444', fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
-                        >
-                          <Trash2 size={12} /> Quitar Renglón
-                        </button>
-                      )}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group">
+                      <label className="form-label">Fecha *</label>
+                      <input type="date" className="input-control" value={appDate} onChange={(e) => setAppDate(e.target.value)} required />
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div className="form-group">
+                      <label className="form-label">Hora Inicio *</label>
+                      <input type="time" className="input-control" value={appTime} onChange={(e) => setAppTime(e.target.value)} required />
+                    </div>
+                  </div>
 
-              <div className="form-group">
-                <label className="form-label">Notas Adicionales</label>
-                <input type="text" className="input-control" value={appNotes} onChange={(e) => setAppNotes(e.target.value)} placeholder="Ej. Cliente prefiere tono rubio ceniza" />
-              </div>
+                  <div className="form-group">
+                    <label className="form-label">Duración del Bloqueo (minutos) *</label>
+                    <input
+                      type="number"
+                      min="15"
+                      step="15"
+                      className="input-control"
+                      value={blockDuration}
+                      onChange={(e) => setBlockDuration(parseInt(e.target.value) || 30)}
+                      required
+                    />
+                  </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsAppModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Guardar Cita</button>
-              </div>
+                  <div className="form-group">
+                    <label className="form-label">Notas Adicionales (Opcional)</label>
+                    <input
+                      type="text"
+                      className="input-control"
+                      value={appNotes}
+                      onChange={(e) => setAppNotes(e.target.value)}
+                      placeholder="Ej. Sale a almuerzo de 12:00 a 1:00"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setIsAppModalOpen(false)}>Cancelar</button>
+                    <button type="submit" className="btn btn-primary" style={{ background: '#d97706', borderColor: '#b45309' }}>Guardar Bloqueo</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Nombre del Cliente *</label>
+                    <input type="text" className="input-control" value={custName} onChange={(e) => setCustName(e.target.value)} required autoFocus placeholder="Ej. Maria Lopez" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Teléfono Cliente</label>
+                    <input type="text" className="input-control" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Ej. +504 9900-0000" />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group">
+                      <label className="form-label">Fecha de la Cita *</label>
+                      <input type="date" className="input-control" value={appDate} onChange={(e) => setAppDate(e.target.value)} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Hora *</label>
+                      <input type="time" className="input-control" value={appTime} onChange={(e) => setAppTime(e.target.value)} required />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label className="form-label" style={{ margin: 0 }}>Servicios y Personal *</label>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setAppServiceItems([...appServiceItems, { serviceId: tenantServices[0]?.id || '', staffId: availableStaff[0]?.id || '' }])}
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                      >
+                        <Plus size={12} /> Agregar Servicio
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {appServiceItems.map((item, idx) => (
+                        <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Servicio #{idx + 1}</label>
+                              <select
+                                className="input-control"
+                                style={{ fontSize: '0.78rem', padding: '0.3rem' }}
+                                value={item.serviceId}
+                                onChange={(e) => {
+                                  const updated = [...appServiceItems];
+                                  updated[idx].serviceId = e.target.value;
+                                  setAppServiceItems(updated);
+                                }}
+                                required
+                              >
+                                {tenantServices.map(s => (
+                                  <option key={s.id} value={s.id}>{s.name} ({s.durationMinutes} min - {formatCurrency(s.price, tenant.currencySymbol)})</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Atendido por</label>
+                              <select
+                                className="input-control"
+                                style={{ fontSize: '0.78rem', padding: '0.3rem' }}
+                                value={item.staffId}
+                                onChange={(e) => {
+                                  const updated = [...appServiceItems];
+                                  updated[idx].staffId = e.target.value;
+                                  setAppServiceItems(updated);
+                                }}
+                                required
+                              >
+                                {availableStaff.map(st => (
+                                  <option key={st.id} value={st.id}>{st.fullName}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {appServiceItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setAppServiceItems(appServiceItems.filter((_, i) => i !== idx))}
+                              style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: '#ef4444', fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                            >
+                              <Trash2 size={12} /> Quitar Renglón
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Notas Adicionales</label>
+                    <input type="text" className="input-control" value={appNotes} onChange={(e) => setAppNotes(e.target.value)} placeholder="Ej. Cliente prefiere tono rubio ceniza" />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setIsAppModalOpen(false)}>Cancelar</button>
+                    <button type="submit" className="btn btn-primary">Guardar Cita</button>
+                  </div>
+                </>
+              )}
             </form>
           </div>
         </div>
@@ -1596,6 +1945,77 @@ export const ServicesAppointments: React.FC = () => {
                 <input type="number" step="0.01" className="input-control" value={commissionValue} onChange={(e) => setCommissionValue(e.target.value)} required />
               </div>
 
+              <div className="form-group" style={{ marginTop: '0.25rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.65rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}>
+                    <Package size={14} style={{ color: '#0284c7' }} />
+                    Insumos de Inventario a Descontar (Opcional)
+                  </label>
+                  {tenantProducts.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setServiceSupplies([...serviceSupplies, { productId: tenantProducts[0]?.id || '', quantity: 1 }])}
+                      style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      <Plus size={12} /> Agregar Insumo
+                    </button>
+                  )}
+                </div>
+                <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '0 0 0.4rem 0' }}>
+                  Se rebajarán del inventario automáticamente al facturar o cobrar este servicio.
+                </p>
+
+                {serviceSupplies.length === 0 ? (
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic', background: '#f8fafc', padding: '0.45rem', borderRadius: '6px' }}>
+                    Sin insumos vinculados.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {serviceSupplies.map((supp, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', background: '#f8fafc', padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                        <select
+                          className="input-control"
+                          style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem' }}
+                          value={supp.productId}
+                          onChange={(e) => {
+                            const updated = [...serviceSupplies];
+                            updated[idx].productId = e.target.value;
+                            setServiceSupplies(updated);
+                          }}
+                        >
+                          {tenantProducts.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} (Stock: {p.currentStock})</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          className="input-control"
+                          style={{ width: '65px', fontSize: '0.75rem', padding: '0.25rem' }}
+                          value={supp.quantity}
+                          onChange={(e) => {
+                            const updated = [...serviceSupplies];
+                            updated[idx].quantity = parseFloat(e.target.value) || 1;
+                            setServiceSupplies(updated);
+                          }}
+                          placeholder="Cant."
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setServiceSupplies(serviceSupplies.filter((_, i) => i !== idx))}
+                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                          title="Quitar insumo"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setIsServiceModalOpen(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">Guardar Servicio</button>
@@ -1637,11 +2057,171 @@ export const ServicesAppointments: React.FC = () => {
                 <input type="number" step="0.01" className="input-control" value={editCommissionValue} onChange={(e) => setEditCommissionValue(e.target.value)} required />
               </div>
 
+              <div className="form-group" style={{ marginTop: '0.25rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.65rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}>
+                    <Package size={14} style={{ color: '#0284c7' }} />
+                    Insumos de Inventario a Descontar (Opcional)
+                  </label>
+                  {tenantProducts.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setEditServiceSupplies([...editServiceSupplies, { productId: tenantProducts[0]?.id || '', quantity: 1 }])}
+                      style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      <Plus size={12} /> Agregar Insumo
+                    </button>
+                  )}
+                </div>
+                <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '0 0 0.4rem 0' }}>
+                  Se rebajarán del inventario automáticamente al facturar o cobrar este servicio.
+                </p>
+
+                {editServiceSupplies.length === 0 ? (
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic', background: '#f8fafc', padding: '0.45rem', borderRadius: '6px' }}>
+                    Sin insumos vinculados.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {editServiceSupplies.map((supp, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', background: '#f8fafc', padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                        <select
+                          className="input-control"
+                          style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem' }}
+                          value={supp.productId}
+                          onChange={(e) => {
+                            const updated = [...editServiceSupplies];
+                            updated[idx].productId = e.target.value;
+                            setEditServiceSupplies(updated);
+                          }}
+                        >
+                          {tenantProducts.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} (Stock: {p.currentStock})</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          className="input-control"
+                          style={{ width: '65px', fontSize: '0.75rem', padding: '0.25rem' }}
+                          value={supp.quantity}
+                          onChange={(e) => {
+                            const updated = [...editServiceSupplies];
+                            updated[idx].quantity = parseFloat(e.target.value) || 1;
+                            setEditServiceSupplies(updated);
+                          }}
+                          placeholder="Cant."
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditServiceSupplies(editServiceSupplies.filter((_, i) => i !== idx))}
+                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                          title="Quitar insumo"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setEditingService(null)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">Guardar Cambios</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Commission Payout Confirmation */}
+      {payoutModal && payoutModal.isOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '440px' }}>
+            <h3 style={{ color: '#0f172a', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <DollarSign size={18} style={{ color: 'var(--accent-primary)' }} /> Liquidar Comisiones
+            </h3>
+
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.82rem', color: '#64748b' }}>Colaborador:</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{payoutModal.staffName}</div>
+              <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '0.4rem' }}>Monto a Liquidar:</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#166534' }}>
+                {formatCurrency(payoutModal.totalAmount, tenant.currencySymbol)}
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>Origen de los Fondos / Registro:</label>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.4rem' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.85rem', cursor: activeShift ? 'pointer' : 'not-allowed', opacity: activeShift ? 1 : 0.6 }}>
+                  <input
+                    type="radio"
+                    name="payoutDestination"
+                    disabled={!activeShift}
+                    checked={payoutModal.destination === 'SHIFT'}
+                    onChange={() => setPayoutModal({ ...payoutModal, destination: 'SHIFT' })}
+                  />
+                  <div>
+                    <span style={{ fontWeight: 600, color: '#0f172a' }}>Salida de Efectivo en Caja Actual (Recomendado)</span>
+                    <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                      {activeShift ? `Registra movimiento de salida en el turno abierto de ${activeShift.userName || 'caja'} para cuadrar el Arqueo Z.` : 'No hay turno de caja abierto en este momento.'}
+                    </p>
+                  </div>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="payoutDestination"
+                    checked={payoutModal.destination === 'FUND'}
+                    onChange={() => setPayoutModal({ ...payoutModal, destination: 'FUND' })}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontWeight: 600, color: '#0f172a' }}>Descontar de Fondo / Banco</span>
+                    <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                      Resta el saldo directamente de una cuenta o fondo financiero registrado.
+                    </p>
+                    {payoutModal.destination === 'FUND' && (
+                      <select
+                        className="input-control"
+                        style={{ marginTop: '0.4rem', fontSize: '0.8rem', padding: '0.35rem' }}
+                        value={payoutModal.fundId}
+                        onChange={(e) => setPayoutModal({ ...payoutModal, fundId: e.target.value })}
+                      >
+                        {tenantFunds.map(f => (
+                          <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="payoutDestination"
+                    checked={payoutModal.destination === 'RECORD_ONLY'}
+                    onChange={() => setPayoutModal({ ...payoutModal, destination: 'RECORD_ONLY' })}
+                  />
+                  <div>
+                    <span style={{ fontWeight: 600, color: '#0f172a' }}>Solo Marcar como Pagado</span>
+                    <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                      No afecta saldos de caja ni cuentas (registro informativo).
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setPayoutModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={handleConfirmPayout}>Confirmar Liquidación</button>
+            </div>
           </div>
         </div>
       )}

@@ -176,8 +176,8 @@ interface AppState {
   addService: (serviceItem: Omit<Service, 'id' | 'tenantId'>) => void;
   updateService: (id: string, service: Partial<Service>) => void;
   deleteService: (id: string) => void;
-  payStaffCommissions: (staffId: string) => void;
-  payCommissionItem: (commId: string) => void;
+  payStaffCommissions: (staffId: string, options?: { payFromActiveShift?: boolean; fundId?: string }) => void;
+  payCommissionItem: (commId: string, options?: { payFromActiveShift?: boolean; fundId?: string }) => void;
   addProfile: (profile: Omit<UserProfile, 'id' | 'tenantId'>) => void;
   addFinancialEvent: (event: Omit<FinancialEvent, 'id' | 'tenantId'>) => void;
   dismissFinancialEvent: (id: string) => void;
@@ -648,10 +648,12 @@ export const useAppStore = create<AppState>()(
         toast.warning(`Atención: La cantidad (${currentQty}) supera el stock disponible (${product.currentStock}).`);
       }
 
+      const isFiscalActive = state.tenant.isFiscalEnabled === true;
+      const effectiveTaxClass = isFiscalActive ? product.taxClassification : 'EXENTO';
       const lineCalculations = calculateLineTotals(
         product.salePrice,
         currentQty,
-        product.taxClassification,
+        effectiveTaxClass,
         0,
         product.tiers,
         state.tenant.pricesIncludeTax ?? true
@@ -666,7 +668,7 @@ export const useAppStore = create<AppState>()(
         unitPrice: lineCalculations.unitPrice,
         originalUnitPrice: lineCalculations.originalUnitPrice,
         discountAmount: 0,
-        taxClassification: product.taxClassification,
+        taxClassification: effectiveTaxClass,
         appliedTierName: lineCalculations.appliedTierName,
         subtotal: lineCalculations.subtotal,
         taxAmount: lineCalculations.taxAmount,
@@ -681,10 +683,12 @@ export const useAppStore = create<AppState>()(
     } else if (service) {
       const staffMember = state.staff.find(s => s.id === staffId) || state.profiles.find(p => p.id === staffId);
       const currentQty = existingIndex >= 0 ? newLines[existingIndex].quantity + quantity : quantity;
+      const isFiscalActive = state.tenant.isFiscalEnabled === true;
+      const effectiveTaxClass = isFiscalActive ? (service.taxClassification || 'GRAVADO_15') : 'EXENTO';
       const lineCalculations = calculateLineTotals(
         service.price,
         currentQty,
-        'GRAVADO_15',
+        effectiveTaxClass,
         0,
         undefined,
         state.tenant.pricesIncludeTax ?? true
@@ -700,7 +704,7 @@ export const useAppStore = create<AppState>()(
         unitPrice: service.price,
         originalUnitPrice: service.price,
         discountAmount: 0,
-        taxClassification: 'GRAVADO_15',
+        taxClassification: effectiveTaxClass,
         subtotal: lineCalculations.subtotal,
         taxAmount: lineCalculations.taxAmount,
         total: lineCalculations.total
@@ -736,10 +740,12 @@ export const useAppStore = create<AppState>()(
       }
     }
 
+    const isFiscalActive = state.tenant.isFiscalEnabled === true;
+    const effectiveTaxClass = isFiscalActive ? targetLine.taxClassification : 'EXENTO';
     const lineCalculations = calculateLineTotals(
       targetLine.originalUnitPrice,
       qty,
-      targetLine.taxClassification,
+      effectiveTaxClass,
       targetLine.discountAmount,
       product?.tiers,
       state.tenant.pricesIncludeTax ?? true
@@ -749,6 +755,7 @@ export const useAppStore = create<AppState>()(
     updatedLines[index] = {
       ...targetLine,
       quantity: qty,
+      taxClassification: effectiveTaxClass,
       unitPrice: lineCalculations.unitPrice,
       appliedTierName: lineCalculations.appliedTierName,
       subtotal: lineCalculations.subtotal,
@@ -776,10 +783,12 @@ export const useAppStore = create<AppState>()(
     if (index < 0 || index >= state.cartLines.length) return state;
     const targetLine = state.cartLines[index];
     const product = state.products.find(p => String(p.id).trim() === String(targetLine.productId).trim() || p.sku === targetLine.sku);
+    const isFiscalActive = state.tenant.isFiscalEnabled === true;
+    const effectiveTaxClass = isFiscalActive ? targetLine.taxClassification : 'EXENTO';
     const lineCalculations = calculateLineTotals(
       targetLine.originalUnitPrice,
       targetLine.quantity,
-      targetLine.taxClassification,
+      effectiveTaxClass,
       discountAmount,
       product?.tiers,
       state.tenant.pricesIncludeTax ?? true
@@ -788,6 +797,7 @@ export const useAppStore = create<AppState>()(
     updatedLines[index] = {
       ...targetLine,
       discountAmount,
+      taxClassification: effectiveTaxClass,
       subtotal: lineCalculations.subtotal,
       taxAmount: lineCalculations.taxAmount,
       total: lineCalculations.total
@@ -807,10 +817,12 @@ export const useAppStore = create<AppState>()(
       const proportion = lineGross / grossTotal;
       const lineDiscount = Math.round((totalDiscount * proportion) * 100) / 100;
       const product = state.products.find(p => String(p.id).trim() === String(line.productId).trim() || p.sku === line.sku);
+      const isFiscalActive = state.tenant.isFiscalEnabled === true;
+      const effectiveTaxClass = isFiscalActive ? line.taxClassification : 'EXENTO';
       const lineCalculations = calculateLineTotals(
         line.originalUnitPrice,
         line.quantity,
-        line.taxClassification,
+        effectiveTaxClass,
         lineDiscount,
         product?.tiers,
         state.tenant.pricesIncludeTax ?? true
@@ -818,6 +830,7 @@ export const useAppStore = create<AppState>()(
       return {
         ...line,
         discountAmount: lineDiscount,
+        taxClassification: effectiveTaxClass,
         subtotal: lineCalculations.subtotal,
         taxAmount: lineCalculations.taxAmount,
         total: lineCalculations.total
@@ -1188,27 +1201,43 @@ export const useAppStore = create<AppState>()(
         }
       }
 
-      if (item.serviceId && item.staffId) {
+      if (item.serviceId) {
         const service = state.services.find(s => s.id === item.serviceId);
-        const staffMember = state.staff.find(s => s.id === item.staffId) || state.profiles.find(p => p.id === item.staffId);
-        if (service && staffMember) {
-          const commAmount = service.commissionType === 'PERCENTAGE'
-            ? (item.subtotal * service.commissionValue) / 100
-            : service.commissionValue * item.quantity;
+        // Automatically deduct supplies consumed by service if configured
+        if (service?.supplies && service.supplies.length > 0) {
+          for (const supply of service.supplies) {
+            const pIdx = updatedProducts.findIndex(p => p.id === supply.productId);
+            if (pIdx >= 0) {
+              const qtyToDeduct = supply.quantity * item.quantity;
+              updatedProducts[pIdx] = {
+                ...updatedProducts[pIdx],
+                currentStock: Math.max(0, updatedProducts[pIdx].currentStock - qtyToDeduct)
+              };
+            }
+          }
+        }
 
-          newCommissions.push({
-            id: `comm-${Date.now()}-${Math.random()}`,
-            tenantId: state.tenant.id,
-            staffId: item.staffId,
-            staffName: staffMember.fullName,
-            saleId: newSale.id,
-            serviceId: item.serviceId,
-            serviceName: service.name,
-            saleAmount: item.subtotal,
-            commissionAmount: commAmount,
-            status: 'PENDING',
-            createdAt: new Date().toISOString()
-          });
+        if (item.staffId) {
+          const staffMember = state.staff.find(s => s.id === item.staffId) || state.profiles.find(p => p.id === item.staffId);
+          if (service && staffMember) {
+            const commAmount = service.commissionType === 'PERCENTAGE'
+              ? (item.subtotal * service.commissionValue) / 100
+              : service.commissionValue * item.quantity;
+
+            newCommissions.push({
+              id: `comm-${Date.now()}-${Math.random()}`,
+              tenantId: state.tenant.id,
+              staffId: item.staffId,
+              staffName: staffMember.fullName,
+              saleId: newSale.id,
+              serviceId: item.serviceId,
+              serviceName: service.name,
+              saleAmount: item.subtotal,
+              commissionAmount: commAmount,
+              status: 'PENDING',
+              createdAt: new Date().toISOString()
+            });
+          }
         }
       }
     }
@@ -1846,17 +1875,151 @@ export const useAppStore = create<AppState>()(
     services: state.services.filter(s => s.id !== id)
   })),
 
-  payStaffCommissions: (staffId) => set((state) => ({
-    commissions: (state.commissions || []).map(c =>
-      (c.staffId === staffId || c.staffName === staffId) && c.tenantId === state.tenant.id ? { ...c, status: 'PAID' } : c
-    )
-  })),
+  payStaffCommissions: (staffId, options) => set((state) => {
+    const isShiftPayout = options?.payFromActiveShift === true;
+    const targetFundId = options?.fundId;
 
-  payCommissionItem: (commId) => set((state) => ({
-    commissions: (state.commissions || []).map(c =>
-      c.id === commId ? { ...c, status: 'PAID' } : c
-    )
-  })),
+    const staffComms = (state.commissions || []).filter(c =>
+      (c.staffId === staffId || c.staffName === staffId) &&
+      c.tenantId === state.tenant.id &&
+      c.status === 'PENDING'
+    );
+
+    if (staffComms.length === 0) {
+      toast.info('No hay comisiones pendientes para este colaborador.');
+      return state;
+    }
+
+    const totalToPay = staffComms.reduce((acc, c) => acc + c.commissionAmount, 0);
+    const staffName = staffComms[0]?.staffName || staffId;
+    const nowIso = new Date().toISOString();
+
+    let updatedMovements = state.cashMovements;
+    let updatedFunds = state.funds;
+
+    if (isShiftPayout) {
+      if (!state.activeShift || state.activeShift.status !== 'OPEN') {
+        toast.error('No hay un turno de caja abierto para registrar el egreso de efectivo.');
+        return state;
+      }
+      const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+      const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
+      const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+
+      const movement: CashMovement = {
+        id: generateUUID(),
+        tenantId: state.tenant.id,
+        cashShiftId: state.activeShift.id,
+        fiscalRangeId: state.activeShift.fiscalRangeId || activeCaja?.id || '',
+        type: 'SALIDA',
+        amount: totalToPay,
+        concept: `Pago de Comisiones: ${staffName}`,
+        registeredBy: state.currentUser?.fullName || 'Sistema',
+        createdAt: nowIso,
+        referenceId: `comm-payout-${staffId}`
+      };
+      updatedMovements = [movement, ...updatedMovements];
+
+      if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+        saveCashMovementToSupabase(movement).catch(e => console.warn('Supabase save commission movement:', e));
+      }
+    } else if (targetFundId) {
+      updatedFunds = state.funds.map(f =>
+        f.id === targetFundId ? { ...f, balance: f.balance - totalToPay } : f
+      );
+    }
+
+    const updatedComms = (state.commissions || []).map(c => {
+      if ((c.staffId === staffId || c.staffName === staffId) && c.tenantId === state.tenant.id && c.status === 'PENDING') {
+        return {
+          ...c,
+          status: 'PAID' as const,
+          paidAt: nowIso,
+          paidFromShiftId: isShiftPayout ? state.activeShift?.id : undefined,
+          paidFromFundId: targetFundId
+        };
+      }
+      return c;
+    });
+
+    toast.success(`Comisiones pagadas a ${staffName} (${formatCurrency(totalToPay, state.tenant.currencySymbol)})${isShiftPayout ? ' con salida de caja registradora' : ''}.`);
+
+    return {
+      commissions: updatedComms,
+      cashMovements: updatedMovements,
+      funds: updatedFunds
+    };
+  }),
+
+  payCommissionItem: (commId, options) => set((state) => {
+    const isShiftPayout = options?.payFromActiveShift === true;
+    const targetFundId = options?.fundId;
+
+    const commItem = (state.commissions || []).find(c => c.id === commId && c.tenantId === state.tenant.id);
+    if (!commItem || commItem.status === 'PAID') {
+      toast.info('La comisión ya está pagada o no fue encontrada.');
+      return state;
+    }
+
+    const totalToPay = commItem.commissionAmount;
+    const staffName = commItem.staffName || 'Colaborador';
+    const nowIso = new Date().toISOString();
+
+    let updatedMovements = state.cashMovements;
+    let updatedFunds = state.funds;
+
+    if (isShiftPayout) {
+      if (!state.activeShift || state.activeShift.status !== 'OPEN') {
+        toast.error('No hay un turno de caja abierto para registrar el egreso de efectivo.');
+        return state;
+      }
+      const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+      const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
+      const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+
+      const movement: CashMovement = {
+        id: generateUUID(),
+        tenantId: state.tenant.id,
+        cashShiftId: state.activeShift.id,
+        fiscalRangeId: state.activeShift.fiscalRangeId || activeCaja?.id || '',
+        type: 'SALIDA',
+        amount: totalToPay,
+        concept: `Pago de Comisión (${commItem.serviceName || 'Servicio'}): ${staffName}`,
+        registeredBy: state.currentUser?.fullName || 'Sistema',
+        createdAt: nowIso,
+        referenceId: `comm-item-${commId}`
+      };
+      updatedMovements = [movement, ...updatedMovements];
+
+      if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+        saveCashMovementToSupabase(movement).catch(e => console.warn('Supabase save commission item movement:', e));
+      }
+    } else if (targetFundId) {
+      updatedFunds = state.funds.map(f =>
+        f.id === targetFundId ? { ...f, balance: f.balance - totalToPay } : f
+      );
+    }
+
+    const updatedComms = (state.commissions || []).map(c =>
+      c.id === commId
+        ? {
+            ...c,
+            status: 'PAID' as const,
+            paidAt: nowIso,
+            paidFromShiftId: isShiftPayout ? state.activeShift?.id : undefined,
+            paidFromFundId: targetFundId
+          }
+        : c
+    );
+
+    toast.success(`Comisión pagada (${formatCurrency(totalToPay, state.tenant.currencySymbol)})${isShiftPayout ? ' con salida de caja registradora' : ''}.`);
+
+    return {
+      commissions: updatedComms,
+      cashMovements: updatedMovements,
+      funds: updatedFunds
+    };
+  }),
 
   addProfile: (profileData) => set((state) => {
     const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)

@@ -418,4 +418,148 @@ describe('App Zustand Store Business Logic', () => {
     expect(adj?.previousStock).toBe(15);
     expect(adj?.newStock).toBe(12);
   });
+
+  it('should force EXENTO tax classification and zero ISV when tenant has isFiscalEnabled set to false', () => {
+    useAppStore.setState({
+      tenant: { ...useAppStore.getState().tenant, isFiscalEnabled: false }
+    });
+
+    const testProduct: Product = {
+      id: 'prod-nonfiscal-1',
+      tenantId: useAppStore.getState().tenant.id,
+      sku: 'TAX-01',
+      name: 'Producto Gravable',
+      category: 'General',
+      unitOfMeasure: 'UND',
+      salePrice: 115,
+      costPrice: 80,
+      currentStock: 10,
+      minStockAlert: 1,
+      taxClassification: 'GRAVADO_15',
+      isActive: true
+    };
+
+    useAppStore.setState({ products: [testProduct] });
+    useAppStore.getState().addToCart({ product: testProduct, quantity: 1 });
+
+    const cart = useAppStore.getState().cartLines;
+    expect(cart.length).toBe(1);
+    expect(cart[0].taxClassification).toBe('EXENTO');
+    expect(cart[0].taxAmount).toBe(0);
+    expect(cart[0].subtotal).toBe(115);
+  });
+
+  it('should deduct linked service supplies from inventory upon completing sale', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(1000);
+
+    const supplyProduct: Product = {
+      id: 'prod-supply-1',
+      tenantId: store.tenant.id,
+      sku: 'SUP-01',
+      name: 'Tinte Profesional',
+      category: 'Insumos',
+      unitOfMeasure: 'UND',
+      salePrice: 150,
+      costPrice: 80,
+      currentStock: 10,
+      minStockAlert: 2,
+      taxClassification: 'EXENTO',
+      isActive: true
+    };
+
+    const service = {
+      id: 'serv-hair-1',
+      tenantId: store.tenant.id,
+      name: 'Tinte y Peinado',
+      durationMinutes: 60,
+      price: 500,
+      commissionType: 'FIXED' as const,
+      commissionValue: 100,
+      isActive: true,
+      supplies: [{ productId: supplyProduct.id, quantity: 2 }]
+    };
+
+    useAppStore.setState({
+      products: [supplyProduct],
+      services: [service]
+    });
+
+    // Add service to cart
+    store.addToCart({ service, quantity: 1 });
+    expect(useAppStore.getState().cartLines.length).toBe(1);
+
+    // Process sale
+    const sale = store.processSale('CASH');
+    expect(sale).not.toBeNull();
+
+    // Verify supply stock is deducted by 2 (10 - 2 = 8)
+    const updatedSupply = useAppStore.getState().products.find(p => p.id === supplyProduct.id);
+    expect(updatedSupply?.currentStock).toBe(8);
+  });
+
+  it('should register a cash movement SALIDA in active shift when liquidating commissions with payFromActiveShift', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(2000);
+    const activeShift = useAppStore.getState().activeShift;
+    expect(activeShift).not.toBeNull();
+
+    const pendingCommission = {
+      id: 'comm-test-1',
+      tenantId: store.tenant.id,
+      saleId: 'sale-test-1',
+      staffId: 'staff-carlos-1',
+      staffName: 'Carlos Barbero',
+      serviceId: 'serv-1',
+      serviceName: 'Corte Caballero',
+      saleAmount: 200,
+      commissionAmount: 50,
+      status: 'PENDING' as const,
+      createdAt: new Date().toISOString()
+    };
+
+    useAppStore.setState({
+      commissions: [pendingCommission]
+    });
+
+    // Liquidate commissions from active cash shift
+    store.payStaffCommissions('staff-carlos-1', { payFromActiveShift: true });
+
+    // Verify commission is marked as PAID
+    const comm = useAppStore.getState().commissions.find(c => c.id === 'comm-test-1');
+    expect(comm?.status).toBe('PAID');
+    expect(comm?.paidFromShiftId).toBe(activeShift?.id);
+
+    // Verify SALIDA cash movement was registered
+    const movements = useAppStore.getState().cashMovements;
+    const salidaMov = movements.find(m => m.type === 'SALIDA' && m.referenceId === 'comm-payout-staff-carlos-1');
+    expect(salidaMov).toBeDefined();
+    expect(salidaMov?.amount).toBe(50);
+    expect(salidaMov?.cashShiftId).toBe(activeShift?.id);
+  });
+
+  it('should add and manage schedule blocks (BLOCK type) in appointments', () => {
+    const store = useAppStore.getState();
+
+    store.addAppointment({
+      type: 'BLOCK',
+      blockReason: 'Almuerzo',
+      customerName: '[Bloqueo] Almuerzo',
+      staffId: 'staff-ana-1',
+      staffName: 'Ana Estilista',
+      serviceId: 'block',
+      serviceName: 'Bloqueo: Almuerzo',
+      scheduledAt: new Date().toISOString(),
+      durationMinutes: 60,
+      status: 'SCHEDULED',
+      notes: 'Horario bloqueado: Almuerzo'
+    });
+
+    const appointments = useAppStore.getState().appointments;
+    const blockApp = appointments.find(a => a.type === 'BLOCK');
+    expect(blockApp).toBeDefined();
+    expect(blockApp?.blockReason).toBe('Almuerzo');
+    expect(blockApp?.durationMinutes).toBe(60);
+    expect(blockApp?.status).toBe('SCHEDULED');
+  });
 });

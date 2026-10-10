@@ -290,6 +290,11 @@ export interface Staff {
   isActive: boolean;
 }
 
+export interface ServiceSupply {
+  productId: string;
+  quantity: number;
+}
+
 export interface Service {
   id: string;
   tenantId: string;
@@ -299,6 +304,8 @@ export interface Service {
   commissionType: 'PERCENTAGE' | 'FIXED';
   commissionValue: number;
   isActive: boolean;
+  taxClassification?: TaxClassification;
+  supplies?: ServiceSupply[];
 }
 
 export interface AppointmentItem {
@@ -314,6 +321,8 @@ export interface AppointmentItem {
 export interface Appointment {
   id: string;
   tenantId: string;
+  type?: 'APPOINTMENT' | 'BLOCK'; // Normal customer appointment or schedule block (Almuerzo / Fuera de servicio)
+  blockReason?: string; // e.g. 'Almuerzo', 'Permiso', 'Capacitación', 'Fuera de Servicio'
   customerName: string;
   customerPhone?: string;
   staffId: string;
@@ -321,6 +330,8 @@ export interface Appointment {
   serviceId: string;
   serviceName?: string;
   scheduledAt: string;
+  durationMinutes?: number;
+  endTime?: string;
   status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   notes?: string;
   items?: AppointmentItem[];
@@ -337,6 +348,9 @@ export interface StaffCommission {
   saleAmount: number;
   commissionAmount: number;
   status: 'PENDING' | 'PAID';
+  paidAt?: string;
+  paidFromShiftId?: string;
+  paidFromFundId?: string;
   createdAt: string;
 }
 

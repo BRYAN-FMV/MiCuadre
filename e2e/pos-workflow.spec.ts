@@ -71,4 +71,68 @@ test.describe('MiCuadre POS & Terminal E2E Workflows', () => {
     await mermasBtn.click();
     await expect(page.getByText(/auditor[íi]a de mermas|registro de p[ée]rdidas/i).first()).toBeVisible();
   });
+
+  test('should handle walk-in services in POS and schedule blocks in Services tab', async ({ page }) => {
+    // 1. Pre-authenticate with local storage state
+    await page.addInitScript(() => {
+      window.localStorage.setItem('micuadre_app_state', JSON.stringify({
+        state: {
+          isAuthenticated: true,
+          activeTab: 'pos'
+        },
+        version: 0
+      }));
+    });
+
+    // 2. Navigate to POS
+    await page.goto('/?comercio=demo');
+
+    // 3. Verify POS is visible
+    await expect(page.getByText(/punto de venta|carrito|total pagar/i).first()).toBeVisible({ timeout: 10000 });
+
+    // 4. Switch to Services catalog in POS
+    const servicesTabBtn = page.getByRole('button', { name: /servicios/i }).first();
+    await expect(servicesTabBtn).toBeVisible();
+    await servicesTabBtn.click();
+
+    // 5. Check if service cards are shown
+    const serviceCard = page.locator('.product-card').first();
+    if (await serviceCard.isVisible()) {
+      await serviceCard.click();
+
+      // 6. Modal for staff assignment should appear
+      await expect(page.getByText(/asignar colaborador/i)).toBeVisible();
+      const addServiceBtn = page.getByRole('button', { name: /agregar al carrito/i });
+      await expect(addServiceBtn).toBeVisible();
+      await addServiceBtn.click();
+
+      // 7. Verify line item in cart
+      await expect(page.locator('.cart-item').first()).toBeVisible();
+    }
+
+    // 8. Navigate to Services tab in Sidebar
+    const navServices = page.locator('#nav-services');
+    await expect(navServices).toBeVisible();
+    await navServices.click();
+
+    // 9. Verify Services view loaded
+    await expect(page.getByText(/servicios, citas & comisiones/i)).toBeVisible({ timeout: 10000 });
+
+    // 10. Open New Appointment modal
+    const newAppBtn = page.getByRole('button', { name: /nueva cita/i });
+    await expect(newAppBtn).toBeVisible();
+    await newAppBtn.click();
+
+    // 11. Verify Schedule Block toggle exists and can be clicked
+    const blockTabBtn = page.getByRole('button', { name: /bloqueo \/ no disponible/i });
+    await expect(blockTabBtn).toBeVisible();
+    await blockTabBtn.click();
+
+    // 12. Verify schedule block fields
+    await expect(page.getByText(/motivo del bloqueo/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /guardar bloqueo/i })).toBeVisible();
+
+    // 13. Close modal
+    await page.getByRole('button', { name: /cancelar/i }).click();
+  });
 });

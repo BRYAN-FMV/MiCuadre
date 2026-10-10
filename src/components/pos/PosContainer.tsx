@@ -6,12 +6,13 @@ import { toast } from 'sonner';
 import {
   Search, ShoppingCart, UserCheck, Trash2, Plus, Minus,
   CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle,
-  Tag, Percent
+  Tag, Percent, Scissors, Clock
 } from 'lucide-react';
-import { Sale, Product, CartLine, Customer } from '../../types';
+import { Sale, Product, CartLine, Customer, Service } from '../../types';
 
 export const PosContainer: React.FC = () => {
   const products = useAppStore(state => state.products);
+  const services = useAppStore(state => state.services);
   const cartLines = useAppStore(state => state.cartLines);
   const cartCustomer = useAppStore(state => state.cartCustomer);
   const customers = useAppStore(state => state.customers);
@@ -95,6 +96,11 @@ export const PosContainer: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cartLines]);
 
+  // Catalog Mode & Walk-in Services State
+  const [catalogMode, setCatalogMode] = useState<'PRODUCTS' | 'SERVICES'>('PRODUCTS');
+  const [serviceModalService, setServiceModalService] = useState<Service | null>(null);
+  const [serviceSelectedStaffId, setServiceSelectedStaffId] = useState<string>('');
+
   // Multi-tenant staff list for service assignment
   const tenantStaff = staff.filter(s => s.tenantId === tenant.id && s.isActive);
   const tenantProfiles = profiles.filter(p => p.tenantId === tenant.id && (p.isActive ?? true));
@@ -111,6 +117,33 @@ export const PosContainer: React.FC = () => {
   const tenantProducts = products.filter((p: Product) => p.tenantId === tenant.id);
   const categories = ['TODOS', ...Array.from(new Set(tenantProducts.map((p: Product) => p.category)))];
 
+  const tenantServices = services.filter((s: Service) => s.tenantId === tenant.id && s.isActive);
+  const filteredServices = tenantServices.filter((s: Service) =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleAddServiceToCart = (service: Service) => {
+    if (availableStaff.length === 1) {
+      addToCart({ service, staffId: availableStaff[0].id, quantity: 1 });
+      toast.success(`+ ${service.name} (${availableStaff[0].fullName})`);
+    } else if (availableStaff.length > 1) {
+      setServiceModalService(service);
+      setServiceSelectedStaffId(availableStaff[0]?.id || '');
+    } else {
+      addToCart({ service, quantity: 1 });
+      toast.success(`+ ${service.name}`);
+    }
+  };
+
+  const handleConfirmServiceModal = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!serviceModalService) return;
+    const staffObj = availableStaff.find(s => s.id === serviceSelectedStaffId);
+    addToCart({ service: serviceModalService, staffId: serviceSelectedStaffId || undefined, quantity: 1 });
+    toast.success(`+ ${serviceModalService.name}${staffObj ? ` (${staffObj.fullName})` : ''}`);
+    setServiceModalService(null);
+  };
+
   const outOfStockCount = tenantProducts.filter((p: Product) => p.isActive && p.currentStock <= 0).length;
   const lowStockCount = tenantProducts.filter((p: Product) => p.isActive && p.currentStock > 0 && p.currentStock <= p.minStockAlert).length;
 
@@ -124,6 +157,13 @@ export const PosContainer: React.FC = () => {
 
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      if (catalogMode === 'SERVICES') {
+        if (filteredServices.length === 1) {
+          handleAddServiceToCart(filteredServices[0]);
+          setSearchTerm('');
+        }
+        return;
+      }
       const match = tenantProducts.find((p: Product) => (p.barcode === searchTerm || p.sku.toLowerCase() === searchTerm.toLowerCase()) && p.isActive);
       if (match) {
         if (!tenant.allowNegativeStock && match.currentStock <= 0) {
@@ -378,142 +418,257 @@ export const PosContainer: React.FC = () => {
           </div>
         </div>
 
-        {/* Category Pills Slider */}
-        <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
-          {categories.map((cat: string) => {
-            const isActive = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                style={{
-                  padding: '0.45rem 0.9rem',
-                  background: isActive ? 'var(--accent-primary)' : '#ffffff',
-                  color: isActive ? '#ffffff' : '#475569',
-                  border: isActive ? '1px solid var(--accent-primary)' : '1px solid #cbd5e1',
-                  borderRadius: '20px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  fontWeight: isActive ? 700 : 500,
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {cat}
-              </button>
-            );
-          })}
+        {/* Catalog Mode Selector (Productos vs Servicios) */}
+        <div style={{ display: 'flex', gap: '0.4rem', background: '#f1f5f9', padding: '0.25rem', borderRadius: '8px', border: '1px solid #e2e8f0', width: 'fit-content' }}>
+          <button
+            type="button"
+            onClick={() => setCatalogMode('PRODUCTS')}
+            style={{
+              padding: '0.35rem 0.8rem',
+              borderRadius: '6px',
+              border: 'none',
+              background: catalogMode === 'PRODUCTS' ? 'var(--accent-primary)' : 'transparent',
+              color: catalogMode === 'PRODUCTS' ? '#ffffff' : '#64748b',
+              fontWeight: catalogMode === 'PRODUCTS' ? 700 : 500,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Package size={14} />
+            <span>Productos ({tenantProducts.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCatalogMode('SERVICES')}
+            style={{
+              padding: '0.35rem 0.8rem',
+              borderRadius: '6px',
+              border: 'none',
+              background: catalogMode === 'SERVICES' ? '#9333ea' : 'transparent',
+              color: catalogMode === 'SERVICES' ? '#ffffff' : '#64748b',
+              fontWeight: catalogMode === 'SERVICES' ? 700 : 500,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Scissors size={14} />
+            <span>Servicios ({tenantServices.length})</span>
+          </button>
         </div>
 
-        {/* Inventory Warning Alert Banner */}
-        {(outOfStockCount > 0 || lowStockCount > 0) && (
-          <div style={{
-            background: outOfStockCount > 0 ? '#fef2f2' : '#fffbeb',
-            border: `1px solid ${outOfStockCount > 0 ? '#fecaca' : '#fde68a'}`,
-            borderRadius: '8px',
-            padding: '0.45rem 0.75rem',
-            fontSize: '0.78rem',
-            color: outOfStockCount > 0 ? '#991b1b' : '#92400e',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-          }}>
-            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-            <span>
-              <strong>Alerta de Inventario:</strong>{' '}
-              {outOfStockCount > 0 ? `${outOfStockCount} producto(s) AGOTADO(S)` : ''}
-              {outOfStockCount > 0 && lowStockCount > 0 ? ' • ' : ''}
-              {lowStockCount > 0 ? `${lowStockCount} producto(s) con STOCK BAJO` : ''}
-              {!tenant.allowNegativeStock && outOfStockCount > 0 && (
-                <span style={{ marginLeft: '0.4rem', fontWeight: 600, opacity: 0.85 }}>(Ventas sin stock bloqueadas)</span>
-              )}
-            </span>
+        {catalogMode === 'PRODUCTS' ? (
+          <>
+            {/* Category Pills Slider */}
+            <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
+              {categories.map((cat: string) => {
+                const isActive = selectedCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    style={{
+                      padding: '0.45rem 0.9rem',
+                      background: isActive ? 'var(--accent-primary)' : '#ffffff',
+                      color: isActive ? '#ffffff' : '#475569',
+                      border: isActive ? '1px solid var(--accent-primary)' : '1px solid #cbd5e1',
+                      borderRadius: '20px',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: isActive ? 700 : 500,
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Inventory Warning Alert Banner */}
+            {(outOfStockCount > 0 || lowStockCount > 0) && (
+              <div style={{
+                background: outOfStockCount > 0 ? '#fef2f2' : '#fffbeb',
+                border: `1px solid ${outOfStockCount > 0 ? '#fecaca' : '#fde68a'}`,
+                borderRadius: '8px',
+                padding: '0.45rem 0.75rem',
+                fontSize: '0.78rem',
+                color: outOfStockCount > 0 ? '#991b1b' : '#92400e',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+              }}>
+                <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                <span>
+                  <strong>Alerta de Inventario:</strong>{' '}
+                  {outOfStockCount > 0 ? `${outOfStockCount} producto(s) AGOTADO(S)` : ''}
+                  {outOfStockCount > 0 && lowStockCount > 0 ? ' • ' : ''}
+                  {lowStockCount > 0 ? `${lowStockCount} producto(s) con STOCK BAJO` : ''}
+                  {!tenant.allowNegativeStock && outOfStockCount > 0 && (
+                    <span style={{ marginLeft: '0.4rem', fontWeight: 600, opacity: 0.85 }}>(Ventas sin stock bloqueadas)</span>
+                  )}
+                </span>
+              </div>
+            )}
+
+            {/* Product Cards Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
+              {filteredProducts.map((product: Product) => {
+                const hasTiers = product.tiers && product.tiers.length > 0;
+                const isOutOfStock = product.currentStock <= 0;
+                const isLowStock = product.currentStock > 0 && product.currentStock <= product.minStockAlert;
+                const isDisabled = isOutOfStock && !tenant.allowNegativeStock;
+
+                return (
+                  <div
+                    key={product.id}
+                    onClick={() => {
+                      if (isDisabled) {
+                        toast.error(`"${product.name}" está AGOTADO. Habilite "Venta con Stock Negativo" en Configuración para vender sin existencia.`);
+                        return;
+                      }
+                      addToCart({ product });
+                      toast.success(`+ ${product.name}`);
+                    }}
+                    style={{
+                      padding: '0.85rem',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      background: isDisabled ? '#f8fafc' : '#ffffff',
+                      border: `1px solid ${isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0')}`,
+                      borderRadius: '10px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      transition: 'transform 0.1s ease, border-color 0.1s ease',
+                      position: 'relative',
+                      opacity: isDisabled ? 0.7 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isDisabled) {
+                        e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isDisabled) {
+                        e.currentTarget.style.borderColor = isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0');
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }
+                    }}
+                  >
+                    {isOutOfStock ? (
+                      <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 700 }}>
+                        Agotado
+                      </span>
+                    ) : isLowStock ? (
+                      <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>
+                        Poco Stock
+                      </span>
+                    ) : hasTiers ? (
+                      <span className="badge badge-wholesale" style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.6rem', padding: '0.15rem 0.4rem' }}>
+                        Mayoreo
+                      </span>
+                    ) : null}
+
+                    <div>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: isOutOfStock ? '#fee2e2' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: isOutOfStock ? '#ef4444' : '#64748b' }}>
+                        <Package size={20} />
+                      </div>
+
+                      <h4 style={{ fontSize: '0.85rem', color: isDisabled ? '#64748b' : '#0f172a', fontWeight: 600, lineHeight: '1.25', height: '2.5em', overflow: 'hidden', marginBottom: '0.4rem' }}>
+                        {product.name}
+                      </h4>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isDisabled ? '#94a3b8' : 'var(--accent-primary)' }}>
+                        {formatCurrency(product.salePrice, tenant.currencySymbol)}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: isOutOfStock ? '#ef4444' : (isLowStock ? '#d97706' : '#64748b'), fontWeight: isOutOfStock || isLowStock ? 700 : 400, marginTop: '0.15rem' }}>
+                        Stock: {product.currentStock} {product.unitOfMeasure}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          /* Service Cards Grid for Walk-in clients */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
+            {filteredServices.length === 0 ? (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
+                <Scissors size={40} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+                <p style={{ fontSize: '0.88rem', fontWeight: 600, color: '#64748b' }}>No hay servicios activos disponibles.</p>
+                <p style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Agregue servicios en la pestaña Servicios y Citas.</p>
+              </div>
+            ) : (
+              filteredServices.map((service: Service) => {
+                return (
+                  <div
+                    key={service.id}
+                    onClick={() => handleAddServiceToCart(service)}
+                    style={{
+                      padding: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '10px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      transition: 'transform 0.1s ease, border-color 0.1s ease',
+                      position: 'relative'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#9333ea';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#f3e8ff', color: '#7e22ce', fontWeight: 700 }}>
+                      {service.durationMinutes} min
+                    </span>
+
+                    <div>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#faf5ff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: '#9333ea' }}>
+                        <Scissors size={20} />
+                      </div>
+
+                      <h4 style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 600, lineHeight: '1.25', height: '2.5em', overflow: 'hidden', marginBottom: '0.4rem' }}>
+                        {service.name}
+                      </h4>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#7e22ce' }}>
+                        {formatCurrency(service.price, tenant.currencySymbol)}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Clock size={11} />
+                        <span>{service.durationMinutes} min • {service.commissionType === 'PERCENTAGE' ? `${service.commissionValue}% com.` : `Fijo ${tenant.currencySymbol}${service.commissionValue}`}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
-
-        {/* Product Cards Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
-          {filteredProducts.map((product: Product) => {
-            const hasTiers = product.tiers && product.tiers.length > 0;
-            const isOutOfStock = product.currentStock <= 0;
-            const isLowStock = product.currentStock > 0 && product.currentStock <= product.minStockAlert;
-            const isDisabled = isOutOfStock && !tenant.allowNegativeStock;
-
-            return (
-              <div
-                key={product.id}
-                onClick={() => {
-                  if (isDisabled) {
-                    toast.error(`"${product.name}" está AGOTADO. Habilite "Venta con Stock Negativo" en Configuración para vender sin existencia.`);
-                    return;
-                  }
-                  addToCart({ product });
-                  toast.success(`+ ${product.name}`);
-                }}
-                style={{
-                  padding: '0.85rem',
-                  cursor: isDisabled ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  background: isDisabled ? '#f8fafc' : '#ffffff',
-                  border: `1px solid ${isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0')}`,
-                  borderRadius: '10px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                  transition: 'transform 0.1s ease, border-color 0.1s ease',
-                  position: 'relative',
-                  opacity: isDisabled ? 0.7 : 1
-                }}
-                onMouseEnter={(e) => {
-                  if (!isDisabled) {
-                    e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isDisabled) {
-                    e.currentTarget.style.borderColor = isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0');
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }
-                }}
-              >
-                {isOutOfStock ? (
-                  <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 700 }}>
-                    Agotado
-                  </span>
-                ) : isLowStock ? (
-                  <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>
-                    Poco Stock
-                  </span>
-                ) : hasTiers ? (
-                  <span className="badge badge-wholesale" style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.6rem', padding: '0.15rem 0.4rem' }}>
-                    Mayoreo
-                  </span>
-                ) : null}
-
-                <div>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: isOutOfStock ? '#fee2e2' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: isOutOfStock ? '#ef4444' : '#64748b' }}>
-                    <Package size={20} />
-                  </div>
-
-                  <h4 style={{ fontSize: '0.85rem', color: isDisabled ? '#64748b' : '#0f172a', fontWeight: 600, lineHeight: '1.25', height: '2.5em', overflow: 'hidden', marginBottom: '0.4rem' }}>
-                    {product.name}
-                  </h4>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isDisabled ? '#94a3b8' : 'var(--accent-primary)' }}>
-                    {formatCurrency(product.salePrice, tenant.currencySymbol)}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: isOutOfStock ? '#ef4444' : (isLowStock ? '#d97706' : '#64748b'), fontWeight: isOutOfStock || isLowStock ? 700 : 400, marginTop: '0.15rem' }}>
-                    Stock: {product.currentStock} {product.unitOfMeasure}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* RIGHT: Modern Checkout Panel */}
@@ -1247,32 +1402,41 @@ export const PosContainer: React.FC = () => {
                     <span>{formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Importe Exonerado:</span>
-                  <span>{formatCurrency(lastCompletedSale.exoneratedAmount || 0, tenant.currencySymbol)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Importe Exento:</span>
-                  <span>{formatCurrency(lastCompletedSale.exemptAmount || 0, tenant.currencySymbol)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Importe Gravado 15%:</span>
-                  <span>{formatCurrency(lastCompletedSale.taxable15 || 0, tenant.currencySymbol)}</span>
-                </div>
-                {lastCompletedSale.taxable18 > 0 && (
+                {lastCompletedSale.isFiscal ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Importe Exonerado:</span>
+                      <span>{formatCurrency(lastCompletedSale.exoneratedAmount || 0, tenant.currencySymbol)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Importe Exento:</span>
+                      <span>{formatCurrency(lastCompletedSale.exemptAmount || 0, tenant.currencySymbol)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Importe Gravado 15%:</span>
+                      <span>{formatCurrency(lastCompletedSale.taxable15 || 0, tenant.currencySymbol)}</span>
+                    </div>
+                    {lastCompletedSale.taxable18 > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Importe Gravado 18%:</span>
+                        <span>{formatCurrency(lastCompletedSale.taxable18 || 0, tenant.currencySymbol)}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>I.S.V. 15%:</span>
+                      <span>{formatCurrency(lastCompletedSale.tax15 || 0, tenant.currencySymbol)}</span>
+                    </div>
+                    {lastCompletedSale.tax18 > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>I.S.V. 18%:</span>
+                        <span>{formatCurrency(lastCompletedSale.tax18 || 0, tenant.currencySymbol)}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Importe Gravado 18%:</span>
-                    <span>{formatCurrency(lastCompletedSale.taxable18 || 0, tenant.currencySymbol)}</span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>I.S.V. 15%:</span>
-                  <span>{formatCurrency(lastCompletedSale.tax15 || 0, tenant.currencySymbol)}</span>
-                </div>
-                {lastCompletedSale.tax18 > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>I.S.V. 18%:</span>
-                    <span>{formatCurrency(lastCompletedSale.tax18 || 0, tenant.currencySymbol)}</span>
+                    <span>Subtotal:</span>
+                    <span>{formatCurrency(lastCompletedSale.subtotal, tenant.currencySymbol)}</span>
                   </div>
                 )}
                 <div style={{ borderBottom: '1px dashed #000', margin: '3px 0' }}></div>
@@ -1466,6 +1630,84 @@ export const PosContainer: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Service Staff Assignment for Walk-in POS */}
+      {serviceModalService && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)',
+          zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '14px', width: '100%', maxWidth: '420px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f3e8ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea' }}>
+                  <Scissors size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    {serviceModalService.name}
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', color: '#7e22ce', fontWeight: 700 }}>
+                    {formatCurrency(serviceModalService.price, tenant.currencySymbol)} • {serviceModalService.durationMinutes} min
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setServiceModalService(null)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmServiceModal} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                  Personal que atiende el servicio
+                </label>
+                <select
+                  className="input-control"
+                  value={serviceSelectedStaffId}
+                  onChange={(e) => setServiceSelectedStaffId(e.target.value)}
+                  style={{ fontSize: '0.85rem', padding: '0.55rem' }}
+                  autoFocus
+                >
+                  <option value="">-- Sin Asignar --</option>
+                  {availableStaff.map(st => (
+                    <option key={st.id} value={st.id}>{st.fullName}</option>
+                  ))}
+                </select>
+                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.72rem', color: '#64748b' }}>
+                  La comisión se acumulará al colaborador seleccionado.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setServiceModalService(null)}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.8rem', background: '#9333ea', borderColor: '#9333ea' }}
+                >
+                  Agregar a la Venta
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

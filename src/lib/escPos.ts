@@ -75,10 +75,12 @@ export function generateEscPosReceipt(
   buffer.push(0x1B, 0x61, 0x02);
   buffer.push(...encoder.encode(`SUBTOTAL: ${formatCurrency(sale.subtotal, tenant.currencySymbol)}\n`));
   if (sale.discountAmount > 0) buffer.push(...encoder.encode(`DESCUENTO: ${formatCurrency(sale.discountAmount, tenant.currencySymbol)}\n`));
-  if (sale.taxable15 > 0) buffer.push(...encoder.encode(`GRAVADO 15%: ${formatCurrency(sale.taxable15, tenant.currencySymbol)}\n`));
-  if (sale.tax15 > 0) buffer.push(...encoder.encode(`ISV 15%: ${formatCurrency(sale.tax15, tenant.currencySymbol)}\n`));
-  if (sale.taxable18 > 0) buffer.push(...encoder.encode(`GRAVADO 18%: ${formatCurrency(sale.taxable18, tenant.currencySymbol)}\n`));
-  if (sale.tax18 > 0) buffer.push(...encoder.encode(`ISV 18%: ${formatCurrency(sale.tax18, tenant.currencySymbol)}\n`));
+  if (sale.isFiscal) {
+    if (sale.taxable15 > 0) buffer.push(...encoder.encode(`GRAVADO 15%: ${formatCurrency(sale.taxable15, tenant.currencySymbol)}\n`));
+    if (sale.tax15 > 0) buffer.push(...encoder.encode(`ISV 15%: ${formatCurrency(sale.tax15, tenant.currencySymbol)}\n`));
+    if (sale.taxable18 > 0) buffer.push(...encoder.encode(`GRAVADO 18%: ${formatCurrency(sale.taxable18, tenant.currencySymbol)}\n`));
+    if (sale.tax18 > 0) buffer.push(...encoder.encode(`ISV 18%: ${formatCurrency(sale.tax18, tenant.currencySymbol)}\n`));
+  }
 
   // Bold & Large Total
   buffer.push(0x1B, 0x45, 0x01); // Emphasized mode ON
