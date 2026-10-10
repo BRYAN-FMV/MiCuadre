@@ -4,10 +4,12 @@ import {
   BarChart3, TrendingUp, DollarSign, FileText, Calendar,
   Printer, CreditCard, ShieldCheck, PieChart, ShoppingBag, ArrowUpRight,
   Search, Filter, Eye, X, Receipt, CheckCircle, Trophy, Award, Users,
-  Archive, Star, Layers, PackageX, TrendingDown, RefreshCw, Zap
+  Archive, Star, Layers, PackageX, TrendingDown, RefreshCw, Zap,
+  AlertTriangle, RotateCcw, Ban, ArrowLeftRight
 } from 'lucide-react';
 import { Sale, Product, CartLine, Staff, UserProfile, Customer, StaffCommission } from '../../types';
 import { generateEscPosReceipt } from '../../lib/escPos';
+import { formatCurrency } from '../../lib/monetary';
 import {
   fetchSalesFromSupabase,
   fetchShiftsFromSupabase,
@@ -28,6 +30,8 @@ export const ReportsView: React.FC = () => {
   const profiles = useAppStore(state => state.profiles);
   const commissions = useAppStore(state => state.commissions);
   const customers = useAppStore(state => state.customers);
+  const voidSale = useAppStore(state => state.voidSale);
+  const refundSale = useAppStore(state => state.refundSale);
 
   const [mainSubTab, setMainSubTab] = useState<'sales' | 'leaderboard' | 'inventory_capital' | 'loyalty' | 'shifts'>('sales');
 
@@ -46,6 +50,111 @@ export const ReportsView: React.FC = () => {
   // Selected Sale / Shift for Detail Modals
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<Sale | null>(null);
   const [selectedShiftDetail, setSelectedShiftDetail] = useState<any | null>(null);
+
+  // Void & Refund Modals state
+  const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
+  const [saleToVoid, setSaleToVoid] = useState<Sale | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [saleToRefund, setSaleToRefund] = useState<Sale | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundMethod, setRefundMethod] = useState<'CASH' | 'STORE_CREDIT'>('CASH');
+  const [refundItemsState, setRefundItemsState] = useState<Array<{
+    productId?: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    maxQuantity: number;
+    subtotal: number;
+    isDamaged: boolean;
+    selected: boolean;
+  }>>([]);
+
+  const handleOpenVoidModal = (sale: Sale) => {
+    setSaleToVoid(sale);
+    setVoidReason('');
+    setIsVoidModalOpen(true);
+  };
+
+  const handleConfirmVoid = () => {
+    if (!saleToVoid) return;
+    if (!voidReason.trim()) {
+      toast.error('Debe ingresar el motivo de anulación');
+      return;
+    }
+    const ok = voidSale(saleToVoid.id, voidReason.trim());
+    if (ok) {
+      setIsVoidModalOpen(false);
+      if (selectedSaleDetail?.id === saleToVoid.id) {
+        setSelectedSaleDetail({
+          ...saleToVoid,
+          status: 'VOIDED',
+          voidReason: voidReason.trim(),
+          voidedAt: new Date().toISOString()
+        });
+      }
+    }
+  };
+
+  const handleOpenRefundModal = (sale: Sale) => {
+    setSaleToRefund(sale);
+    setRefundReason('');
+    setRefundMethod('CASH');
+    setRefundItemsState(
+      (sale.items || []).map(it => ({
+        productId: it.productId,
+        productName: it.name,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        maxQuantity: it.quantity,
+        subtotal: it.total,
+        isDamaged: false,
+        selected: true
+      }))
+    );
+    setIsRefundModalOpen(true);
+  };
+
+  const handleConfirmRefund = () => {
+    if (!saleToRefund) return;
+    const selectedItems = refundItemsState.filter(it => it.selected && it.quantity > 0);
+    if (selectedItems.length === 0) {
+      toast.error('Seleccione al menos un producto a devolver');
+      return;
+    }
+    if (!refundReason.trim()) {
+      toast.error('Debe especificar el motivo de devolución / cambio');
+      return;
+    }
+
+    const hasAnyDamaged = selectedItems.some(it => it.isDamaged);
+
+    const ok = refundSale({
+      saleId: saleToRefund.id,
+      reason: refundReason.trim(),
+      refundMethod,
+      isDamagedWaste: hasAnyDamaged,
+      items: selectedItems.map(it => ({
+        productId: it.productId,
+        productName: it.productName,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        subtotal: it.unitPrice * it.quantity,
+        isDamaged: it.isDamaged
+      }))
+    });
+
+    if (ok) {
+      setIsRefundModalOpen(false);
+      if (selectedSaleDetail?.id === saleToRefund.id) {
+        setSelectedSaleDetail({
+          ...saleToRefund,
+          status: 'REFUNDED'
+        });
+      }
+    }
+  };
 
   // Auto-sync full business telemetry (sales, shifts, cash movements, expenses) from cloud on view mount
   React.useEffect(() => {
@@ -847,7 +956,13 @@ export const ReportsView: React.FC = () => {
                         <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>
                             <code>{s.documentNumber}</code>
-                            {isFiscalDoc && <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>Fiscal SAR</div>}
+                            {s.status === 'VOIDED' ? (
+                              <div style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 800 }}>ANULADA</div>
+                            ) : s.status === 'REFUNDED' ? (
+                              <div style={{ fontSize: '0.68rem', color: '#d97706', fontWeight: 800 }}>DEVUELTA</div>
+                            ) : isFiscalDoc ? (
+                              <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>Fiscal SAR</div>
+                            ) : null}
                           </td>
                           <td style={{ padding: '0.75rem 1rem', color: '#475569', fontSize: '0.8rem' }}>
                             {new Date(s.createdAt).toLocaleString('es-HN', { dateStyle: 'short', timeStyle: 'short' })}
@@ -1526,26 +1641,318 @@ export const ReportsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Reprint Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => handlePrintReceipt(selectedSaleDetail, 'COPIA')}
-                  style={{ padding: '0.6rem 1rem', fontSize: '0.82rem' }}
-                >
-                  <Printer size={15} />
-                  <span>Reimprimir Copia SAR</span>
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => handlePrintReceipt(selectedSaleDetail, 'ORIGINAL')}
-                  style={{ padding: '0.6rem 1rem', fontSize: '0.82rem' }}
-                >
-                  <Printer size={15} />
-                  <span>Imprimir Original Cliente</span>
-                </button>
+              {/* Status Alerts if Voided or Refunded */}
+              {selectedSaleDetail.status === 'VOIDED' && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem 1rem', color: '#991b1b', fontSize: '0.85rem' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '0.2rem' }}>FACTURA ANULADA</div>
+                  <div>Motivo: {selectedSaleDetail.voidReason || 'Sin motivo especificado'}</div>
+                  {selectedSaleDetail.voidedAt && (
+                    <div style={{ fontSize: '0.75rem', marginTop: '0.2rem', color: '#b91c1c' }}>
+                      Fecha: {new Date(selectedSaleDetail.voidedAt).toLocaleString('es-HN')}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedSaleDetail.status === 'REFUNDED' && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.75rem 1rem', color: '#92400e', fontSize: '0.85rem' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '0.2rem' }}>DEVOLUCION PROCESADA</div>
+                  <div>Esta venta registra devolucion o sustitucion de producto.</div>
+                </div>
+              )}
+
+              {/* Actions & Reprint Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {selectedSaleDetail.status !== 'VOIDED' && selectedSaleDetail.status !== 'REFUNDED' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => handleOpenVoidModal(selectedSaleDetail)}
+                      style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '0.55rem', fontSize: '0.8rem', fontWeight: 600 }}
+                    >
+                      <Ban size={14} />
+                      <span>Anular Venta Completa</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => handleOpenRefundModal(selectedSaleDetail)}
+                      style={{ color: '#d97706', borderColor: '#fcd34d', padding: '0.55rem', fontSize: '0.8rem', fontWeight: 600 }}
+                    >
+                      <RotateCcw size={14} />
+                      <span>Devolucion / Cambio</span>
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.25rem' }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handlePrintReceipt(selectedSaleDetail, 'COPIA')}
+                    style={{ padding: '0.6rem 1rem', fontSize: '0.82rem' }}
+                  >
+                    <Printer size={15} />
+                    <span>Reimprimir Copia SAR</span>
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handlePrintReceipt(selectedSaleDetail, 'ORIGINAL')}
+                    style={{ padding: '0.6rem 1rem', fontSize: '0.82rem' }}
+                  >
+                    <Printer size={15} />
+                    <span>Imprimir Original Cliente</span>
+                  </button>
+                </div>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Void Sale */}
+      {isVoidModalOpen && saleToVoid && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(3px)',
+          zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '14px', width: '100%', maxWidth: '460px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #fee2e2', background: '#fef2f2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#dc2626', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Ban size={18} />
+                Anular Factura #{saleToVoid.documentNumber}
+              </h3>
+              <button
+                onClick={() => setIsVoidModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', color: '#475569' }}>
+                <p style={{ margin: 0, fontWeight: 600, color: '#0f172a' }}>Efectos operativos de la anulacion:</p>
+                <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0, lineHeight: 1.5 }}>
+                  <li>El stock vendido ({saleToVoid.items?.reduce((a, b) => a + b.quantity, 0) || 0} unidades) se reintegrara al inventario vendible.</li>
+                  <li>Si se cobro en efectivo y hay turno activo, se generara una SALIDA de caja de {formatCurrency(saleToVoid.total, tenant.currencySymbol)} para que el Arqueo Z cuadre con la gaveta fisica.</li>
+                </ul>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
+                  Motivo de Anulacion (Obligatorio)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Ej. Factura emitida por error de cobro / Cliente cancelo pedido..."
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsVoidModalOpen(false)}
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleConfirmVoid}
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.82rem', background: '#dc2626', borderColor: '#dc2626' }}
+                >
+                  Confirmar Anulacion
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Refund / Product Exchange */}
+      {isRefundModalOpen && saleToRefund && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(3px)',
+          zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '14px', width: '100%', maxWidth: '580px',
+            maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column'
+          }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#ffffff', zIndex: 10 }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <RotateCcw size={18} style={{ color: '#d97706' }} />
+                Devolucion o Cambio de Producto #{saleToRefund.documentNumber}
+              </h3>
+              <button
+                onClick={() => setIsRefundModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>
+                  Seleccione los articulos a devolver
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {refundItemsState.map((it, idx) => (
+                    <div key={idx} style={{
+                      padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0',
+                      background: it.selected ? '#f8fafc' : '#ffffff',
+                      display: 'flex', flexDirection: 'column', gap: '0.4rem'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={it.selected}
+                            onChange={(e) => {
+                              const updated = [...refundItemsState];
+                              updated[idx].selected = e.target.checked;
+                              setRefundItemsState(updated);
+                            }}
+                          />
+                          <span>{it.productName}</span>
+                        </label>
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                          {formatCurrency(it.unitPrice * it.quantity, tenant.currencySymbol)}
+                        </span>
+                      </div>
+
+                      {it.selected && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', paddingLeft: '1.5rem', paddingTop: '0.25rem' }}>
+                          <div>
+                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Cant. a devolver (Max {it.maxQuantity}):</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max={it.maxQuantity}
+                              value={it.quantity}
+                              onChange={(e) => {
+                                const val = Math.max(1, Math.min(it.maxQuantity, parseInt(e.target.value) || 1));
+                                const updated = [...refundItemsState];
+                                updated[idx].quantity = val;
+                                setRefundItemsState(updated);
+                              }}
+                              style={{ width: '100%', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: '#dc2626', fontWeight: 600, cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={it.isDamaged}
+                                onChange={(e) => {
+                                  const updated = [...refundItemsState];
+                                  updated[idx].isDamaged = e.target.checked;
+                                  setRefundItemsState(updated);
+                                }}
+                              />
+                              <span>En mal estado (Merma)</span>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  Forma de Devolucion / Reembolso
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setRefundMethod('CASH')}
+                    style={{
+                      flex: 1, padding: '0.5rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700,
+                      border: '1px solid #cbd5e1',
+                      background: refundMethod === 'CASH' ? 'var(--accent-primary)' : '#f8fafc',
+                      color: refundMethod === 'CASH' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Efectivo (Gaveta de Caja)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRefundMethod('STORE_CREDIT')}
+                    style={{
+                      flex: 1, padding: '0.5rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700,
+                      border: '1px solid #cbd5e1',
+                      background: refundMethod === 'STORE_CREDIT' ? 'var(--accent-primary)' : '#f8fafc',
+                      color: refundMethod === 'STORE_CREDIT' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Credito en Tienda / Vale de Cambio
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  Motivo de la Devolucion / Cambio (Obligatorio)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej. Producto en mal estado / Cambio por otro sabor o talla..."
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  style={{ width: '100%', padding: '0.55rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Total a Devolver:</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#16a34a' }}>
+                  {formatCurrency(
+                    refundItemsState.filter(i => i.selected).reduce((acc, it) => acc + (it.unitPrice * it.quantity), 0),
+                    tenant.currencySymbol
+                  )}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsRefundModalOpen(false)}
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleConfirmRefund}
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
+                >
+                  Procesar Devolucion
+                </button>
+              </div>
             </div>
           </div>
         </div>

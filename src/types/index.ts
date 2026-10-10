@@ -218,8 +218,49 @@ export interface Sale {
   loyaltyPointsEarned?: number;
   loyaltyPointsRedeemed?: number;
   loyaltyDiscountAmount?: number;
+  status?: 'COMPLETED' | 'VOIDED' | 'REFUNDED';
+  voidReason?: string;
+  voidedAt?: string;
   createdAt: string;
   items?: CartLine[];
+}
+
+export interface SalesReturn {
+  id: string;
+  tenantId: string;
+  saleId: string;
+  documentNumber: string;
+  cashShiftId?: string;
+  reason: string;
+  refundMethod: 'CASH' | 'STORE_CREDIT';
+  subtotal: number;
+  tax15: number;
+  tax18: number;
+  total: number;
+  isDamagedWaste?: boolean;
+  items: Array<{
+    productId?: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    isDamaged?: boolean;
+  }>;
+  createdAt: string;
+}
+
+export interface InventoryAdjustment {
+  id: string;
+  tenantId: string;
+  productId: string;
+  productName: string;
+  type: 'MERMA_DANADO' | 'VENCIDO' | 'AJUSTE_CONTEO' | 'USO_INTERNO';
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  notes?: string;
+  registeredBy?: string;
+  createdAt: string;
 }
 
 export interface AccountPayment {

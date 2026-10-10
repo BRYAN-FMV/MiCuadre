@@ -110,6 +110,7 @@ export const CashShiftModal: React.FC = () => {
     const shiftSales = sales.filter((s: Sale) => {
       const matchesTenant = !s.tenantId || s.tenantId === tenant.id;
       if (!matchesTenant) return false;
+      if (s.status === 'VOIDED') return false;
 
       // 1. Direct ID match
       if (activeShift?.id && s.cashShiftId === activeShift.id) return true;

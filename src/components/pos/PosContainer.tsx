@@ -5,7 +5,8 @@ import { generateEscPosReceipt } from '../../lib/escPos';
 import { toast } from 'sonner';
 import {
   Search, ShoppingCart, UserCheck, Trash2, Plus, Minus,
-  CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle
+  CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle,
+  Tag, Percent
 } from 'lucide-react';
 import { Sale, Product, CartLine, Customer } from '../../types';
 
@@ -37,12 +38,16 @@ export const PosContainer: React.FC = () => {
   const restoreHeldCart = useAppStore(state => state.restoreHeldCart);
   const deleteHeldCart = useAppStore(state => state.deleteHeldCart);
   const processSale = useAppStore(state => state.processSale);
+  const applyGlobalCartDiscount = useAppStore(state => state.applyGlobalCartDiscount);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('TODOS');
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isHeldOrdersModalOpen, setIsHeldOrdersModalOpen] = useState(false);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [discountType, setDiscountType] = useState<'PERCENT' | 'FIXED'>('PERCENT');
+  const [discountValue, setDiscountValue] = useState<string>('');
   const [selectedDocType, setSelectedDocType] = useState<'FISCAL' | 'TICKET'>('FISCAL');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT'>('CASH');
   const [cashTendered, setCashTendered] = useState<string>('');
@@ -143,9 +148,38 @@ export const PosContainer: React.FC = () => {
   };
 
   const cartSubtotal = cartLines.reduce((acc: number, l: CartLine) => acc + l.subtotal, 0);
+  const cartDiscountTotal = cartLines.reduce((acc: number, l: CartLine) => acc + (l.discountAmount || 0), 0);
   const cartTax15 = cartLines.filter((l: CartLine) => l.taxClassification === 'GRAVADO_15').reduce((acc: number, l: CartLine) => acc + l.taxAmount, 0);
   const cartTax18 = cartLines.filter((l: CartLine) => l.taxClassification === 'GRAVADO_18').reduce((acc: number, l: CartLine) => acc + l.taxAmount, 0);
   const cartGrandTotal = cartLines.reduce((acc: number, l: CartLine) => acc + l.total, 0);
+
+  const handleApplySeniorDiscount = () => {
+    applyGlobalCartDiscount(25, true);
+    setIsDiscountModalOpen(false);
+    toast.success('Descuento de Tercera Edad (25%) aplicado al carrito');
+  };
+
+  const handleApplyCustomDiscount = () => {
+    const val = parseFloat(discountValue);
+    if (isNaN(val) || val <= 0) {
+      toast.error('Ingrese un monto o porcentaje de descuento valido');
+      return;
+    }
+    if (discountType === 'PERCENT' && val > 100) {
+      toast.error('El porcentaje no puede superar el 100%');
+      return;
+    }
+    applyGlobalCartDiscount(val, discountType === 'PERCENT');
+    setIsDiscountModalOpen(false);
+    setDiscountValue('');
+    toast.success(`Descuento de ${discountType === 'PERCENT' ? `${val}%` : formatCurrency(val, tenant.currencySymbol)} aplicado`);
+  };
+
+  const handleRemoveDiscount = () => {
+    applyGlobalCartDiscount(0, false);
+    setIsDiscountModalOpen(false);
+    toast.info('Descuento eliminado');
+  };
 
   // Tenant Customers & Loyalty Calculations
   const tenantCustomers = customers.filter((c: Customer) => c.tenantId === tenant.id);
@@ -533,7 +567,14 @@ export const PosContainer: React.FC = () => {
             cartLines.map((line: CartLine, index: number) => (
               <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 80px', alignItems: 'center', padding: '0.6rem 0', borderBottom: '1px solid #f1f5f9' }}>
                 <div>
-                  <h5 style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, margin: 0 }}>{line.name}</h5>
+                  <h5 style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, margin: 0 }}>
+                    {line.name}
+                    {line.discountAmount > 0 && (
+                      <span className="badge" style={{ fontSize: '0.62rem', background: '#fee2e2', color: '#dc2626', fontWeight: 700, marginLeft: '0.35rem' }}>
+                        Desc: -{formatCurrency(line.discountAmount, tenant.currencySymbol)}
+                      </span>
+                    )}
+                  </h5>
                   {line.appliedTierName && (
                     <span className="badge badge-wholesale" style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem' }}>
                       {line.appliedTierName}
@@ -604,6 +645,13 @@ export const PosContainer: React.FC = () => {
             <span>{formatCurrency(cartSubtotal, tenant.currencySymbol)}</span>
           </div>
 
+          {cartDiscountTotal > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#dc2626', fontWeight: 700 }}>
+              <span>Descuento Otorgado:</span>
+              <span>-{formatCurrency(cartDiscountTotal, tenant.currencySymbol)}</span>
+            </div>
+          )}
+
           {cartTax15 > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
               <span>ISV 15%:</span>
@@ -626,22 +674,38 @@ export const PosContainer: React.FC = () => {
           </div>
 
           {/* Action Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginTop: '0.4rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', marginTop: '0.4rem' }}>
             <button
               className="btn btn-secondary"
               onClick={clearCart}
               disabled={cartLines.length === 0}
-              style={{ padding: '0.55rem', fontSize: '0.8rem', color: '#dc2626', borderColor: '#fca5a5' }}
+              style={{ padding: '0.55rem', fontSize: '0.78rem', color: '#dc2626', borderColor: '#fca5a5' }}
             >
-              Vaciar Carrito
+              Vaciar
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setIsDiscountModalOpen(true)}
+              disabled={cartLines.length === 0}
+              style={{
+                padding: '0.55rem', fontSize: '0.78rem',
+                color: cartDiscountTotal > 0 ? '#16a34a' : '#475569',
+                borderColor: cartDiscountTotal > 0 ? '#86efac' : '#cbd5e1',
+                background: cartDiscountTotal > 0 ? '#f0fdf4' : '#ffffff',
+                fontWeight: cartDiscountTotal > 0 ? 700 : 500
+              }}
+              title="Aplicar Descuento o Ley Tercera Edad"
+            >
+              <Tag size={13} />
+              <span>{cartDiscountTotal > 0 ? 'Descuento Activo' : 'Descuento'}</span>
             </button>
             <button
               className="btn btn-secondary"
               onClick={handleHoldCart}
               disabled={cartLines.length === 0}
-              style={{ padding: '0.55rem', fontSize: '0.8rem', color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
+              style={{ padding: '0.55rem', fontSize: '0.78rem', color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
             >
-              <PauseCircle size={14} />
+              <PauseCircle size={13} />
               <span>Retener</span>
             </button>
           </div>
@@ -1275,6 +1339,132 @@ export const PosContainer: React.FC = () => {
               <button className="btn btn-secondary" onClick={() => setLastCompletedSale(null)} style={{ width: '100%', fontSize: '0.8rem', padding: '0.4rem' }}>
                 Cerrar Ventana
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Apply Cart Discount */}
+      {isDiscountModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)',
+          zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '14px', width: '100%', maxWidth: '440px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Tag size={18} style={{ color: 'var(--accent-primary)' }} />
+                Aplicar Descuento al Carrito
+              </h3>
+              <button
+                onClick={() => setIsDiscountModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>
+                  Descuento por Ley
+                </label>
+                <button
+                  type="button"
+                  onClick={handleApplySeniorDiscount}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', justifyContent: 'flex-start', padding: '0.65rem 0.85rem', borderColor: '#3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700 }}
+                >
+                  <Percent size={16} />
+                  <div style={{ textAlign: 'left' }}>
+                    <div>Tercera Edad / Adulto Mayor (25%)</div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 400, color: '#2563eb' }}>Ley de Proteccion Integral del Adulto Mayor (Honduras)</span>
+                  </div>
+                </button>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>
+                  Descuento Personalizado
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('PERCENT')}
+                    style={{
+                      flex: 1, padding: '0.45rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700,
+                      border: '1px solid #cbd5e1',
+                      background: discountType === 'PERCENT' ? 'var(--accent-primary)' : '#f8fafc',
+                      color: discountType === 'PERCENT' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Porcentaje (%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('FIXED')}
+                    style={{
+                      flex: 1, padding: '0.45rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700,
+                      border: '1px solid #cbd5e1',
+                      background: discountType === 'FIXED' ? 'var(--accent-primary)' : '#f8fafc',
+                      color: discountType === 'FIXED' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Monto Fijo ({tenant.currencySymbol})
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    step={discountType === 'PERCENT' ? '1' : '0.01'}
+                    max={discountType === 'PERCENT' ? '100' : undefined}
+                    placeholder={discountType === 'PERCENT' ? 'Ej. 10' : 'Ej. 50.00'}
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleApplyCustomDiscount();
+                      }
+                    }}
+                    style={{
+                      flex: 1, padding: '0.55rem 0.75rem', borderRadius: '6px',
+                      border: '1px solid #cbd5e1', fontSize: '0.9rem', outline: 'none'
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleApplyCustomDiscount}
+                    style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+
+              {cartDiscountTotal > 0 && (
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={handleRemoveDiscount}
+                    className="btn btn-secondary"
+                    style={{ width: '100%', color: '#dc2626', borderColor: '#fca5a5', padding: '0.55rem', fontSize: '0.8rem' }}
+                  >
+                    Quitar Descuento del Carrito (0%)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

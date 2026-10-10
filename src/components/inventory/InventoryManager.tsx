@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Plus, History, Search, Package, Edit2, Trash2, X, AlertTriangle } from 'lucide-react';
 
 export const InventoryManager: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, tenant } = useAppStore();
+  const { products, addProduct, updateProduct, deleteProduct, tenant, addInventoryAdjustment, inventoryAdjustments } = useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('TODOS');
@@ -17,6 +17,14 @@ export const InventoryManager: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [selectedKardexProduct, setSelectedKardexProduct] = useState<Product | null>(null);
+
+  // Inventory Adjustment (Merma / Mal Estado) state
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [selectedAdjustmentProduct, setSelectedAdjustmentProduct] = useState<Product | null>(null);
+  const [adjustmentType, setAdjustmentType] = useState<'MERMA_DANADO' | 'VENCIDO' | 'AJUSTE_CONTEO' | 'USO_INTERNO'>('MERMA_DANADO');
+  const [adjustmentQty, setAdjustmentQty] = useState('1');
+  const [adjustmentNotes, setAdjustmentNotes] = useState('');
+  const [isAdjustmentsHistoryOpen, setIsAdjustmentsHistoryOpen] = useState(false);
 
   // Form State for new/edit product
   const [name, setName] = useState('');
@@ -133,6 +141,39 @@ export const InventoryManager: React.FC = () => {
     }
   };
 
+  const openAdjustmentModal = (product: Product) => {
+    setSelectedAdjustmentProduct(product);
+    setAdjustmentType('MERMA_DANADO');
+    setAdjustmentQty('1');
+    setAdjustmentNotes('');
+    setIsAdjustmentModalOpen(true);
+  };
+
+  const handleSaveAdjustment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAdjustmentProduct) return;
+    const qty = parseInt(adjustmentQty);
+    if (isNaN(qty) || qty <= 0) {
+      toast.error('Ingrese una cantidad valida a ajustar');
+      return;
+    }
+    if (qty > selectedAdjustmentProduct.currentStock) {
+      toast.warning(`Atencion: La cantidad a ajustar (${qty}) supera el stock actual (${selectedAdjustmentProduct.currentStock}).`);
+    }
+
+    addInventoryAdjustment({
+      productId: selectedAdjustmentProduct.id,
+      productName: selectedAdjustmentProduct.name,
+      type: adjustmentType,
+      quantity: qty,
+      notes: adjustmentNotes.trim() || undefined
+    });
+
+    setIsAdjustmentModalOpen(false);
+  };
+
+  const tenantAdjustments = (inventoryAdjustments || []).filter(a => a.tenantId === tenant.id);
+
   // Multi-tenant product filtering & Stock counters
   const tenantProducts = products.filter((p: Product) => p.tenantId === tenant.id);
   const categories = ['TODOS', ...Array.from(new Set(tenantProducts.map((p: Product) => p.category)))];
@@ -175,16 +216,27 @@ export const InventoryManager: React.FC = () => {
           </p>
         </div>
 
-        {canEditInventory ? (
-          <button className="btn btn-primary" onClick={openAddModal} style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
-            <Plus size={16} />
-            <span>Nuevo Producto</span>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setIsAdjustmentsHistoryOpen(true)}
+            style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
+            title="Ver auditoría de mermas, productos vencidos y pérdidas"
+          >
+            <History size={16} />
+            <span>Mermas & Ajustes ({tenantAdjustments.length})</span>
           </button>
-        ) : (
-          <span className="badge badge-wholesale" style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}>
-            Modo Consulta de Precios & Existencias
-          </span>
-        )}
+          {canEditInventory ? (
+            <button className="btn btn-primary" onClick={openAddModal} style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
+              <Plus size={16} />
+              <span>Nuevo Producto</span>
+            </button>
+          ) : (
+            <span className="badge badge-wholesale" style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}>
+              Modo Consulta de Precios & Existencias
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Filter Toolbar */}
@@ -370,6 +422,14 @@ export const InventoryManager: React.FC = () => {
                           </button>
                           {canEditInventory && (
                             <>
+                              <button
+                                title="Registrar Merma / Ajuste"
+                                className="btn btn-secondary"
+                                onClick={() => openAdjustmentModal(p)}
+                                style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#d97706' }}
+                              >
+                                <AlertTriangle size={14} />
+                              </button>
                               <button
                                 title="Editar Producto"
                                 className="btn btn-secondary"
@@ -753,6 +813,205 @@ export const InventoryManager: React.FC = () => {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Record Inventory Adjustment / Merma */}
+      {isAdjustmentModalOpen && selectedAdjustmentProduct && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)',
+          zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '480px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #fee2e2', background: '#fef2f2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#dc2626', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertTriangle size={18} />
+                Registrar Ajuste / Merma de Inventario
+              </h3>
+              <button
+                onClick={() => setIsAdjustmentModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdjustment} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Producto:</span>
+                  <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>{selectedAdjustmentProduct.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>SKU: {selectedAdjustmentProduct.sku}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Stock Actual:</span>
+                  <div style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '1rem' }}>
+                    {selectedAdjustmentProduct.currentStock} {selectedAdjustmentProduct.unitOfMeasure || 'Unid.'}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  Tipo de Ajuste o Perdida
+                </label>
+                <select
+                  value={adjustmentType}
+                  onChange={(e) => setAdjustmentType(e.target.value as any)}
+                  className="form-control"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                >
+                  <option value="MERMA_DANADO">Producto Danado / En Mal Estado (Merma)</option>
+                  <option value="VENCIDO">Producto Vencido / Expirado</option>
+                  <option value="AJUSTE_CONTEO">Faltante por Conteo Fisico</option>
+                  <option value="USO_INTERNO">Uso / Consumo Interno del Negocio</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  Cantidad a Rebajar del Inventario
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={selectedAdjustmentProduct.currentStock}
+                  value={adjustmentQty}
+                  onChange={(e) => setAdjustmentQty(e.target.value)}
+                  className="form-control"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  Observaciones / Justificacion
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Ej. Fruta en mal estado / Empaque roto / Conteo fin de mes..."
+                  value={adjustmentNotes}
+                  onChange={(e) => setAdjustmentNotes(e.target.value)}
+                  className="form-control"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsAdjustmentModalOpen(false)}
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ padding: '0.5rem 1rem', fontSize: '0.82rem', background: '#dc2626', borderColor: '#dc2626' }}
+                >
+                  Confirmar Rebaja
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Adjustments & Mermas History */}
+      {isAdjustmentsHistoryOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)',
+          zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '720px',
+            maxHeight: '90vh', overflowY: 'auto',
+            padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+            display: 'flex', flexDirection: 'column', gap: '1rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', color: '#0f172a', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <History size={20} style={{ color: 'var(--accent-primary)' }} />
+                  Auditoria de Mermas, Vencidos & Ajustes de Stock
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
+                  Registro de perdidas y bajas de mercaderia no recuperable
+                </p>
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setIsAdjustmentsHistoryOpen(false)}
+                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="table-responsive">
+              <table className="table" style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Fecha</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Producto</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Tipo</th>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>Cant.</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Stock Previo / Nuevo</th>
+                    <th style={{ padding: '0.6rem 0.75rem' }}>Responsable / Notas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenantAdjustments.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                        No hay registros de mermas o ajustes manuales.
+                      </td>
+                    </tr>
+                  ) : (
+                    tenantAdjustments.map((adj) => (
+                      <tr key={adj.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.6rem 0.75rem', color: '#64748b' }}>
+                          {new Date(adj.createdAt).toLocaleString('es-HN', { dateStyle: 'short', timeStyle: 'short' })}
+                        </td>
+                        <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, color: '#0f172a' }}>
+                          {adj.productName}
+                        </td>
+                        <td style={{ padding: '0.6rem 0.75rem' }}>
+                          <span className="badge" style={{
+                            background: adj.type === 'MERMA_DANADO' ? '#fee2e2' : adj.type === 'VENCIDO' ? '#ffedd5' : '#f1f5f9',
+                            color: adj.type === 'MERMA_DANADO' ? '#dc2626' : adj.type === 'VENCIDO' ? '#ea580c' : '#475569',
+                            fontWeight: 700
+                          }}>
+                            {adj.type === 'MERMA_DANADO' ? 'Dano / Merma' : adj.type === 'VENCIDO' ? 'Vencido' : adj.type === 'AJUSTE_CONTEO' ? 'Conteo' : 'Uso Interno'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', fontWeight: 800, color: '#dc2626' }}>
+                          -{adj.quantity}
+                        </td>
+                        <td style={{ padding: '0.6rem 0.75rem', color: '#64748b' }}>
+                          {adj.previousStock} &rarr; {adj.newStock}
+                        </td>
+                        <td style={{ padding: '0.6rem 0.75rem', color: '#475569' }}>
+                          <div>{adj.registeredBy}</div>
+                          {adj.notes && <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{adj.notes}</div>}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

@@ -3,7 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import {
   Tenant, UserProfile, Product, FiscalRange, CashShift, CashMovement,
   CartLine, Sale, PurchaseInvoice, Supplier, Service, Staff,
-  Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment
+  Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment,
+  SalesReturn, InventoryAdjustment
 } from '../types';
 import {
   INITIAL_TENANT, INITIAL_PROFILES, INITIAL_PRODUCTS,
@@ -12,7 +13,7 @@ import {
   INITIAL_FUNDS, INITIAL_CUSTOMERS, INITIAL_ACCOUNT_PAYMENTS
 } from '../lib/mockData';
 
-import { calculateLineTotals, calculateCartTotals, calculateCPP } from '../lib/monetary';
+import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
 import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase } from '../lib/supabaseService';
@@ -60,6 +61,8 @@ interface AppState {
   cartCustomer: { id?: string; rtn?: string; name: string; loyaltyPoints?: number };
   heldOrders: HeldOrder[];
   sales: Sale[];
+  salesReturns: SalesReturn[];
+  inventoryAdjustments: InventoryAdjustment[];
 
   // Customer Management & Loyalty
   customers: Customer[];
@@ -133,6 +136,8 @@ interface AppState {
   holdCurrentCart: () => void;
   restoreHeldCart: (heldOrderId: string) => void;
   deleteHeldCart: (heldOrderId: string) => void;
+  setCartLineDiscount: (index: number, discountAmount: number) => void;
+  applyGlobalCartDiscount: (percentageOrFixed: number, isPercentage: boolean) => void;
 
   // Shift Actions & Movements
   cashMovements: CashMovement[];
@@ -140,8 +145,11 @@ interface AppState {
   closeCashShift: (declaredCash: number) => { difference: number; closingSystem: number };
   addCashMovement: (type: 'ENTRADA' | 'SALIDA', amount: number, concept: string, referenceId?: string) => void;
 
-  // Sales Action
+  // Sales Action & Returns
   processSale: (paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT', loyaltyPointsRedeemed?: number, overrideIsFiscal?: boolean) => Sale | null;
+  voidSale: (saleId: string, reason: string) => boolean;
+  refundSale: (refundData: { saleId: string; reason: string; refundMethod: 'CASH' | 'STORE_CREDIT'; isDamagedWaste?: boolean; items: Array<{ productId?: string; productName: string; quantity: number; unitPrice: number; subtotal: number; isDamaged?: boolean }> }) => boolean;
+  addInventoryAdjustment: (adjustment: Omit<InventoryAdjustment, 'id' | 'tenantId' | 'createdAt' | 'previousStock' | 'newStock' | 'registeredBy'> & { previousStock?: number; newStock?: number; registeredBy?: string }) => void;
 
   // Purchase & Supplier Actions
   addSupplier: (supplier: Omit<Supplier, 'id' | 'tenantId'>) => void;
@@ -202,6 +210,8 @@ export const useAppStore = create<AppState>()(
       cartCustomer: { name: 'Consumidor Final' },
       heldOrders: [],
       sales: [],
+      salesReturns: [],
+      inventoryAdjustments: [],
       customers: INITIAL_CUSTOMERS,
       accountPayments: INITIAL_ACCOUNT_PAYMENTS,
       suppliers: INITIAL_SUPPLIERS,
@@ -762,6 +772,61 @@ export const useAppStore = create<AppState>()(
     return { cartLines: updated };
   }),
 
+  setCartLineDiscount: (index, discountAmount) => set((state) => {
+    if (index < 0 || index >= state.cartLines.length) return state;
+    const targetLine = state.cartLines[index];
+    const product = state.products.find(p => String(p.id).trim() === String(targetLine.productId).trim() || p.sku === targetLine.sku);
+    const lineCalculations = calculateLineTotals(
+      targetLine.originalUnitPrice,
+      targetLine.quantity,
+      targetLine.taxClassification,
+      discountAmount,
+      product?.tiers,
+      state.tenant.pricesIncludeTax ?? true
+    );
+    const updatedLines = [...state.cartLines];
+    updatedLines[index] = {
+      ...targetLine,
+      discountAmount,
+      subtotal: lineCalculations.subtotal,
+      taxAmount: lineCalculations.taxAmount,
+      total: lineCalculations.total
+    };
+    return { cartLines: updatedLines };
+  }),
+
+  applyGlobalCartDiscount: (percentageOrFixed, isPercentage) => set((state) => {
+    if (state.cartLines.length === 0) return state;
+    const grossTotal = state.cartLines.reduce((acc, line) => acc + (line.originalUnitPrice * line.quantity), 0);
+    if (grossTotal <= 0) return state;
+
+    const totalDiscount = isPercentage ? grossTotal * (percentageOrFixed / 100) : percentageOrFixed;
+
+    const updatedLines = state.cartLines.map(line => {
+      const lineGross = line.originalUnitPrice * line.quantity;
+      const proportion = lineGross / grossTotal;
+      const lineDiscount = Math.round((totalDiscount * proportion) * 100) / 100;
+      const product = state.products.find(p => String(p.id).trim() === String(line.productId).trim() || p.sku === line.sku);
+      const lineCalculations = calculateLineTotals(
+        line.originalUnitPrice,
+        line.quantity,
+        line.taxClassification,
+        lineDiscount,
+        product?.tiers,
+        state.tenant.pricesIncludeTax ?? true
+      );
+      return {
+        ...line,
+        discountAmount: lineDiscount,
+        subtotal: lineCalculations.subtotal,
+        taxAmount: lineCalculations.taxAmount,
+        total: lineCalculations.total
+      };
+    });
+
+    return { cartLines: updatedLines };
+  }),
+
   removeCartLine: (index) => set((state) => ({
     cartLines: state.cartLines.filter((_, i) => i !== index)
   })),
@@ -905,6 +970,7 @@ export const useAppStore = create<AppState>()(
     const shiftSales = state.sales.filter(s => {
       const matchesTenant = !s.tenantId || s.tenantId === shift.tenantId;
       if (!matchesTenant) return false;
+      if (s.status === 'VOIDED') return false;
 
       // 1. Direct ID match
       if (s.cashShiftId && s.cashShiftId === shift.id) return true;
@@ -1220,6 +1286,222 @@ export const useAppStore = create<AppState>()(
 
     return newSale;
   },
+
+  voidSale: (saleId, reason) => {
+    const state = get();
+    const sale = (state.sales || []).find(s => s.id === saleId);
+    if (!sale) {
+      toast.error('Factura no encontrada');
+      return false;
+    }
+    if (sale.status === 'VOIDED') {
+      toast.error('Esta factura ya fue anulada previamente');
+      return false;
+    }
+
+    // 1. Restituye inventario vendible
+    const updatedProducts = [...state.products];
+    if (sale.items && sale.items.length > 0) {
+      for (const item of sale.items) {
+        if (item.productId) {
+          const pIndex = updatedProducts.findIndex(p => p.id === item.productId || p.sku === item.sku);
+          if (pIndex >= 0) {
+            updatedProducts[pIndex] = {
+              ...updatedProducts[pIndex],
+              currentStock: updatedProducts[pIndex].currentStock + item.quantity
+            };
+            if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+              saveProductToSupabase(updatedProducts[pIndex]).catch(e => console.warn('Supabase update product on void:', e));
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Si se cobró en efectivo y hay turno activo, registrar SALIDA de caja para que el arqueo cuadre
+    let updatedMovements = [...(state.cashMovements || [])];
+    if ((sale.paymentMethod === 'CASH' || sale.paymentMethod === 'MIXED') && state.activeShift && state.activeShift.status === 'OPEN') {
+      const shift = state.activeShift;
+      const movement: CashMovement = {
+        id: generateUUID(),
+        tenantId: state.tenant.id,
+        cashShiftId: shift.id,
+        fiscalRangeId: shift.fiscalRangeId || '',
+        type: 'SALIDA',
+        amount: sale.total,
+        concept: `Anulación de Factura #${sale.documentNumber}: ${reason}`,
+        registeredBy: state.currentUser?.fullName || 'Administrador',
+        createdAt: new Date().toISOString(),
+        referenceId: sale.id
+      };
+      updatedMovements = [movement, ...updatedMovements];
+      if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+        saveCashMovementToSupabase(movement).catch(e => console.warn('Supabase save void movement:', e));
+      }
+    }
+
+    // 3. Marcar venta como ANULADA
+    const updatedSales = state.sales.map(s =>
+      s.id === saleId
+        ? { ...s, status: 'VOIDED' as const, voidReason: reason, voidedAt: new Date().toISOString() }
+        : s
+    );
+
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      supabase.from('sales').update({
+        customer_name: `${sale.customerName} [ANULADA: ${reason}]`
+      }).eq('id', saleId).then(({ error }) => {
+        if (error) console.warn('Supabase update sale on void:', error.message);
+      });
+    }
+
+    set({
+      sales: updatedSales,
+      products: updatedProducts,
+      cashMovements: updatedMovements
+    });
+
+    toast.success(`Factura #${sale.documentNumber} anulada exitosamente. Stock devuelto a inventario.`);
+    return true;
+  },
+
+  refundSale: (refundData) => {
+    const state = get();
+    const sale = (state.sales || []).find(s => s.id === refundData.saleId);
+    if (!sale) {
+      toast.error('Factura no encontrada');
+      return false;
+    }
+
+    const refundTotal = refundData.items.reduce((acc, it) => acc + (it.unitPrice * it.quantity), 0);
+    const updatedProducts = [...state.products];
+    const newAdjustments: InventoryAdjustment[] = [];
+
+    for (const it of refundData.items) {
+      if (it.productId) {
+        const pIndex = updatedProducts.findIndex(p => p.id === it.productId);
+        if (pIndex >= 0) {
+          const prod = updatedProducts[pIndex];
+          if (refundData.isDamagedWaste || it.isDamaged) {
+            // Producto Dañado / Merma: NO vuelve al stock vendible
+            newAdjustments.push({
+              id: generateUUID(),
+              tenantId: state.tenant.id,
+              productId: prod.id,
+              productName: prod.name,
+              type: 'MERMA_DANADO',
+              quantity: it.quantity,
+              previousStock: prod.currentStock,
+              newStock: prod.currentStock,
+              notes: `Devolución por mal estado de Factura #${sale.documentNumber}: ${refundData.reason}`,
+              registeredBy: state.currentUser?.fullName || 'Usuario',
+              createdAt: new Date().toISOString()
+            });
+          } else {
+            // Producto en buen estado: regresa al stock disponible
+            updatedProducts[pIndex] = {
+              ...prod,
+              currentStock: prod.currentStock + it.quantity
+            };
+            if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+              saveProductToSupabase(updatedProducts[pIndex]).catch(e => console.warn('Supabase update product on refund:', e));
+            }
+          }
+        }
+      }
+    }
+
+    // Movimiento de caja en caso de reembolso en efectivo
+    let updatedMovements = [...(state.cashMovements || [])];
+    if (refundData.refundMethod === 'CASH' && state.activeShift && state.activeShift.status === 'OPEN') {
+      const shift = state.activeShift;
+      const movement: CashMovement = {
+        id: generateUUID(),
+        tenantId: state.tenant.id,
+        cashShiftId: shift.id,
+        fiscalRangeId: shift.fiscalRangeId || '',
+        type: 'SALIDA',
+        amount: refundTotal,
+        concept: `Devolución de Factura #${sale.documentNumber}: ${refundData.reason}`,
+        registeredBy: state.currentUser?.fullName || 'Administrador',
+        createdAt: new Date().toISOString(),
+        referenceId: sale.id
+      };
+      updatedMovements = [movement, ...updatedMovements];
+      if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+        saveCashMovementToSupabase(movement).catch(e => console.warn('Supabase save refund movement:', e));
+      }
+    }
+
+    const newReturn: SalesReturn = {
+      id: generateUUID(),
+      tenantId: state.tenant.id,
+      saleId: sale.id,
+      documentNumber: sale.documentNumber,
+      cashShiftId: state.activeShift?.id,
+      reason: refundData.reason,
+      refundMethod: refundData.refundMethod,
+      subtotal: refundTotal,
+      tax15: 0,
+      tax18: 0,
+      total: refundTotal,
+      isDamagedWaste: refundData.isDamagedWaste,
+      items: refundData.items,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedSales = state.sales.map(s =>
+      s.id === refundData.saleId
+        ? { ...s, status: 'REFUNDED' as const }
+        : s
+    );
+
+    set({
+      sales: updatedSales,
+      products: updatedProducts,
+      cashMovements: updatedMovements,
+      salesReturns: [newReturn, ...(state.salesReturns || [])],
+      inventoryAdjustments: [...newAdjustments, ...(state.inventoryAdjustments || [])]
+    });
+
+    toast.success(`Devolución de ${formatCurrency(refundTotal, state.tenant.currencySymbol)} procesada correctamente.`);
+    return true;
+  },
+
+  addInventoryAdjustment: (adjData) => set((state) => {
+    const prodIndex = state.products.findIndex(p => p.id === adjData.productId);
+    if (prodIndex < 0) return state;
+
+    const prod = state.products[prodIndex];
+    const newStock = Math.max(0, prod.currentStock - adjData.quantity);
+
+    const adjustment: InventoryAdjustment = {
+      ...adjData,
+      id: generateUUID(),
+      tenantId: state.tenant.id,
+      previousStock: prod.currentStock,
+      newStock,
+      registeredBy: state.currentUser?.fullName || 'Usuario',
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedProducts = [...state.products];
+    updatedProducts[prodIndex] = {
+      ...prod,
+      currentStock: newStock
+    };
+
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      saveProductToSupabase(updatedProducts[prodIndex]).catch(e => console.warn('Supabase update product on adjustment:', e));
+    }
+
+    toast.success(`Ajuste de inventario registrado (${adjData.type}): -${adjData.quantity} unidades.`);
+
+    return {
+      products: updatedProducts,
+      inventoryAdjustments: [adjustment, ...(state.inventoryAdjustments || [])]
+    };
+  }),
 
   addSupplier: (supplierData) => set((state) => {
     const newSupplier: Supplier = {
@@ -1689,7 +1971,10 @@ export const useAppStore = create<AppState>()(
   }),
 
   resetToDefaultData: () => {
-    localStorage.removeItem('micuadre_app_state');
+    try {
+      localStorage.removeItem('micuadre_app_state');
+      localStorage.removeItem('micuadre_active_shift_id');
+    } catch (e) {}
     set({
       isAuthenticated: false,
       tenant: INITIAL_TENANT,
@@ -1700,10 +1985,16 @@ export const useAppStore = create<AppState>()(
       fiscalRange: INITIAL_FISCAL_RANGE,
       products: INITIAL_PRODUCTS,
       activeShift: null,
+      shiftHistory: [],
+      cashMovements: [],
       cartLines: [],
       cartCustomer: { name: 'Consumidor Final' },
       heldOrders: [],
       sales: [],
+      salesReturns: [],
+      inventoryAdjustments: [],
+      customers: INITIAL_CUSTOMERS,
+      accountPayments: INITIAL_ACCOUNT_PAYMENTS,
       suppliers: INITIAL_SUPPLIERS,
       purchaseInvoices: [],
       funds: INITIAL_FUNDS,

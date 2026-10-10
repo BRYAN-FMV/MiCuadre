@@ -217,4 +217,205 @@ describe('App Zustand Store Business Logic', () => {
     expect(resultCaja2.closingSystem).toBe(700);
     expect(resultCaja2.difference).toBe(0);
   });
+
+  it('should apply global discounts (such as 25% Senior Citizen Tercera Edad) to cart items proportionally', () => {
+    const store = useAppStore.getState();
+
+    const productA: Product = {
+      id: 'prod-disc-1',
+      tenantId: store.tenant.id,
+      sku: 'DISC-A',
+      name: 'Producto A',
+      category: 'General',
+      unitOfMeasure: 'UND',
+      salePrice: 100,
+      costPrice: 50,
+      currentStock: 20,
+      minStockAlert: 5,
+      taxClassification: 'EXENTO',
+      isActive: true
+    };
+
+    useAppStore.setState({ products: [productA] });
+
+    // Add 2 units: Gross = L. 200
+    store.addToCart({ product: productA, quantity: 2 });
+    expect(useAppStore.getState().cartLines[0].total).toBe(200);
+
+    // Apply Senior Citizen discount: 25%
+    store.applyGlobalCartDiscount(25, true);
+
+    const discountedLines = useAppStore.getState().cartLines;
+    expect(discountedLines[0].discountAmount).toBe(50); // 25% of 200 = 50
+    expect(discountedLines[0].total).toBe(150);
+
+    // Clear discount (0%)
+    store.applyGlobalCartDiscount(0, false);
+    const clearedLines = useAppStore.getState().cartLines;
+    expect(clearedLines[0].discountAmount).toBe(0);
+    expect(clearedLines[0].total).toBe(200);
+  });
+
+  it('should void a sale, restoring stock and registering a cash outflow in active shift', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(500);
+
+    const product: Product = {
+      id: 'prod-void-1',
+      tenantId: store.tenant.id,
+      sku: 'VOID-01',
+      name: 'Articulo Anulable',
+      category: 'General',
+      unitOfMeasure: 'UND',
+      salePrice: 100,
+      costPrice: 60,
+      currentStock: 10,
+      minStockAlert: 2,
+      taxClassification: 'EXENTO',
+      isActive: true
+    };
+
+    useAppStore.setState({ products: [product] });
+
+    // Sell 2 units in cash (Total = L. 200)
+    useAppStore.getState().addToCart({ product, quantity: 2 });
+    const sale = useAppStore.getState().processSale('CASH');
+    expect(sale).not.toBeNull();
+    expect(sale?.total).toBe(200);
+
+    // Stock should be 8
+    const stockAfterSale = useAppStore.getState().products.find(p => p.id === product.id)?.currentStock;
+    expect(stockAfterSale).toBe(8);
+
+    // Void the sale
+    const voidSuccess = store.voidSale(sale!.id, 'Error de cobro cajero');
+    expect(voidSuccess).toBe(true);
+
+    // Stock must be restored to 10
+    const stockAfterVoid = useAppStore.getState().products.find(p => p.id === product.id)?.currentStock;
+    expect(stockAfterVoid).toBe(10);
+
+    // Sale status must be VOIDED
+    const voidedSale = useAppStore.getState().sales.find(s => s.id === sale!.id);
+    expect(voidedSale?.status).toBe('VOIDED');
+    expect(voidedSale?.voidReason).toBe('Error de cobro cajero');
+
+    // A cash movement of type SALIDA for L. 200 must be registered
+    const movements = useAppStore.getState().cashMovements;
+    const voidMovement = movements.find(m => m.referenceId === sale!.id && m.type === 'SALIDA');
+    expect(voidMovement).toBeDefined();
+    expect(voidMovement?.amount).toBe(200);
+
+    // Attempting to void again should fail
+    const secondVoid = store.voidSale(sale!.id, 'Duplicado intento');
+    expect(secondVoid).toBe(false);
+  });
+
+  it('should process product return for defective/damaged waste without returning to sellable stock', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(500);
+
+    const product: Product = {
+      id: 'prod-waste-1',
+      tenantId: store.tenant.id,
+      sku: 'WASTE-01',
+      name: 'Leche Pasteurizada',
+      category: 'Lácteos',
+      unitOfMeasure: 'UND',
+      salePrice: 30,
+      costPrice: 20,
+      currentStock: 10,
+      minStockAlert: 2,
+      taxClassification: 'EXENTO',
+      isActive: true
+    };
+
+    useAppStore.setState({ products: [product] });
+
+    // Sell 2 units (Total = L. 60)
+    store.addToCart({ product, quantity: 2 });
+    const sale = store.processSale('CASH');
+    expect(sale).not.toBeNull();
+
+    // Current stock is 8
+    expect(useAppStore.getState().products.find(p => p.id === product.id)?.currentStock).toBe(8);
+
+    // Customer returns 1 defective unit (isDamagedWaste = true)
+    const refundSuccess = store.refundSale({
+      saleId: sale!.id,
+      reason: 'Empaque inflado / producto descompuesto',
+      refundMethod: 'CASH',
+      isDamagedWaste: true,
+      items: [{
+        productId: product.id,
+        productName: product.name,
+        quantity: 1,
+        unitPrice: 30,
+        subtotal: 30,
+        isDamaged: true
+      }]
+    });
+
+    expect(refundSuccess).toBe(true);
+
+    // CRITICAL: Stock must REMAIN 8 (the damaged unit must NOT go back to sellable inventory)
+    const stockAfterRefund = useAppStore.getState().products.find(p => p.id === product.id)?.currentStock;
+    expect(stockAfterRefund).toBe(8);
+
+    // An inventory adjustment of type MERMA_DANADO must be registered
+    const adjustments = useAppStore.getState().inventoryAdjustments;
+    expect(adjustments.length).toBeGreaterThan(0);
+    expect(adjustments[0].type).toBe('MERMA_DANADO');
+    expect(adjustments[0].quantity).toBe(1);
+
+    // Sale must be marked as REFUNDED
+    const refundedSale = useAppStore.getState().sales.find(s => s.id === sale!.id);
+    expect(refundedSale?.status).toBe('REFUNDED');
+
+    // Sales returns record exists
+    const returns = useAppStore.getState().salesReturns;
+    expect(returns.length).toBeGreaterThan(0);
+    expect(returns[0].total).toBe(30);
+  });
+
+  it('should register manual inventory write-off adjustments (mermas / vencidos)', () => {
+    const store = useAppStore.getState();
+
+    const product: Product = {
+      id: 'prod-adj-1',
+      tenantId: store.tenant.id,
+      sku: 'ADJ-01',
+      name: 'Yogurt Fresa',
+      category: 'Lácteos',
+      unitOfMeasure: 'UND',
+      salePrice: 25,
+      costPrice: 15,
+      currentStock: 15,
+      minStockAlert: 2,
+      taxClassification: 'EXENTO',
+      isActive: true
+    };
+
+    useAppStore.setState({ products: [product] });
+
+    store.addInventoryAdjustment({
+      productId: product.id,
+      productName: product.name,
+      type: 'VENCIDO',
+      quantity: 3,
+      notes: 'Lote caducado en vitrina'
+    });
+
+    // Stock must be reduced from 15 to 12
+    const updatedStock = useAppStore.getState().products.find(p => p.id === product.id)?.currentStock;
+    expect(updatedStock).toBe(12);
+
+    // Record must be stored in inventoryAdjustments
+    const adjustments = useAppStore.getState().inventoryAdjustments;
+    const adj = adjustments.find(a => a.productId === product.id);
+    expect(adj).toBeDefined();
+    expect(adj?.type).toBe('VENCIDO');
+    expect(adj?.previousStock).toBe(15);
+    expect(adj?.newStock).toBe(12);
+  });
 });
