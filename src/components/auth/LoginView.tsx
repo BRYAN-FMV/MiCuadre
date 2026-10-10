@@ -276,8 +276,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const uniqueTenantRanges = Array.from(uniqueRangesMap.values());
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '2rem', background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)' }}>
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'relative' }}>
+      {/* Top Desktop PWA Install Bar */}
+      {!isPwaStandalone() && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: '#064e3b', color: '#ecfdf5', padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.85rem', zIndex: 100, borderBottom: '1px solid #059669', fontSize: '0.85rem', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', flexWrap: 'wrap' }}>
+          <Download size={18} style={{ color: '#34d399' }} />
+          <span><strong>Modo App de Escritorio:</strong> Instala MiCuadre en esta computadora para abrir siempre en tu comercio sin pasar por la web.</span>
+          <button
+            type="button"
+            onClick={async () => {
+              const res = await promptPwaInstall();
+              if (res.outcome === 'accepted') {
+                toast.success('MiCuadre se ha instalado en tu equipo');
+              } else {
+                toast.info('Para instalar en PC: haz clic en el icono de instalación (pantalla con flecha) en la barra superior de tu navegador o en el menú de Chrome/Edge "Instalar aplicación".');
+              }
+            }}
+            style={{ background: '#10b981', color: '#ffffff', border: 'none', padding: '0.35rem 0.8rem', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}
+          >
+            Instalar en PC / Mac
+          </button>
+        </div>
+      )}
+
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '2rem', background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', marginTop: !isPwaStandalone() ? '2.5rem' : '0' }}>
 
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>

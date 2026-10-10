@@ -9,7 +9,33 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (e: Event) => {
     e.preventDefault();
     deferredInstallPrompt = e;
+    window.dispatchEvent(new CustomEvent('pwa-installable'));
   });
+}
+
+/**
+ * Registers the Service Worker required for Chrome Desktop PWA installability
+ */
+export function registerServiceWorker(): void {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          console.log('[PWA] Service Worker activo:', reg.scope);
+        })
+        .catch((err) => {
+          console.warn('[PWA] Error al registrar Service Worker:', err);
+        });
+    });
+  }
+}
+
+/**
+ * Checks whether the native install prompt is currently ready and deferred
+ */
+export function hasInstallPrompt(): boolean {
+  return deferredInstallPrompt !== null;
 }
 
 /**
@@ -84,13 +110,13 @@ export function updateDynamicManifest(tenantName: string, storeSlug: string): vo
       theme_color: '#0f172a',
       icons: [
         {
-          src: '/MiCuadre-logo.png',
+          src: '/icon-192.png',
           sizes: '192x192',
           type: 'image/png',
           purpose: 'any maskable'
         },
         {
-          src: '/logo.png',
+          src: '/icon-512.png',
           sizes: '512x512',
           type: 'image/png',
           purpose: 'any maskable'

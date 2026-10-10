@@ -4,10 +4,11 @@ import { Tenant } from '../../types';
 import {
   Store, ShoppingBag, Receipt, Calendar, Printer, Lock, Users,
   ArrowRight, Search, Sparkles, Building2, ChevronRight, X, ShieldAlert,
-  CheckCircle2, AlertCircle, FileText, ChevronDown, Check, Zap, Shield, Layers
+  CheckCircle2, AlertCircle, FileText, ChevronDown, Check, Zap, Shield, Layers, Download
 } from 'lucide-react';
 import { fetchTenantsFromSupabase, findTenantInSupabase } from '../../lib/supabaseService';
 import { normalizeSlug } from '../../lib/security';
+import { isPwaStandalone, promptPwaInstall } from '../../lib/pwa';
 import { toast } from 'sonner';
 
 interface LandingViewProps {
@@ -77,6 +78,25 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
               <Building2 size={16} style={{ color: '#059669' }} />
               <span>Ver Demo</span>
             </button>
+
+            {!isPwaStandalone() && (
+              <button
+                onClick={async () => {
+                  const res = await promptPwaInstall();
+                  if (res.outcome === 'accepted') {
+                    toast.success('MiCuadre se ha instalado en tu dispositivo');
+                  } else {
+                    toast.info('Para instalar en PC: haz clic en el icono de instalación (pantalla con flecha) en la barra superior de tu navegador o menú "Instalar aplicación".');
+                  }
+                }}
+                className="btn btn-secondary btn-text-responsive-hide"
+                style={{ fontSize: '0.82rem', padding: '0.45rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title="Instalar aplicación en esta computadora"
+              >
+                <Download size={15} style={{ color: '#059669' }} />
+                <span>Instalar App</span>
+              </button>
+            )}
 
             <button
               onClick={() => setIsAccessModalOpen(true)}
