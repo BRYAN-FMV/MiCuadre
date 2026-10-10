@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { ArrowRight, Store, ShieldAlert, Lock, User, Building2, Download } from 'lucide-react';
+import { ArrowRight, Store, ShieldAlert, Lock, User, Building2, Download, Monitor, CheckCircle, HelpCircle, X } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
 import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase } from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
-import { setRememberedStore, updateDynamicManifest, isPwaStandalone, promptPwaInstall } from '../../lib/pwa';
+import { setRememberedStore, updateDynamicManifest, isPwaStandalone, promptPwaInstall, hasInstallPrompt } from '../../lib/pwa';
 
 interface LoginViewProps {
   onBackToLanding?: () => void;
@@ -25,6 +25,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const [selectedProfileId, setSelectedProfileId] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isInstallGuideOpen, setIsInstallGuideOpen] = useState<boolean>(false);
+  const [canPromptInstall, setCanPromptInstall] = useState<boolean>(hasInstallPrompt());
+
+  useEffect(() => {
+    const handleInstallable = () => setCanPromptInstall(true);
+    window.addEventListener('pwa-installable', handleInstallable);
+    return () => window.removeEventListener('pwa-installable', handleInstallable);
+  }, []);
+
+  const handleTriggerInstall = async () => {
+    if (hasInstallPrompt()) {
+      const res = await promptPwaInstall();
+      if (res.outcome === 'accepted') {
+        toast.success('MiCuadre se ha instalado con éxito en tu dispositivo');
+      }
+    } else {
+      setIsInstallGuideOpen(true);
+    }
+  };
 
   useEffect(() => {
     if (tenant?.name) {
@@ -284,14 +303,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
           <span><strong>Modo App de Escritorio:</strong> Instala MiCuadre en esta computadora para abrir siempre en tu comercio sin pasar por la web.</span>
           <button
             type="button"
-            onClick={async () => {
-              const res = await promptPwaInstall();
-              if (res.outcome === 'accepted') {
-                toast.success('MiCuadre se ha instalado en tu equipo');
-              } else {
-                toast.info('Para instalar en PC: haz clic en el icono de instalación (pantalla con flecha) en la barra superior de tu navegador o en el menú de Chrome/Edge "Instalar aplicación".');
-              }
-            }}
+            onClick={handleTriggerInstall}
             style={{ background: '#10b981', color: '#ffffff', border: 'none', padding: '0.35rem 0.8rem', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}
           >
             Instalar en PC / Mac
@@ -435,14 +447,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
             {!isPwaStandalone() && (
               <button
                 type="button"
-                onClick={async () => {
-                  const res = await promptPwaInstall();
-                  if (res.outcome === 'accepted') {
-                    toast.success('MiCuadre se ha instalado en tu dispositivo');
-                  } else {
-                    toast.info('Para instalar MiCuadre: haz clic en el icono de instalación en la barra superior del navegador o en el menú "Instalar aplicación".');
-                  }
-                }}
+                onClick={handleTriggerInstall}
                 style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.45rem 0.85rem', borderRadius: '6px', fontSize: '0.8rem', color: '#0f172a', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}
               >
                 <Download size={14} style={{ color: '#059669' }} />
@@ -467,6 +472,79 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
         </form>
 
       </div>
+
+      {/* Visual Install Guide Modal for PC / Tablet */}
+      {isInstallGuideOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)',
+          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '480px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1.25rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
+                  <Monitor size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                    Instalar MiCuadre en esta Computadora
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>
+                    Acceso directo que abre siempre en {tenant?.name || 'tu comercio'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInstallGuideOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <CheckCircle size={20} style={{ color: '#059669', flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '0.85rem', color: '#065f46' }}>
+                  <strong>Opción 1: Barra de Direcciones de Chrome / Edge</strong>
+                  <div style={{ marginTop: '0.35rem', color: '#047857' }}>
+                    En la parte superior de tu navegador, a la derecha de la barra de direcciones (cerca de la estrella de favoritos), haz clic en el icono de <strong>monitor con flecha hacia abajo</strong> y presiona <strong>Instalar</strong>.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <HelpCircle size={20} style={{ color: '#2563eb', flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>
+                  <strong>Opción 2: Menú de Opciones del Navegador</strong>
+                  <div style={{ marginTop: '0.35rem', color: '#475569' }}>
+                    1. Haz clic en los <strong>tres puntos verticales (...)</strong> arriba a la derecha de Chrome o Edge.<br />
+                    2. Selecciona <strong>"Guardar y compartir"</strong> o <strong>"Instalar MiCuadre"</strong>.<br />
+                    3. Haz clic en <strong>Instalar</strong>.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'center', paddingTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsInstallGuideOpen(false)}
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '0.75rem', fontSize: '0.9rem', fontWeight: 700, background: '#059669', borderColor: '#059669' }}
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

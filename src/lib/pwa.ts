@@ -88,49 +88,19 @@ export function clearRememberedStore(): void {
 }
 
 /**
- * Dynamically updates the Web App Manifest so that installing the PWA from a
- * personalized store link creates an app shortcut specifically bound to that store.
+ * Updates browser title and ensures the valid static manifest link is preserved.
+ * Store routing is preserved via client-side local storage pinning (Netflix architecture).
  */
 export function updateDynamicManifest(tenantName: string, storeSlug: string): void {
   if (typeof document === 'undefined') return;
   try {
+    document.title = `MiCuadre - ${tenantName}`;
     const manifestEl = document.getElementById('app-manifest') as HTMLLinkElement;
-    if (!manifestEl) return;
-
-    const cleanSlug = storeSlug.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const dynamicManifest = {
-      name: `MiCuadre - ${tenantName}`,
-      short_name: tenantName.length > 15 ? tenantName.slice(0, 15) : tenantName,
-      description: `Terminal POS y Facturación Comercial para ${tenantName}`,
-      start_url: `/?tienda=${cleanSlug}`,
-      scope: '/',
-      display: 'standalone',
-      orientation: 'any',
-      background_color: '#0f172a',
-      theme_color: '#0f172a',
-      icons: [
-        {
-          src: '/icon-192.png',
-          sizes: '192x192',
-          type: 'image/png',
-          purpose: 'any maskable'
-        },
-        {
-          src: '/icon-512.png',
-          sizes: '512x512',
-          type: 'image/png',
-          purpose: 'any maskable'
-        }
-      ]
-    };
-
-    const blob = new Blob([JSON.stringify(dynamicManifest, null, 2)], {
-      type: 'application/manifest+json'
-    });
-    const manifestURL = URL.createObjectURL(blob);
-    manifestEl.setAttribute('href', manifestURL);
+    if (manifestEl && manifestEl.getAttribute('href') !== '/manifest.json') {
+      manifestEl.setAttribute('href', '/manifest.json');
+    }
   } catch (err) {
-    console.warn('No se pudo actualizar el manifiesto dinámico:', err);
+    console.warn('Error al actualizar metadata de tienda:', err);
   }
 }
 
