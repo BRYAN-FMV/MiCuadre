@@ -17,6 +17,7 @@ interface SuperAdminDashboardProps {
 
 export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit }) => {
   const storeTenants = useAppStore(state => state.tenants) || [];
+  const storeProfiles = useAppStore(state => state.profiles) || [];
   const addTenant = useAppStore(state => state.addTenant);
   const updateTenant = useAppStore(state => state.updateTenant);
   const deleteTenantAction = useAppStore(state => state.deleteTenant);
@@ -28,6 +29,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
   const [masterPasswordInput, setMasterPasswordInput] = useState('');
 
   const [tenants, setTenants] = useState<Tenant[]>(storeTenants);
+  const [cloudTenantIds, setCloudTenantIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<{ success: boolean; message: string; details?: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,7 +79,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
     if (isSupabaseConfigured()) {
       const liveTenants = await fetchTenantsFromSupabase();
       if (liveTenants && liveTenants.length > 0) {
-        setTenants(liveTenants);
+        const cloudSet = new Set(liveTenants.map(t => t.id));
+        setCloudTenantIds(cloudSet);
+        const localOnly = storeTenants.filter(st => !cloudSet.has(st.id));
+        setTenants([...liveTenants, ...localOnly]);
       } else {
         setTenants(storeTenants);
       }
@@ -197,7 +202,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
 
     if (isSupabaseConfigured()) {
       toast.info('Registrando comercio en Supabase...');
-      const { error } = await supabase.from('tenants').insert({
+      let { error } = await supabase.from('tenants').insert({
         id: newId,
         name: newTenantObj.name,
         rtn: newTenantObj.rtn || null,
@@ -213,10 +218,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
         allow_negative_stock: false
       });
 
+      // Resilient fallback if schema lacks newer columns (e.g. is_loyalty_enabled)
+      if (error && error.message.includes('column')) {
+        console.warn('Reintentando insercion de tenant con esquema base en Supabase:', error.message);
+        const retry = await supabase.from('tenants').insert({
+          id: newId,
+          name: newTenantObj.name,
+          rtn: newTenantObj.rtn || null,
+          phone: newTenantObj.phone || null,
+          email: newTenantObj.email || null,
+          address: newTenantObj.address || null,
+          business_type: newTenantObj.businessType,
+          is_fiscal_enabled: newTenantObj.isFiscalEnabled
+        });
+        error = retry.error;
+      }
+
       if (error) {
         toast.warning(`Comercio guardado localmente (${error.message})`);
       } else {
-        toast.success(`¡Comercio "${newTenantObj.name}" registrado en Supabase!`);
+        toast.success(`Comercio "${newTenantObj.name}" registrado en Supabase`);
         await supabase.from('profiles').insert({
           id: adminProfile.id,
           tenant_id: newId,
@@ -240,6 +261,63 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
     setNewEmail('');
     setNewAddress('');
     loadData();
+  };
+
+  const handleSyncTenantToCloud = async (targetTenant: Tenant) => {
+    if (!isSupabaseConfigured()) {
+      toast.error('Supabase no está configurado');
+      return;
+    }
+
+    toast.info(`Sincronizando "${targetTenant.name}" con Supabase...`);
+    let { error } = await supabase.from('tenants').upsert({
+      id: targetTenant.id,
+      name: targetTenant.name,
+      rtn: targetTenant.rtn || null,
+      phone: targetTenant.phone || null,
+      email: targetTenant.email || null,
+      address: targetTenant.address || null,
+      business_type: targetTenant.businessType,
+      is_fiscal_enabled: targetTenant.isFiscalEnabled,
+      is_services_enabled: targetTenant.isServicesEnabled ?? true,
+      is_wholesale_enabled: targetTenant.isWholesaleEnabled ?? true,
+      is_loyalty_enabled: targetTenant.isLoyaltyEnabled ?? true,
+      access_password: targetTenant.accessPassword || null,
+      allow_negative_stock: targetTenant.allowNegativeStock ?? false
+    }, { onConflict: 'id' });
+
+    if (error && error.message.includes('column')) {
+      console.warn('Reintentando sincronizacion de tenant con esquema base compatible:', error.message);
+      const retry = await supabase.from('tenants').upsert({
+        id: targetTenant.id,
+        name: targetTenant.name,
+        rtn: targetTenant.rtn || null,
+        phone: targetTenant.phone || null,
+        email: targetTenant.email || null,
+        address: targetTenant.address || null,
+        business_type: targetTenant.businessType,
+        is_fiscal_enabled: targetTenant.isFiscalEnabled
+      }, { onConflict: 'id' });
+      error = retry.error;
+    }
+
+    if (error) {
+      toast.error(`Error al sincronizar con Supabase: ${error.message}`);
+    } else {
+      toast.success(`Comercio "${targetTenant.name}" sincronizado exitosamente en Supabase`);
+      const adminProf = storeProfiles.find(p => p.tenantId === targetTenant.id && p.role === 'ADMIN');
+      if (adminProf) {
+        await supabase.from('profiles').upsert({
+          id: adminProf.id,
+          tenant_id: targetTenant.id,
+          full_name: adminProf.fullName,
+          role: 'ADMIN',
+          pin_code: adminProf.pinCode,
+          is_active: true
+        }, { onConflict: 'id' });
+      }
+      loadData();
+    }
   };
 
   const handleRenewSubscription = (targetTenant: Tenant, monthsToAdd: number) => {
@@ -266,7 +344,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
     updateTenant(editingTenant.id, editingTenant);
 
     if (isSupabaseConfigured()) {
-      const { error } = await supabase
+      let { error } = await supabase
         .from('tenants')
         .update({
           name: editingTenant.name,
@@ -279,13 +357,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
           is_services_enabled: editingTenant.isServicesEnabled ?? true,
           is_wholesale_enabled: editingTenant.isWholesaleEnabled ?? true,
           is_loyalty_enabled: editingTenant.isLoyaltyEnabled ?? true,
-          access_password: editingTenant.accessPassword || null,
-          subscription_status: editingTenant.subscriptionStatus || 'ACTIVE',
-          subscription_plan: editingTenant.subscriptionPlan || 'MONTHLY',
-          subscription_expires_at: editingTenant.subscriptionExpiresAt || null,
-          monthly_price: editingTenant.monthlyPrice || 950
+          access_password: editingTenant.accessPassword || null
         })
         .eq('id', editingTenant.id);
+
+      if (error && error.message.includes('column')) {
+        console.warn('Reintentando actualizacion de tenant con columnas base:', error.message);
+        const retry = await supabase
+          .from('tenants')
+          .update({
+            name: editingTenant.name,
+            rtn: editingTenant.rtn || null,
+            phone: editingTenant.phone || null,
+            email: editingTenant.email || null,
+            address: editingTenant.address || null,
+            business_type: editingTenant.businessType,
+            is_fiscal_enabled: editingTenant.isFiscalEnabled
+          })
+          .eq('id', editingTenant.id);
+        error = retry.error;
+      }
 
       if (error) {
         toast.error(`Error al actualizar en Supabase: ${error.message}`);
@@ -573,6 +664,19 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
                         }}>
                           {status === 'ACTIVE' ? 'Suscripción Activa' : status === 'TRIAL' ? 'En Prueba Gratis' : 'SUSCRIPCIÓN VENCIDA'}
                         </span>
+                        {isSupabaseConfigured() && !cloudTenantIds.has(t.id) && (
+                          <span style={{
+                            fontSize: '0.72rem',
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '12px',
+                            fontWeight: 700,
+                            background: '#fef3c7',
+                            color: '#b45309',
+                            border: '1px solid #fde68a'
+                          }}>
+                            Pendiente Nube
+                          </span>
+                        )}
                       </div>
                       <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.3rem 0 0 0' }}>
                         ID: <code>{t.id}</code> • RTN: {t.rtn || 'No registrado'} • Tel: {t.phone || 'N/A'}
@@ -588,6 +692,16 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
 
                   {/* Actions Toolbar for Tenant */}
                   <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap', background: '#ffffff', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    {isSupabaseConfigured() && !cloudTenantIds.has(t.id) && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => handleSyncTenantToCloud(t)}
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: '#0369a1', borderColor: '#7dd3fc', background: '#f0f9ff', fontWeight: 700 }}
+                        title="Subir y sincronizar este comercio a Supabase"
+                      >
+                        <RefreshCw size={13} /> Sincronizar a Nube
+                      </button>
+                    )}
                     <button
                       className="btn btn-secondary"
                       onClick={() => handleRenewSubscription(t, 1)}

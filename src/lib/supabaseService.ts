@@ -163,7 +163,7 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
   if (!isSupabaseConfigured() || !isValidUUID(tenant.id)) return false;
 
   try {
-    const { error } = await supabase.from('tenants').upsert({
+    let { error } = await supabase.from('tenants').upsert({
       id: tenant.id,
       name: tenant.name,
       rtn: tenant.rtn || null,
@@ -179,6 +179,22 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
       currency_symbol: tenant.currencySymbol || 'L.',
       access_password: tenant.accessPassword || null
     }, { onConflict: 'id' });
+
+    // Fallback: If older database schema lacks newer columns, retry with base columns
+    if (error && error.message.includes('column')) {
+      console.warn('Reintentando guardar tenant con esquema base en Supabase:', error.message);
+      const retry = await supabase.from('tenants').upsert({
+        id: tenant.id,
+        name: tenant.name,
+        rtn: tenant.rtn || null,
+        phone: tenant.phone || null,
+        email: tenant.email || null,
+        address: tenant.address || null,
+        business_type: tenant.businessType,
+        is_fiscal_enabled: tenant.isFiscalEnabled
+      }, { onConflict: 'id' });
+      error = retry.error;
+    }
 
     if (error) {
       console.error('Error guardando tenant en Supabase:', error.message);
