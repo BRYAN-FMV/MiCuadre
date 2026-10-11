@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useAppStore } from './useAppStore';
-import { Product } from '../types';
+import { useAppStore, hasUserPermission } from './useAppStore';
+import { Product, UserProfile } from '../types';
 
 describe('App Zustand Store Business Logic', () => {
   beforeEach(() => {
@@ -812,6 +812,79 @@ describe('App Zustand Store Business Logic', () => {
     // Stock should be back to 10
     prod = useAppStore.getState().products.find(p => p.id === 'prod-pack-void');
     expect(prod?.currentStock).toBe(10);
+  });
+
+  describe('Granular Staff Permissions (hasUserPermission & updateProfilePermissions)', () => {
+    const adminUser: UserProfile = {
+      id: 'admin-1',
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      fullName: 'Carlos Admin',
+      role: 'ADMIN',
+      isActive: true
+    };
+
+    const cashierUser: UserProfile = {
+      id: 'cajero-1',
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      fullName: 'Ana Cajera',
+      role: 'CAJERO',
+      isActive: true
+    };
+
+    it('should always grant all permissions to ADMIN', () => {
+      expect(hasUserPermission(adminUser, 'canApplyDiscounts')).toBe(true);
+      expect(hasUserPermission(adminUser, 'canSellCredit')).toBe(true);
+      expect(hasUserPermission(adminUser, 'canVoidSales')).toBe(true);
+      expect(hasUserPermission(adminUser, 'canViewCostPrices')).toBe(true);
+      expect(hasUserPermission(adminUser, 'canEditCatalog')).toBe(true);
+      expect(hasUserPermission(adminUser, 'canRegisterAdjustments')).toBe(true);
+    });
+
+    it('should deny permissions to CAJERO by default when not configured', () => {
+      expect(hasUserPermission(cashierUser, 'canApplyDiscounts')).toBe(false);
+      expect(hasUserPermission(cashierUser, 'canSellCredit')).toBe(false);
+      expect(hasUserPermission(cashierUser, 'canVoidSales')).toBe(false);
+      expect(hasUserPermission(cashierUser, 'canViewCostPrices')).toBe(false);
+      expect(hasUserPermission(cashierUser, 'canEditCatalog')).toBe(false);
+      expect(hasUserPermission(cashierUser, 'canRegisterAdjustments')).toBe(false);
+    });
+
+    it('should grant specific permissions when explicitly enabled for CAJERO', () => {
+      const permittedCashier: UserProfile = {
+        ...cashierUser,
+        permissions: {
+          canApplyDiscounts: true,
+          canSellCredit: false
+        }
+      };
+
+      expect(hasUserPermission(permittedCashier, 'canApplyDiscounts')).toBe(true);
+      expect(hasUserPermission(permittedCashier, 'canSellCredit')).toBe(false);
+      expect(hasUserPermission(permittedCashier, 'canVoidSales')).toBe(false);
+    });
+
+    it('should update profile permissions via store action updateProfilePermissions', () => {
+      useAppStore.setState({
+        profiles: [adminUser, cashierUser],
+        currentUser: cashierUser
+      });
+
+      const store = useAppStore.getState();
+      store.updateProfilePermissions('cajero-1', {
+        canApplyDiscounts: true,
+        canViewCostPrices: true
+      });
+
+      const updatedCashier = useAppStore.getState().profiles.find(p => p.id === 'cajero-1');
+      expect(updatedCashier?.permissions?.canApplyDiscounts).toBe(true);
+      expect(updatedCashier?.permissions?.canViewCostPrices).toBe(true);
+      expect(updatedCashier?.permissions?.canSellCredit).toBeUndefined();
+
+      // currentUser should also be updated if it is the current user
+      expect(useAppStore.getState().currentUser.permissions?.canApplyDiscounts).toBe(true);
+      expect(hasUserPermission(useAppStore.getState().currentUser, 'canApplyDiscounts')).toBe(true);
+      expect(hasUserPermission(useAppStore.getState().currentUser, 'canSellCredit')).toBe(false);
+    });
   });
 });
 

@@ -30,6 +30,19 @@ export interface Tenant {
   ticketPaperWidth?: '58mm' | '80mm'; // Receipt thermal paper width selector (58mm e.g. PT-210 vs 80mm desktop)
 }
 
+export interface UserPermissions {
+  // Ventas & POS
+  canApplyDiscounts?: boolean;       // Aplicar descuentos manuales o de ley (tercera edad)
+  canSellCredit?: boolean;           // Vender al credito / fiado
+  canVoidSales?: boolean;            // Anular facturas emitidas o devoluciones
+  canOpenDrawerNoSale?: boolean;     // Salidas manuales de caja chica / apertura de gaveta
+
+  // Inventario & Catalogo
+  canViewCostPrices?: boolean;       // Visualizar costos de compra y margen comercial
+  canEditCatalog?: boolean;          // Crear o editar productos, precios y categorias
+  canRegisterAdjustments?: boolean;  // Registrar mermas o ajustes manuales de stock
+}
+
 export interface UserProfile {
   id: string;
   tenantId: string;
@@ -37,6 +50,7 @@ export interface UserProfile {
   role: UserRole;
   pinCode?: string;
   isActive: boolean;
+  permissions?: UserPermissions;
 }
 
 export interface FiscalRange {

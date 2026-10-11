@@ -310,7 +310,8 @@ export async function fetchProfilesFromSupabase(tenantId: string): Promise<UserP
     fullName: p.full_name,
     role: p.role,
     pinCode: p.pin_code,
-    isActive: p.is_active
+    isActive: p.is_active,
+    permissions: p.permissions || undefined
   }));
 }
 
@@ -362,7 +363,8 @@ export async function updateProfilePinInSupabase(
         full_name: profile.fullName,
         role: profile.role,
         pin_code: newPin,
-        is_active: profile.isActive ?? true
+        is_active: profile.isActive ?? true,
+        permissions: profile.permissions || {}
       });
 
     if (insertError) {

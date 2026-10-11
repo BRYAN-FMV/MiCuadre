@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import {
-  Tenant, UserProfile, Product, ProductPresentation, FiscalRange, CashShift, CashMovement,
+  Tenant, UserProfile, UserPermissions, Product, ProductPresentation, FiscalRange, CashShift, CashMovement,
   CartLine, Sale, PurchaseInvoice, Supplier, Service, Staff,
   Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment,
   SalesReturn, InventoryAdjustment
@@ -18,6 +18,20 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
 import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
+
+/**
+ * Check if a user has a specific granular permission.
+ * - ADMIN role always has all permissions granted (returns true).
+ * - Other roles check user.permissions[permission], defaulting to false if undefined.
+ */
+export function hasUserPermission(
+  user: UserProfile | null | undefined,
+  permission: keyof UserPermissions
+): boolean {
+  if (!user) return false;
+  if (user.role === 'ADMIN') return true;
+  return Boolean(user.permissions && user.permissions[permission] === true);
+}
 
 export interface HeldOrder {
   id: string;
@@ -179,6 +193,7 @@ interface AppState {
   payStaffCommissions: (staffId: string, options?: { payFromActiveShift?: boolean; fundId?: string }) => void;
   payCommissionItem: (commId: string, options?: { payFromActiveShift?: boolean; fundId?: string }) => void;
   addProfile: (profile: Omit<UserProfile, 'id' | 'tenantId'>) => void;
+  updateProfilePermissions: (profileId: string, permissions: Partial<UserPermissions>) => void;
   addFinancialEvent: (event: Omit<FinancialEvent, 'id' | 'tenantId'>) => void;
   dismissFinancialEvent: (id: string) => void;
   payFinancialEvent: (eventId: string, fundId: string) => void;
@@ -2044,6 +2059,38 @@ export const useAppStore = create<AppState>()(
           return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
         });
     return { profiles: [...state.profiles, { ...profileData, id: newId, tenantId: state.tenant.id }] };
+  }),
+
+  updateProfilePermissions: (profileId, newPermissions) => set((state) => {
+    const updatedProfiles = state.profiles.map(p => {
+      if (p.id === profileId) {
+        return {
+          ...p,
+          permissions: {
+            ...(p.permissions || {}),
+            ...newPermissions
+          }
+        };
+      }
+      return p;
+    });
+
+    const isCurrent = state.currentUser?.id === profileId;
+    const target = updatedProfiles.find(p => p.id === profileId);
+    const updatedCurrentUser = isCurrent && target ? target : state.currentUser;
+
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id) && target) {
+      supabase.from('profiles').update({
+        permissions: target.permissions
+      }).eq('id', profileId).then(({ error }) => {
+        if (error) console.warn('Supabase update profile permissions error:', error.message);
+      });
+    }
+
+    return {
+      profiles: updatedProfiles,
+      currentUser: updatedCurrentUser
+    };
   }),
 
   addFinancialEvent: (eventData) => set((state) => {

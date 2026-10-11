@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAppStore, HeldOrder } from '../../store/useAppStore';
+import { useAppStore, HeldOrder, hasUserPermission } from '../../store/useAppStore';
 import { formatCurrency } from '../../lib/monetary';
 import { generateEscPosReceipt } from '../../lib/escPos';
 import { toast } from 'sonner';
@@ -8,7 +8,8 @@ import {
   CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle,
   Tag, Percent, Scissors, Clock
 } from 'lucide-react';
-import { Sale, Product, CartLine, Customer, Service, ProductPresentation } from '../../types';
+import { Sale, Product, CartLine, Customer, Service, ProductPresentation, UserProfile } from '../../types';
+import { AdminPinModal } from '../common/AdminPinModal';
 
 export const PosContainer: React.FC = () => {
   const products = useAppStore(state => state.products);
@@ -55,6 +56,19 @@ export const PosContainer: React.FC = () => {
   const [lastCompletedSale, setLastCompletedSale] = useState<Sale | null>(null);
   const [selectedTicketCopy, setSelectedTicketCopy] = useState<'ORIGINAL' | 'COPIA'>('ORIGINAL');
   const [presentationModalProduct, setPresentationModalProduct] = useState<Product | null>(null);
+
+  // Admin PIN Authorization Modal State (Mechanism B)
+  const [adminPinConfig, setAdminPinConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    actionDescription?: string;
+    onSuccess: (admin: UserProfile) => void;
+  }>({
+    isOpen: false,
+    title: '',
+    actionDescription: '',
+    onSuccess: () => {}
+  });
 
   // Customer Modal & Registration state
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -240,6 +254,19 @@ export const PosContainer: React.FC = () => {
   const cartGrandTotal = cartLines.reduce((acc: number, l: CartLine) => acc + l.total, 0);
 
   const handleApplySeniorDiscount = () => {
+    if (!hasUserPermission(currentUser, 'canApplyDiscounts')) {
+      setAdminPinConfig({
+        isOpen: true,
+        title: 'Autorizar Descuento de Tercera Edad (25%)',
+        actionDescription: 'Se requiere autorizacion de Administrador para aplicar el descuento de Ley de Tercera Edad.',
+        onSuccess: () => {
+          applyGlobalCartDiscount(25, true);
+          setIsDiscountModalOpen(false);
+          toast.success('Descuento de Tercera Edad (25%) aplicado al carrito');
+        }
+      });
+      return;
+    }
     applyGlobalCartDiscount(25, true);
     setIsDiscountModalOpen(false);
     toast.success('Descuento de Tercera Edad (25%) aplicado al carrito');
@@ -255,6 +282,22 @@ export const PosContainer: React.FC = () => {
       toast.error('El porcentaje no puede superar el 100%');
       return;
     }
+
+    if (!hasUserPermission(currentUser, 'canApplyDiscounts')) {
+      setAdminPinConfig({
+        isOpen: true,
+        title: 'Autorizar Descuento Personalizado',
+        actionDescription: `Se requiere autorizacion de Administrador para aplicar un descuento de ${discountType === 'PERCENT' ? `${val}%` : formatCurrency(val, tenant.currencySymbol)}.`,
+        onSuccess: () => {
+          applyGlobalCartDiscount(val, discountType === 'PERCENT');
+          setIsDiscountModalOpen(false);
+          setDiscountValue('');
+          toast.success(`Descuento de ${discountType === 'PERCENT' ? `${val}%` : formatCurrency(val, tenant.currencySymbol)} aplicado`);
+        }
+      });
+      return;
+    }
+
     applyGlobalCartDiscount(val, discountType === 'PERCENT');
     setIsDiscountModalOpen(false);
     setDiscountValue('');
@@ -327,6 +370,25 @@ export const PosContainer: React.FC = () => {
     }
 
     const isOverrideFiscal = Boolean(tenant.isFiscalEnabled);
+
+    if (paymentMethod === 'CREDIT' && !hasUserPermission(currentUser, 'canSellCredit')) {
+      setAdminPinConfig({
+        isOpen: true,
+        title: 'Autorizar Venta al Fiado / Crédito',
+        actionDescription: `Se requiere autorizacion de Administrador para otorgar credito por ${formatCurrency(netPayableTotal, tenant.currencySymbol)} a ${cartCustomer.name}.`,
+        onSuccess: () => {
+          const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
+          if (!completedSale) return;
+          setLastCompletedSale(completedSale);
+          setIsPaymentModalOpen(false);
+          setCashTendered('');
+          setRedeemedPoints(0);
+          toast.success(`Venta ${completedSale.isFiscal ? 'Fiscal SAR' : 'Ticket Interno'} (Crédito) #${completedSale.documentNumber} realizada con éxito`);
+        }
+      });
+      return;
+    }
+
     const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
     if (!completedSale) return;
 
@@ -903,7 +965,18 @@ export const PosContainer: React.FC = () => {
             </button>
             <button
               className="btn btn-secondary"
-              onClick={() => setIsDiscountModalOpen(true)}
+              onClick={() => {
+                if (!hasUserPermission(currentUser, 'canApplyDiscounts')) {
+                  setAdminPinConfig({
+                    isOpen: true,
+                    title: 'Autorizar Descuento en Venta',
+                    actionDescription: 'Se requiere autorizacion de Administrador para aplicar descuentos al carrito.',
+                    onSuccess: () => setIsDiscountModalOpen(true)
+                  });
+                  return;
+                }
+                setIsDiscountModalOpen(true);
+              }}
               disabled={cartLines.length === 0}
               style={{
                 padding: '0.55rem', fontSize: '0.78rem',
@@ -1283,9 +1356,26 @@ export const PosContainer: React.FC = () => {
                     key={method}
                     className={`btn ${paymentMethod === method ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => {
-                      if (method === 'CREDIT' && (!cartCustomer.id || cartCustomer.name === 'Consumidor Final')) {
-                        toast.warning('Para vender a crédito / fiado seleccione un cliente registrado (F4)');
-                        setIsCustomerModalOpen(true);
+                      if (method === 'CREDIT') {
+                        if (!hasUserPermission(currentUser, 'canSellCredit')) {
+                          setAdminPinConfig({
+                            isOpen: true,
+                            title: 'Autorizar Venta al Fiado / Crédito',
+                            actionDescription: 'Se requiere autorizacion de Administrador para otorgar credito o fiar a este cliente.',
+                            onSuccess: () => {
+                              if (!cartCustomer.id || cartCustomer.name === 'Consumidor Final') {
+                                toast.warning('Para vender a crédito / fiado seleccione un cliente registrado (F4)');
+                                setIsCustomerModalOpen(true);
+                              }
+                              setPaymentMethod('CREDIT');
+                            }
+                          });
+                          return;
+                        }
+                        if (!cartCustomer.id || cartCustomer.name === 'Consumidor Final') {
+                          toast.warning('Para vender a crédito / fiado seleccione un cliente registrado (F4)');
+                          setIsCustomerModalOpen(true);
+                        }
                       }
                       setPaymentMethod(method);
                     }}
@@ -1930,6 +2020,18 @@ export const PosContainer: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Admin PIN Authorization Modal (Mechanism B) */}
+      <AdminPinModal
+        isOpen={adminPinConfig.isOpen}
+        title={adminPinConfig.title}
+        actionDescription={adminPinConfig.actionDescription}
+        onSuccess={(admin) => {
+          setAdminPinConfig(prev => ({ ...prev, isOpen: false }));
+          adminPinConfig.onSuccess(admin);
+        }}
+        onCancel={() => setAdminPinConfig(prev => ({ ...prev, isOpen: false }))}
+      />
 
     </div>
   );

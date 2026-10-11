@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, hasUserPermission } from '../../store/useAppStore';
 import { formatCurrency } from '../../lib/monetary';
-import { Product, TaxClassification, PriceTier, ProductPresentation } from '../../types';
+import { Product, TaxClassification, PriceTier, ProductPresentation, UserProfile } from '../../types';
 import { toast } from 'sonner';
-import { Plus, History, Search, Package, Edit2, Trash2, X, AlertTriangle, Layers } from 'lucide-react';
+import { Plus, History, Search, Package, Edit2, Trash2, X, AlertTriangle, Layers, Eye, EyeOff } from 'lucide-react';
+import { AdminPinModal } from '../common/AdminPinModal';
 
 interface FormPresentation extends Omit<ProductPresentation, 'id'> {
   id?: string;
 }
 
 export const InventoryManager: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, tenant, addInventoryAdjustment, inventoryAdjustments } = useAppStore();
+  const { products, addProduct, updateProduct, deleteProduct, tenant, currentUser, addInventoryAdjustment, inventoryAdjustments } = useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('TODOS');
@@ -29,6 +30,21 @@ export const InventoryManager: React.FC = () => {
   const [adjustmentQty, setAdjustmentQty] = useState('1');
   const [adjustmentNotes, setAdjustmentNotes] = useState('');
   const [isAdjustmentsHistoryOpen, setIsAdjustmentsHistoryOpen] = useState(false);
+
+  // Granular permissions & cost visibility
+  const [isCostUnlocked, setIsCostUnlocked] = useState(false);
+  const canSeeCosts = hasUserPermission(currentUser, 'canViewCostPrices') || isCostUnlocked;
+  const [adminPinConfig, setAdminPinConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    actionDescription?: string;
+    onSuccess: (admin: UserProfile) => void;
+  }>({
+    isOpen: false,
+    title: '',
+    actionDescription: '',
+    onSuccess: () => {}
+  });
 
   // Form State for new/edit product
   const [name, setName] = useState('');
@@ -245,8 +261,7 @@ export const InventoryManager: React.FC = () => {
     return matchesSearch && matchesCat && matchesStock;
   });
 
-  const currentUser = useAppStore(state => state.currentUser);
-  const canEditInventory = currentUser?.role === 'ADMIN' || currentUser?.role === 'BODEGUERO';
+  const canEditInventory = currentUser?.role === 'ADMIN' || currentUser?.role === 'BODEGUERO' || hasUserPermission(currentUser, 'canEditCatalog');
 
   return (
     <div className="view-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -264,25 +279,74 @@ export const InventoryManager: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {!hasUserPermission(currentUser, 'canViewCostPrices') && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                if (isCostUnlocked) {
+                  setIsCostUnlocked(false);
+                  toast.info('Visualización de costos ocultada');
+                } else {
+                  setAdminPinConfig({
+                    isOpen: true,
+                    title: 'Autorización para Ver Costos',
+                    actionDescription: 'Ingrese PIN de administrador para desbloquear los costos de compra y márgenes.',
+                    onSuccess: () => {
+                      setIsCostUnlocked(true);
+                      toast.success('Costos de compra desbloqueados para esta sesión');
+                    }
+                  });
+                }
+              }}
+              style={{ padding: '0.6rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              title={isCostUnlocked ? 'Ocultar costos de compra' : 'Desbloquear costos de compra con PIN'}
+            >
+              {isCostUnlocked ? <EyeOff size={16} /> : <Eye size={16} />}
+              <span>{isCostUnlocked ? 'Ocultar Costos' : 'Desbloquear Costos'}</span>
+            </button>
+          )}
+
           <button
             className="btn btn-secondary"
-            onClick={() => setIsAdjustmentsHistoryOpen(true)}
+            onClick={() => {
+              if (hasUserPermission(currentUser, 'canRegisterAdjustments')) {
+                setIsAdjustmentsHistoryOpen(true);
+              } else {
+                setAdminPinConfig({
+                  isOpen: true,
+                  title: 'Autorización para Ver Ajustes',
+                  actionDescription: 'Ingrese PIN de administrador para ver el historial de mermas y ajustes.',
+                  onSuccess: () => setIsAdjustmentsHistoryOpen(true)
+                });
+              }
+            }}
             style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
             title="Ver auditoría de mermas, productos vencidos y pérdidas"
           >
             <History size={16} />
             <span>Mermas & Ajustes ({tenantAdjustments.length})</span>
           </button>
-          {canEditInventory ? (
-            <button className="btn btn-primary" onClick={openAddModal} style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}>
-              <Plus size={16} />
-              <span>Nuevo Producto</span>
-            </button>
-          ) : (
-            <span className="badge badge-wholesale" style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}>
-              Modo Consulta de Precios & Existencias
-            </span>
-          )}
+
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              if (canEditInventory) {
+                openAddModal();
+              } else {
+                setAdminPinConfig({
+                  isOpen: true,
+                  title: 'Autorización para Nuevo Producto',
+                  actionDescription: 'Ingrese PIN de administrador para crear un producto en el catálogo.',
+                  onSuccess: () => openAddModal()
+                });
+              }
+            }}
+            style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
+          >
+            <Plus size={16} />
+            <span>Nuevo Producto</span>
+          </button>
         </div>
       </div>
 
@@ -465,7 +529,7 @@ export const InventoryManager: React.FC = () => {
                         )}
                       </td>
                       <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
-                        {formatCurrency(p.costPrice, tenant.currencySymbol)}
+                        {canSeeCosts ? formatCurrency(p.costPrice, tenant.currencySymbol) : '***'}
                       </td>
                       <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
                         {formatCurrency(p.salePrice, tenant.currencySymbol)}
@@ -492,34 +556,63 @@ export const InventoryManager: React.FC = () => {
                           >
                             <History size={14} />
                           </button>
-                          {canEditInventory && (
-                            <>
-                              <button
-                                title="Registrar Merma / Ajuste"
-                                className="btn btn-secondary"
-                                onClick={() => openAdjustmentModal(p)}
-                                style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#d97706' }}
-                              >
-                                <AlertTriangle size={14} />
-                              </button>
-                              <button
-                                title="Editar Producto"
-                                className="btn btn-secondary"
-                                onClick={() => openEditModal(p)}
-                                style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#0284c7' }}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                title="Eliminar Producto"
-                                className="btn btn-secondary"
-                                onClick={() => setDeletingProduct(p)}
-                                style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#ef4444' }}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </>
-                          )}
+                          <button
+                            title="Registrar Merma / Ajuste"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              if (hasUserPermission(currentUser, 'canRegisterAdjustments')) {
+                                openAdjustmentModal(p);
+                              } else {
+                                setAdminPinConfig({
+                                  isOpen: true,
+                                  title: 'Autorización para Ajuste',
+                                  actionDescription: `Ingrese PIN de administrador para registrar una merma o ajuste en ${p.name}.`,
+                                  onSuccess: () => openAdjustmentModal(p)
+                                });
+                              }
+                            }}
+                            style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#d97706' }}
+                          >
+                            <AlertTriangle size={14} />
+                          </button>
+                          <button
+                            title="Editar Producto"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              if (hasUserPermission(currentUser, 'canEditCatalog')) {
+                                openEditModal(p);
+                              } else {
+                                setAdminPinConfig({
+                                  isOpen: true,
+                                  title: 'Autorización para Editar Producto',
+                                  actionDescription: `Ingrese PIN de administrador para editar ${p.name}.`,
+                                  onSuccess: () => openEditModal(p)
+                                });
+                              }
+                            }}
+                            style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#0284c7' }}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            title="Eliminar Producto"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              if (hasUserPermission(currentUser, 'canEditCatalog')) {
+                                setDeletingProduct(p);
+                              } else {
+                                setAdminPinConfig({
+                                  isOpen: true,
+                                  title: 'Autorización para Eliminar Producto',
+                                  actionDescription: `Ingrese PIN de administrador para eliminar ${p.name}.`,
+                                  onSuccess: () => setDeletingProduct(p)
+                                });
+                              }
+                            }}
+                            style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#ef4444' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -928,7 +1021,9 @@ export const InventoryManager: React.FC = () => {
               </div>
               <div style={{ textAlign: 'center' }}>
                 <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Costo CPP</span>
-                <p style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--accent-primary)', margin: 0 }}>{formatCurrency(selectedKardexProduct.costPrice, tenant.currencySymbol)}</p>
+                <p style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--accent-primary)', margin: 0 }}>
+                  {canSeeCosts ? formatCurrency(selectedKardexProduct.costPrice, tenant.currencySymbol) : '***'}
+                </p>
               </div>
             </div>
 
@@ -945,13 +1040,17 @@ export const InventoryManager: React.FC = () => {
                 <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '0.6rem 0.75rem' }}><span className="badge badge-success">COMPRA (IN)</span></td>
                   <td style={{ padding: '0.6rem 0.75rem', color: '#10b981', fontWeight: 700 }}>+50</td>
-                  <td style={{ padding: '0.6rem 0.75rem' }}>{formatCurrency(selectedKardexProduct.costPrice, tenant.currencySymbol)}</td>
+                  <td style={{ padding: '0.6rem 0.75rem' }}>
+                    {canSeeCosts ? formatCurrency(selectedKardexProduct.costPrice, tenant.currencySymbol) : '***'}
+                  </td>
                   <td style={{ padding: '0.6rem 0.75rem' }}>{selectedKardexProduct.currentStock + 2}</td>
                 </tr>
                 <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '0.6rem 0.75rem' }}><span className="badge badge-fiscal">VENTA (OUT)</span></td>
                   <td style={{ padding: '0.6rem 0.75rem', color: '#ef4444', fontWeight: 700 }}>-2</td>
-                  <td style={{ padding: '0.6rem 0.75rem' }}>{formatCurrency(selectedKardexProduct.costPrice, tenant.currencySymbol)}</td>
+                  <td style={{ padding: '0.6rem 0.75rem' }}>
+                    {canSeeCosts ? formatCurrency(selectedKardexProduct.costPrice, tenant.currencySymbol) : '***'}
+                  </td>
                   <td style={{ padding: '0.6rem 0.75rem' }}>{selectedKardexProduct.currentStock}</td>
                 </tr>
               </tbody>
@@ -1158,6 +1257,19 @@ export const InventoryManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* MODAL: Admin PIN Authorization */}
+      <AdminPinModal
+        isOpen={adminPinConfig.isOpen}
+        title={adminPinConfig.title}
+        actionDescription={adminPinConfig.actionDescription}
+        onSuccess={(admin) => {
+          const cb = adminPinConfig.onSuccess;
+          setAdminPinConfig(prev => ({ ...prev, isOpen: false }));
+          cb(admin);
+        }}
+        onCancel={() => setAdminPinConfig(prev => ({ ...prev, isOpen: false }))}
+      />
 
     </div>
   );

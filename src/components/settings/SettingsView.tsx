@@ -2,12 +2,22 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer } from 'lucide-react';
-import { UserRole, BusinessType, UserProfile, Customer, FiscalRange } from '../../types';
+import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
 import { seedInitialDataToSupabase, updateProfilePinInSupabase } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
 import { compressImageToWebP } from '../../lib/imageUtils';
+
+export const PERMISSION_DEFINITIONS: { key: keyof UserPermissions; label: string; desc: string; category: string }[] = [
+  { key: 'canApplyDiscounts', label: 'Aplicar Descuentos', desc: 'Permite aplicar descuentos en caja (manuales o tercera edad).', category: 'Ventas & Caja' },
+  { key: 'canSellCredit', label: 'Venta al Crédito / Fiado', desc: 'Permite registrar ventas al crédito o cobrar a cuenta de clientes.', category: 'Ventas & Caja' },
+  { key: 'canVoidSales', label: 'Anulación de Ventas / Tickets', desc: 'Permite anular ventas emitidas o devoluciones.', category: 'Ventas & Caja' },
+  { key: 'canOpenDrawerNoSale', label: 'Apertura de Gaveta / Caja Chica', desc: 'Permite registrar salidas de efectivo o abrir gaveta sin venta.', category: 'Ventas & Caja' },
+  { key: 'canViewCostPrices', label: 'Visualizar Costos y Márgenes', desc: 'Muestra costo de compra y margen de ganancia en catálogo y kardex.', category: 'Inventario' },
+  { key: 'canEditCatalog', label: 'Editar Catálogo de Productos', desc: 'Crear, modificar o eliminar productos, precios y presentaciones.', category: 'Inventario' },
+  { key: 'canRegisterAdjustments', label: 'Registrar Mermas y Ajustes', desc: 'Ajustar existencias por mermas, productos vencidos o conteo.', category: 'Inventario' },
+];
 
 export const SettingsView: React.FC = () => {
   const tenant = useAppStore(state => state.tenant);
@@ -26,6 +36,7 @@ export const SettingsView: React.FC = () => {
   const deleteFiscalRange = useAppStore(state => state.deleteFiscalRange);
   const setSelectedFiscalRange = useAppStore(state => state.setSelectedFiscalRange);
   const addProfile = useAppStore(state => state.addProfile);
+  const updateProfilePermissions = useAppStore(state => state.updateProfilePermissions);
   const addCustomer = useAppStore(state => state.addCustomer);
   const updateCustomer = useAppStore(state => state.updateCustomer);
   const deleteCustomer = useAppStore(state => state.deleteCustomer);
@@ -210,6 +221,49 @@ export const SettingsView: React.FC = () => {
   const [newRole, setNewRole] = useState<UserRole>('CAJERO');
   const [newPinCode, setNewPinCode] = useState('0000');
 
+  // Granular staff permissions state
+  const [newPermissions, setNewPermissions] = useState<UserPermissions>({
+    canApplyDiscounts: false,
+    canSellCredit: false,
+    canVoidSales: false,
+    canOpenDrawerNoSale: false,
+    canViewCostPrices: false,
+    canEditCatalog: false,
+    canRegisterAdjustments: false
+  });
+
+  const [editingPermissionsProfile, setEditingPermissionsProfile] = useState<UserProfile | null>(null);
+  const [editPermissions, setEditPermissions] = useState<UserPermissions>({
+    canApplyDiscounts: false,
+    canSellCredit: false,
+    canVoidSales: false,
+    canOpenDrawerNoSale: false,
+    canViewCostPrices: false,
+    canEditCatalog: false,
+    canRegisterAdjustments: false
+  });
+
+  const handleOpenPermissionsModal = (profile: UserProfile) => {
+    setEditingPermissionsProfile(profile);
+    setEditPermissions({
+      canApplyDiscounts: !!profile.permissions?.canApplyDiscounts,
+      canSellCredit: !!profile.permissions?.canSellCredit,
+      canVoidSales: !!profile.permissions?.canVoidSales,
+      canOpenDrawerNoSale: !!profile.permissions?.canOpenDrawerNoSale,
+      canViewCostPrices: !!profile.permissions?.canViewCostPrices,
+      canEditCatalog: !!profile.permissions?.canEditCatalog,
+      canRegisterAdjustments: !!profile.permissions?.canRegisterAdjustments
+    });
+  };
+
+  const handleSavePermissions = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPermissionsProfile) return;
+    updateProfilePermissions(editingPermissionsProfile.id, editPermissions);
+    toast.success(`Permisos de ${editingPermissionsProfile.fullName} actualizados`);
+    setEditingPermissionsProfile(null);
+  };
+
   const handleSaveNewPin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPinProfile) return;
@@ -323,13 +377,16 @@ export const SettingsView: React.FC = () => {
           return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
         });
 
+    const finalPermissions = newRole === 'ADMIN' ? undefined : newPermissions;
+
     const newProfile: UserProfile = {
       id: generateUUID(),
       tenantId: tenant.id,
       fullName: newFullName,
       role: newRole,
       pinCode: newPinCode,
-      isActive: true
+      isActive: true,
+      permissions: finalPermissions
     };
 
     useAppStore.setState(state => ({ profiles: [...state.profiles, newProfile] }));
@@ -341,7 +398,8 @@ export const SettingsView: React.FC = () => {
         full_name: newFullName,
         role: newRole,
         pin_code: newPinCode,
-        is_active: true
+        is_active: true,
+        permissions: finalPermissions || {}
       });
 
       if (error) {
@@ -359,6 +417,15 @@ export const SettingsView: React.FC = () => {
 
     setIsNewProfileModalOpen(false);
     setNewFullName('');
+    setNewPermissions({
+      canApplyDiscounts: false,
+      canSellCredit: false,
+      canVoidSales: false,
+      canOpenDrawerNoSale: false,
+      canViewCostPrices: false,
+      canEditCatalog: false,
+      canRegisterAdjustments: false
+    });
   };
 
   const isDevMode = useAppStore(state => state.isDevMode);
@@ -890,27 +957,51 @@ export const SettingsView: React.FC = () => {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.85rem' }}>
-          {tenantProfiles.map(p => (
-            <div key={p.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="badge badge-fiscal">{p.role}</span>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>PIN: ****{p.pinCode?.slice(-2)}</span>
+          {tenantProfiles.map(p => {
+            const grantedCount = p.permissions ? Object.values(p.permissions).filter(Boolean).length : 0;
+            return (
+              <div key={p.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="badge badge-fiscal">{p.role}</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>PIN: ****{p.pinCode?.slice(-2)}</span>
+                </div>
+                <h4 style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, margin: '0.2rem 0' }}>{p.fullName}</h4>
+                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  {p.role === 'ADMIN' ? (
+                    <span style={{ color: '#16a34a', fontWeight: 600 }}>Acceso Total / Admin</span>
+                  ) : (
+                    <span>{grantedCount} de 7 permisos directos</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.2rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setEditingPinProfile(p);
+                      setNewPinInput(p.pinCode || '1234');
+                    }}
+                    style={{ fontSize: '0.78rem', padding: '0.3rem 0.55rem' }}
+                  >
+                    <Key size={13} />
+                    <span>Cambiar PIN</span>
+                  </button>
+                  {p.role !== 'ADMIN' && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => handleOpenPermissionsModal(p)}
+                      style={{ fontSize: '0.78rem', padding: '0.3rem 0.55rem', color: '#0284c7' }}
+                      title="Configurar permisos asignados"
+                    >
+                      <ShieldCheck size={13} />
+                      <span>Permisos</span>
+                    </button>
+                  )}
+                </div>
               </div>
-              <h4 style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, margin: '0.2rem 0' }}>{p.fullName}</h4>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setEditingPinProfile(p);
-                  setNewPinInput(p.pinCode || '1234');
-                }}
-                style={{ fontSize: '0.78rem', padding: '0.3rem 0.55rem', alignSelf: 'flex-start' }}
-              >
-                <Key size={13} />
-                <span>Cambiar PIN</span>
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -1156,7 +1247,7 @@ export const SettingsView: React.FC = () => {
       {/* MODAL: New Team Profile */}
       {isNewProfileModalOpen && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: '420px' }}>
+          <div className="modal-content" style={{ maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ color: '#0f172a', marginBottom: '0.85rem' }}>Agregar Nuevo Colaborador</h3>
             <form onSubmit={handleCreateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div className="form-group">
@@ -1165,9 +1256,9 @@ export const SettingsView: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Rol y Permisos</label>
+                <label className="form-label">Rol del Colaborador</label>
                 <select className="input-control" value={newRole} onChange={(e) => setNewRole(e.target.value as UserRole)}>
-                  <option value="CAJERO">Cajero (Solo Facturación y Caja)</option>
+                  <option value="CAJERO">Cajero (Facturación y Ventas)</option>
                   <option value="BODEGUERO">Bodeguero (Inventario y Compras)</option>
                   <option value="STAFF">Staff / Barbero (Servicios y Comisiones)</option>
                   <option value="ADMIN">Administrador (Acceso Total)</option>
@@ -1176,12 +1267,134 @@ export const SettingsView: React.FC = () => {
 
               <div className="form-group">
                 <label className="form-label">PIN Rápido (4 dígitos) *</label>
-                <input type="password" maxLength={4} className="input-control" value={newPinCode} onChange={(e) => setNewPinCode(e.target.value)} required />
+                <input type="password" maxLength={4} className="input-control" value={newPinCode} onChange={(e) => setNewPinCode(e.target.value.replace(/\D/g, ''))} required />
               </div>
+
+              {newRole === 'ADMIN' ? (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.75rem', fontSize: '0.8rem', color: '#166534' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '0.2rem' }}>Acceso Total / Administrador</div>
+                  Los administradores tienen autorización plena en todas las operaciones del sistema sin requerir PIN adicional.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <label className="form-label" style={{ fontWeight: 700, color: '#0f172a' }}>Permisos Asignados (Acceso Directo)</label>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '-0.3rem 0 0.4rem 0' }}>
+                    Las funciones no marcadas requerirán la aprobación instantánea con PIN de administrador al ejecutarse.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                    {PERMISSION_DEFINITIONS.map(def => {
+                      const isChecked = !!newPermissions[def.key];
+                      return (
+                        <label
+                          key={def.key}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '0.6rem',
+                            padding: '0.5rem 0.65rem',
+                            borderRadius: '6px',
+                            border: isChecked ? '1px solid var(--accent-primary)' : '1px solid #e2e8f0',
+                            background: isChecked ? '#f0fdfa' : '#f8fafc',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => setNewPermissions(prev => ({ ...prev, [def.key]: e.target.checked }))}
+                            style={{ marginTop: '0.15rem', cursor: 'pointer' }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>{def.label}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{def.desc}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setIsNewProfileModalOpen(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">Registrar Empleado</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Edit Profile Permissions */}
+      {editingPermissionsProfile && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+              <div>
+                <h3 style={{ color: '#0f172a', margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
+                  Permisos de {editingPermissionsProfile.fullName}
+                </h3>
+                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>
+                  Rol: {editingPermissionsProfile.role} - Configuración de accesos y autorizaciones
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setEditingPermissionsProfile(null)}
+                style={{ padding: '0.2rem 0.5rem' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePermissions} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
+                Las funciones desactivadas requerirán la aprobación instantánea con PIN de administrador.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                {PERMISSION_DEFINITIONS.map(def => {
+                  const isChecked = !!editPermissions[def.key];
+                  return (
+                    <label
+                      key={def.key}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '0.6rem',
+                        padding: '0.5rem 0.65rem',
+                        borderRadius: '6px',
+                        border: isChecked ? '1px solid var(--accent-primary)' : '1px solid #e2e8f0',
+                        background: isChecked ? '#f0fdfa' : '#f8fafc',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => setEditPermissions(prev => ({ ...prev, [def.key]: e.target.checked }))}
+                        style={{ marginTop: '0.15rem', cursor: 'pointer' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>{def.label}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{def.desc}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditingPermissionsProfile(null)}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Guardar Permisos
+                </button>
               </div>
             </form>
           </div>

@@ -208,4 +208,252 @@ test.describe('MiCuadre POS & Terminal E2E Workflows', () => {
     await expect(page.getByText(/Pack x3 \(3 unids\)/i)).toBeVisible();
     await expect(page.locator('.cart-item').first()).toBeVisible();
   });
+
+  test('should prompt for Admin PIN when cashier without canApplyDiscounts attempts to apply discount, and apply it upon PIN entry', async ({ page }) => {
+    const demoTenantId = '00000000-0000-0000-0000-000000000001';
+
+    // 1. Initialize store state with Cashier lacking canApplyDiscounts and Admin with PIN 1234
+    await page.addInitScript(({ tenantId }) => {
+      window.localStorage.setItem('micuadre_app_state', JSON.stringify({
+        state: {
+          isAuthenticated: true,
+          activeTab: 'pos',
+          isShiftModalOpen: false,
+          activeShift: {
+            id: 'shift-open-001',
+            tenantId,
+            userId: 'cashier-test-id',
+            userName: 'Cajero Sin Descuento',
+            openingAmount: 500,
+            status: 'OPEN',
+            openedAt: new Date().toISOString()
+          },
+          tenant: {
+            id: tenantId,
+            name: 'Comercio Demo',
+            businessType: 'PULPERIA',
+            isFiscalEnabled: false,
+            isServicesEnabled: true,
+            isWholesaleEnabled: true,
+            allowNegativeStock: false,
+            currencySymbol: 'L.'
+          },
+          currentUser: {
+            id: 'cashier-test-id',
+            tenantId,
+            fullName: 'Cajero Sin Descuento',
+            role: 'CAJERO',
+            pinCode: '2222',
+            isActive: true,
+            permissions: {
+              canApplyDiscounts: false,
+              canSellCredit: false,
+              canVoidSales: false,
+              canViewCostPrices: false,
+              canEditCatalog: false,
+              canRegisterAdjustments: false
+            }
+          },
+          profiles: [
+            {
+              id: 'admin-owner-id',
+              tenantId,
+              fullName: 'Admin Propietario',
+              role: 'ADMIN',
+              pinCode: '1234',
+              isActive: true
+            },
+            {
+              id: 'cashier-test-id',
+              tenantId,
+              fullName: 'Cajero Sin Descuento',
+              role: 'CAJERO',
+              pinCode: '2222',
+              isActive: true,
+              permissions: {
+                canApplyDiscounts: false
+              }
+            }
+          ],
+          products: [
+            {
+              id: 'prod-disc-item',
+              tenantId,
+              sku: 'PROD-DISC',
+              name: 'Arroz Precocido 1lb',
+              category: 'Granos',
+              unitOfMeasure: 'Libra',
+              costPrice: 12,
+              salePrice: 18,
+              currentStock: 50,
+              minStockAlert: 5,
+              taxClassification: 'EXENTO',
+              isActive: true
+            }
+          ]
+        },
+        version: 0
+      }));
+    }, { tenantId: demoTenantId });
+
+    // 2. Navigate to POS
+    await page.goto('/?comercio=demo');
+
+    // 3. Add product to cart
+    await expect(page.getByText('Arroz Precocido 1lb')).toBeVisible({ timeout: 10000 });
+    await page.getByText('Arroz Precocido 1lb').click();
+    await expect(page.locator('.cart-item').first()).toBeVisible();
+
+    // 4. Click Descuento button
+    const discountBtn = page.getByRole('button', { name: /descuento/i });
+    await expect(discountBtn).toBeVisible();
+    await discountBtn.click();
+
+    // 5. Verify Admin PIN modal is displayed
+    await expect(page.getByText(/autorizar descuento/i).first()).toBeVisible();
+    await expect(page.getByPlaceholder('••••')).toBeVisible();
+
+    // 6. Enter valid Admin PIN 1234 using numeric keypad buttons
+    await page.getByRole('button', { name: '1', exact: true }).click();
+    await page.getByRole('button', { name: '2', exact: true }).click();
+    await page.getByRole('button', { name: '3', exact: true }).click();
+    await page.getByRole('button', { name: '4', exact: true }).click();
+
+    // 7. Click Autorizar
+    const authorizeBtn = page.getByRole('button', { name: /autorizar/i });
+    await expect(authorizeBtn).toBeEnabled();
+    await authorizeBtn.click();
+
+    // 8. Verify Admin PIN modal is dismissed and Discount Modal opens
+    await expect(page.getByText(/autorizar descuento/i)).not.toBeVisible();
+    await expect(page.getByText(/aplicar descuento al carrito/i)).toBeVisible();
+
+    // 9. Apply senior citizen discount
+    const seniorDiscountBtn = page.getByText(/tercera edad|adulto mayor/i).first();
+    await expect(seniorDiscountBtn).toBeVisible();
+    await seniorDiscountBtn.click();
+
+    // 10. Verify discount applied in cart
+    await expect(page.getByText(/descuento/i).first()).toBeVisible();
+  });
+
+  test('should mask purchase costs with *** for cashiers without canViewCostPrices, and unmask when authorized via Admin PIN', async ({ page }) => {
+    const demoTenantId = '00000000-0000-0000-0000-000000000001';
+
+    // 1. Initialize store state with Cashier lacking canViewCostPrices
+    await page.addInitScript(({ tenantId }) => {
+      window.localStorage.setItem('micuadre_app_state', JSON.stringify({
+        state: {
+          isAuthenticated: true,
+          activeTab: 'inventory',
+          isShiftModalOpen: false,
+          activeShift: {
+            id: 'shift-open-002',
+            tenantId,
+            userId: 'cashier-test-id',
+            userName: 'Cajero Inventario',
+            openingAmount: 500,
+            status: 'OPEN',
+            openedAt: new Date().toISOString()
+          },
+          tenant: {
+            id: tenantId,
+            name: 'Comercio Demo',
+            businessType: 'PULPERIA',
+            isFiscalEnabled: false,
+            isServicesEnabled: true,
+            isWholesaleEnabled: true,
+            allowNegativeStock: false,
+            currencySymbol: 'L.'
+          },
+          currentUser: {
+            id: 'cashier-test-id',
+            tenantId,
+            fullName: 'Cajero Inventario',
+            role: 'CAJERO',
+            pinCode: '3333',
+            isActive: true,
+            permissions: {
+              canViewCostPrices: false,
+              canEditCatalog: false,
+              canRegisterAdjustments: false
+            }
+          },
+          profiles: [
+            {
+              id: 'admin-owner-id',
+              tenantId,
+              fullName: 'Admin Propietario',
+              role: 'ADMIN',
+              pinCode: '1234',
+              isActive: true
+            },
+            {
+              id: 'cashier-test-id',
+              tenantId,
+              fullName: 'Cajero Inventario',
+              role: 'CAJERO',
+              pinCode: '3333',
+              isActive: true,
+              permissions: {
+                canViewCostPrices: false
+              }
+            }
+          ],
+          products: [
+            {
+              id: 'prod-cost-test',
+              tenantId,
+              sku: 'COST-001',
+              name: 'Aceite Vegetal 750ml',
+              category: 'Abarrotes',
+              unitOfMeasure: 'Unidad',
+              costPrice: 42.50,
+              salePrice: 55.00,
+              currentStock: 15,
+              minStockAlert: 3,
+              taxClassification: 'EXENTO',
+              isActive: true
+            }
+          ]
+        },
+        version: 0
+      }));
+    }, { tenantId: demoTenantId });
+
+    // 2. Navigate to store (starts on Inventory tab)
+    await page.goto('/?comercio=demo');
+
+    // 3. Verify product row is visible in inventory
+    await expect(page.getByText('Aceite Vegetal 750ml')).toBeVisible({ timeout: 10000 });
+
+    // 4. Verify cost price is masked with ***
+    await expect(page.getByText('***').first()).toBeVisible();
+
+    // 5. Verify Desbloquear Costos button is present
+    const unlockBtn = page.getByRole('button', { name: /desbloquear costos/i });
+    await expect(unlockBtn).toBeVisible();
+
+    // 6. Click Desbloquear Costos
+    await unlockBtn.click();
+
+    // 7. Verify Admin PIN modal is displayed
+    await expect(page.getByText(/autorizaci[oó]n para ver costos/i)).toBeVisible();
+
+    // 8. Enter Admin PIN 1234
+    await page.getByRole('button', { name: '1', exact: true }).click();
+    await page.getByRole('button', { name: '2', exact: true }).click();
+    await page.getByRole('button', { name: '3', exact: true }).click();
+    await page.getByRole('button', { name: '4', exact: true }).click();
+
+    // 9. Submit authorization
+    await page.getByRole('button', { name: /autorizar/i }).click();
+
+    // 10. Verify Admin PIN modal closes and real cost price is now displayed
+    await expect(page.getByText(/autorizaci[oó]n para ver costos/i)).not.toBeVisible();
+    await expect(page.getByText(/L\.\s*42\.50/i)).toBeVisible();
+
+    // 11. Verify button toggles to Ocultar Costos
+    await expect(page.getByRole('button', { name: /ocultar costos/i })).toBeVisible();
+  });
 });
