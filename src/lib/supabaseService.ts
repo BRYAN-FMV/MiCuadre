@@ -430,6 +430,7 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
       minStockAlert: Number(p.min_stock_alert),
       taxClassification: p.tax_classification,
       isActive: p.is_active,
+      presentations: Array.isArray(p.presentations) ? p.presentations : [],
       tiers: p.product_price_tiers?.map((t: any) => ({
         id: t.id,
         minQuantity: t.min_quantity,
@@ -465,10 +466,18 @@ export async function saveProductToSupabase(product: Product) {
       current_stock: product.currentStock != null ? product.currentStock : 0,
       min_stock_alert: product.minStockAlert != null ? product.minStockAlert : 5,
       tax_classification: product.taxClassification || 'EXENTO',
-      is_active: product.isActive ?? true
+      is_active: product.isActive ?? true,
+      presentations: product.presentations || []
     };
 
-    const { data, error } = await supabase.from('products').upsert(payload, { onConflict: 'id' }).select().single();
+    let { data, error } = await supabase.from('products').upsert(payload, { onConflict: 'id' }).select().single();
+    if (error && error.message.includes('column') && error.message.includes('presentations')) {
+      const { presentations, ...fallbackPayload } = payload;
+      const retry = await supabase.from('products').upsert(fallbackPayload, { onConflict: 'id' }).select().single();
+      data = retry.data;
+      error = retry.error;
+    }
+
     if (error) {
       console.warn('Supabase upsert products info:', error.message);
     } else if (data && product.tiers && product.tiers.length > 0) {

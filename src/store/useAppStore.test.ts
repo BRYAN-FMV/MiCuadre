@@ -562,4 +562,256 @@ describe('App Zustand Store Business Logic', () => {
     expect(blockApp?.durationMinutes).toBe(60);
     expect(blockApp?.status).toBe('SCHEDULED');
   });
+
+  it('should add packaging presentation to cart and deduct multiplied base units upon sale', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(500);
+
+    const testProduct: Product = {
+      id: 'prod-pack-1',
+      tenantId: store.tenant.id,
+      sku: 'JAB-PACK',
+      name: 'Jabón Protex',
+      category: 'Cuidado Personal',
+      unitOfMeasure: 'UND',
+      salePrice: 25,
+      costPrice: 15,
+      currentStock: 20,
+      minStockAlert: 5,
+      taxClassification: 'EXENTO',
+      isActive: true,
+      presentations: [
+        {
+          id: 'pres-pack-3',
+          name: 'Pack x3',
+          unitsCount: 3,
+          salePrice: 65,
+          barcode: '7501002003'
+        }
+      ]
+    };
+
+    useAppStore.setState({ products: [testProduct] });
+
+    // Add 2 packs of 3 to cart (requires 2 * 3 = 6 base units)
+    store.addToCart({
+      product: testProduct,
+      presentation: testProduct.presentations![0],
+      quantity: 2
+    });
+
+    const cart = useAppStore.getState().cartLines;
+    expect(cart.length).toBe(1);
+    expect(cart[0].name).toBe('Jabón Protex [Pack x3]');
+    expect(cart[0].unitPrice).toBe(65);
+    expect(cart[0].quantity).toBe(2);
+    expect(cart[0].unitsPerPackage).toBe(3);
+    expect(cart[0].total).toBe(130);
+
+    // Process sale
+    const sale = store.processSale('CASH');
+    expect(sale).not.toBeNull();
+
+    // Verify product currentStock: 20 - 6 = 14
+    const updatedProd = useAppStore.getState().products.find(p => p.id === 'prod-pack-1');
+    expect(updatedProd?.currentStock).toBe(14);
+  });
+
+  it('should block adding packaging presentation when base units are insufficient', () => {
+    useAppStore.setState({
+      tenant: { ...useAppStore.getState().tenant, allowNegativeStock: false }
+    });
+
+    const testProduct: Product = {
+      id: 'prod-pack-2',
+      tenantId: useAppStore.getState().tenant.id,
+      sku: 'JAB-PACK-2',
+      name: 'Jabón Palmolive',
+      category: 'Cuidado Personal',
+      unitOfMeasure: 'UND',
+      salePrice: 20,
+      costPrice: 12,
+      currentStock: 2, // Only 2 units in stock
+      minStockAlert: 1,
+      taxClassification: 'EXENTO',
+      isActive: true,
+      presentations: [
+        {
+          id: 'pres-pack-3b',
+          name: 'Pack x3',
+          unitsCount: 3, // Requires 3 units
+          salePrice: 55
+        }
+      ]
+    };
+
+    useAppStore.setState({ products: [testProduct] });
+
+    // Trying to add 1 Pack x3 (needs 3 units, only 2 available)
+    useAppStore.getState().addToCart({
+      product: testProduct,
+      presentation: testProduct.presentations![0],
+      quantity: 1
+    });
+
+    expect(useAppStore.getState().cartLines.length).toBe(0);
+  });
+
+  it('should support having both individual units and pack presentations in cart simultaneously', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(500);
+
+    const testProduct: Product = {
+      id: 'prod-pack-3',
+      tenantId: store.tenant.id,
+      sku: 'JAB-PACK-3',
+      name: 'Jabón Dove',
+      category: 'Cuidado Personal',
+      unitOfMeasure: 'UND',
+      salePrice: 30,
+      costPrice: 20,
+      currentStock: 10,
+      minStockAlert: 2,
+      taxClassification: 'EXENTO',
+      isActive: true,
+      presentations: [
+        {
+          id: 'pres-pack-3c',
+          name: 'Pack x3',
+          unitsCount: 3,
+          salePrice: 80
+        }
+      ]
+    };
+
+    useAppStore.setState({ products: [testProduct] });
+
+    // Add 1 individual unit
+    store.addToCart({ product: testProduct, quantity: 1 });
+    // Add 1 pack of 3
+    store.addToCart({ product: testProduct, presentation: testProduct.presentations![0], quantity: 1 });
+
+    const cart = useAppStore.getState().cartLines;
+    expect(cart.length).toBe(2);
+    expect(cart[0].name).toBe('Jabón Dove');
+    expect(cart[1].name).toBe('Jabón Dove [Pack x3]');
+
+    // Process sale: 1 unit + 3 units = 4 base units deducted
+    store.processSale('CASH');
+
+    const updatedProd = useAppStore.getState().products.find(p => p.id === 'prod-pack-3');
+    expect(updatedProd?.currentStock).toBe(6); // 10 - 4 = 6
+  });
+
+  it('should correctly increment base units and update CPP when purchasing packaging presentations', () => {
+    const store = useAppStore.getState();
+
+    const testProduct: Product = {
+      id: 'prod-pack-pur',
+      tenantId: store.tenant.id,
+      sku: 'JAB-PUR',
+      name: 'Jabón Rexona',
+      category: 'Cuidado Personal',
+      unitOfMeasure: 'UND',
+      salePrice: 20,
+      costPrice: 10,
+      currentStock: 0,
+      minStockAlert: 5,
+      taxClassification: 'EXENTO',
+      isActive: true,
+      presentations: [
+        {
+          id: 'pres-rex-3',
+          name: 'Pack x3',
+          unitsCount: 3,
+          salePrice: 55
+        }
+      ]
+    };
+
+    useAppStore.setState({ products: [testProduct] });
+
+    // Purchase 5 packs of 3 at L. 45 per pack (5 * 3 = 15 units received, base unit cost = 45 / 3 = 15)
+    store.processPurchase(
+      {
+        supplierId: 'supp-1',
+        supplierName: 'Distribuidora Central',
+        invoiceNumber: 'FAC-001',
+        issueDate: '2026-10-10',
+        dueDate: '2026-11-10',
+        subtotal: 225,
+        taxAmount: 0,
+        total: 225,
+        paidAmount: 0,
+        paymentTerms: 'CREDIT',
+        paymentStatus: 'UNPAID'
+      },
+      [
+        {
+          productId: 'prod-pack-pur',
+          quantity: 5,
+          unitCost: 45,
+          unitsPerPackage: 3,
+          presentationId: 'pres-rex-3',
+          presentationName: 'Pack x3'
+        }
+      ]
+    );
+
+    const updatedProd = useAppStore.getState().products.find(p => p.id === 'prod-pack-pur');
+    expect(updatedProd?.currentStock).toBe(15);
+    expect(updatedProd?.costPrice).toBe(15);
+  });
+
+  it('should restitute multiplied packaging units when a sale is voided', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(500);
+
+    const testProduct: Product = {
+      id: 'prod-pack-void',
+      tenantId: store.tenant.id,
+      sku: 'JAB-VOID',
+      name: 'Jabón Zote',
+      category: 'Lavandería',
+      unitOfMeasure: 'UND',
+      salePrice: 30,
+      costPrice: 15,
+      currentStock: 10,
+      minStockAlert: 2,
+      taxClassification: 'EXENTO',
+      isActive: true,
+      presentations: [
+        {
+          id: 'pres-zote-2',
+          name: 'Dúo Pack (x2)',
+          unitsCount: 2,
+          salePrice: 55
+        }
+      ]
+    };
+
+    useAppStore.setState({ products: [testProduct] });
+
+    // Sell 2 Dúo Packs (4 units)
+    store.addToCart({
+      product: testProduct,
+      presentation: testProduct.presentations![0],
+      quantity: 2
+    });
+
+    const sale = store.processSale('CASH');
+    expect(sale).not.toBeNull();
+
+    // Stock should be 10 - 4 = 6
+    let prod = useAppStore.getState().products.find(p => p.id === 'prod-pack-void');
+    expect(prod?.currentStock).toBe(6);
+
+    // Void the sale
+    store.voidSale(sale!.id, 'Cliente devolvió el producto');
+
+    // Stock should be back to 10
+    prod = useAppStore.getState().products.find(p => p.id === 'prod-pack-void');
+    expect(prod?.currentStock).toBe(10);
+  });
 });
+

@@ -79,9 +79,13 @@ export const PurchaseManager: React.FC = () => {
     quantity: number;
     unitCost: number;
     newSalePrice?: number;
+    presentationId?: string;
+    presentationName?: string;
+    unitsPerPackage?: number;
   }>>([]);
 
   const [selectedProdId, setSelectedProdId] = useState(tenantProducts[0]?.id || '');
+  const [selectedPresentationId, setSelectedPresentationId] = useState<string>('');
   const [itemQty, setItemQty] = useState('10');
   const [itemCost, setItemCost] = useState(tenantProducts[0]?.costPrice ? tenantProducts[0].costPrice.toFixed(2) : '0.00');
 
@@ -91,6 +95,7 @@ export const PurchaseManager: React.FC = () => {
     setSelectedSupplierId(firstSupp?.id || '');
     setModalSupplierQuery(firstSupp?.companyName || '');
     setSelectedProdId(firstProd?.id || '');
+    setSelectedPresentationId('');
     setModalProductQuery(firstProd?.name || '');
     setItemCost(firstProd?.costPrice ? firstProd.costPrice.toFixed(2) : '0.00');
     setInvoiceNumber('');
@@ -106,6 +111,7 @@ export const PurchaseManager: React.FC = () => {
 
   const handleSelectProduct = (prod: Product) => {
     setSelectedProdId(prod.id);
+    setSelectedPresentationId('');
     setModalProductQuery(prod.name);
     setItemCost(prod.costPrice ? prod.costPrice.toFixed(2) : '0.00');
     setIsProductDropdownOpen(false);
@@ -115,6 +121,20 @@ export const PurchaseManager: React.FC = () => {
     setModalProductQuery(query);
     const cleanQ = query.trim().toLowerCase();
     if (cleanQ) {
+      // Check packaging presentation barcode first
+      for (const p of tenantProducts) {
+        if (p.presentations) {
+          const matchedPres = p.presentations.find(pres => pres.barcode && pres.barcode.toLowerCase() === cleanQ);
+          if (matchedPres) {
+            setSelectedProdId(p.id);
+            setSelectedPresentationId(matchedPres.id);
+            setModalProductQuery(`${p.name} [${matchedPres.name}]`);
+            setItemCost(matchedPres.costPrice ? matchedPres.costPrice.toFixed(2) : (p.costPrice * matchedPres.unitsCount).toFixed(2));
+            setIsProductDropdownOpen(false);
+            return;
+          }
+        }
+      }
       // Barcode scanner or exact SKU match
       const exactMatch = tenantProducts.find(p =>
         (p.barcode && p.barcode.toLowerCase() === cleanQ) ||
@@ -156,14 +176,20 @@ export const PurchaseManager: React.FC = () => {
     const prod = tenantProducts.find(p => p.id === selectedProdId);
     if (!prod) return;
 
+    const pres = prod.presentations?.find(p => p.id === selectedPresentationId);
+    const unitsMultiplier = pres ? pres.unitsCount : 1;
+
     setPurchaseItems([
       ...purchaseItems,
       {
         productId: prod.id,
-        productName: prod.name,
+        productName: pres ? `${prod.name} [${pres.name}]` : prod.name,
         quantity: parseInt(itemQty) || 1,
         unitCost: parseFloat(itemCost) || 0,
-        newSalePrice: prod.salePrice
+        newSalePrice: pres ? pres.salePrice : prod.salePrice,
+        presentationId: pres?.id,
+        presentationName: pres?.name,
+        unitsPerPackage: unitsMultiplier
       }
     ]);
   };
@@ -1050,7 +1076,7 @@ export const PurchaseManager: React.FC = () => {
                     <label className="form-label">Pagar de Fondo *</label>
                     <select className="input-control" value={selectedCashFundId} onChange={(e) => setSelectedCashFundId(e.target.value)}>
                       <option value="ACTIVE_CASH_SHIFT">
-                        💵 Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
+                        Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
                       </option>
                       {tenantFunds.map(f => (
                         <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
@@ -1061,98 +1087,153 @@ export const PurchaseManager: React.FC = () => {
               </div>
 
               {/* Items Selector */}
-              <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <label className="form-label" style={{ fontWeight: 700 }}>Agregar Producto Recibido (Escaneo o Nombre)</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.4rem', marginTop: '0.3rem', alignItems: 'start' }}>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      className="input-control"
-                      placeholder="Escanear código o buscar nombre..."
-                      value={modalProductQuery}
-                      onChange={(e) => handleProductQueryChange(e.target.value)}
-                      onFocus={() => setIsProductDropdownOpen(true)}
-                    />
-                    {isProductDropdownOpen && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', zIndex: 100, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                        {tenantProducts.filter(p =>
-                          !modalProductQuery ||
-                          p.name.toLowerCase().includes(modalProductQuery.toLowerCase()) ||
-                          (p.barcode && p.barcode.toLowerCase().includes(modalProductQuery.toLowerCase())) ||
-                          (p.sku && p.sku.toLowerCase().includes(modalProductQuery.toLowerCase()))
-                        ).length === 0 ? (
-                          <div style={{ padding: '0.6rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>
-                            No se encontraron productos.
-                          </div>
-                        ) : (
-                          tenantProducts.filter(p =>
-                            !modalProductQuery ||
-                            p.name.toLowerCase().includes(modalProductQuery.toLowerCase()) ||
-                            (p.barcode && p.barcode.toLowerCase().includes(modalProductQuery.toLowerCase())) ||
-                            (p.sku && p.sku.toLowerCase().includes(modalProductQuery.toLowerCase()))
-                          ).map(p => (
-                            <div
-                              key={p.id}
-                              onClick={() => handleSelectProduct(p)}
-                              style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.82rem', borderBottom: '1px solid #f1f5f9', background: selectedProdId === p.id ? '#f0fdf4' : '#ffffff' }}
-                            >
-                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.name}</div>
-                              <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Stock: {p.currentStock} {p.unitOfMeasure}</span>
-                                <span style={{ fontWeight: 700, color: '#059669' }}>Costo actual: {formatCurrency(p.costPrice, tenant.currencySymbol)}</span>
+              {(() => {
+                const currentSelectedProduct = tenantProducts.find(p => p.id === selectedProdId);
+                const hasPresentations = Boolean(currentSelectedProduct?.presentations && currentSelectedProduct.presentations.length > 0);
+
+                return (
+                  <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Agregar Producto Recibido (Escaneo o Nombre)</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: hasPresentations ? '2fr 1.3fr 1fr 1fr auto' : '2fr 1fr 1fr auto', gap: '0.4rem', marginTop: '0.3rem', alignItems: 'start' }}>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          className="input-control"
+                          placeholder="Escanear código o buscar nombre..."
+                          value={modalProductQuery}
+                          onChange={(e) => handleProductQueryChange(e.target.value)}
+                          onFocus={() => setIsProductDropdownOpen(true)}
+                        />
+                        {isProductDropdownOpen && (
+                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', zIndex: 100, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                            {tenantProducts.filter(p =>
+                              !modalProductQuery ||
+                              p.name.toLowerCase().includes(modalProductQuery.toLowerCase()) ||
+                              (p.barcode && p.barcode.toLowerCase().includes(modalProductQuery.toLowerCase())) ||
+                              (p.sku && p.sku.toLowerCase().includes(modalProductQuery.toLowerCase()))
+                            ).length === 0 ? (
+                              <div style={{ padding: '0.6rem', fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>
+                                No se encontraron productos.
                               </div>
-                            </div>
-                          ))
+                            ) : (
+                              tenantProducts.filter(p =>
+                                !modalProductQuery ||
+                                p.name.toLowerCase().includes(modalProductQuery.toLowerCase()) ||
+                                (p.barcode && p.barcode.toLowerCase().includes(modalProductQuery.toLowerCase())) ||
+                                (p.sku && p.sku.toLowerCase().includes(modalProductQuery.toLowerCase()))
+                              ).map(p => (
+                                <div
+                                  key={p.id}
+                                  onClick={() => handleSelectProduct(p)}
+                                  style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.82rem', borderBottom: '1px solid #f1f5f9', background: selectedProdId === p.id ? '#f0fdf4' : '#ffffff' }}
+                                >
+                                  <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.name}</div>
+                                  <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>Stock: {p.currentStock} {p.unitOfMeasure}</span>
+                                    <span style={{ fontWeight: 700, color: '#059669' }}>Costo actual: {formatCurrency(p.costPrice, tenant.currencySymbol)}</span>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
                         )}
+                      </div>
+
+                      {hasPresentations && (
+                        <div>
+                          <select
+                            className="input-control"
+                            value={selectedPresentationId}
+                            onChange={(e) => {
+                              const presId = e.target.value;
+                              setSelectedPresentationId(presId);
+                              const pres = currentSelectedProduct?.presentations?.find(p => p.id === presId);
+                              if (pres) {
+                                setItemCost(pres.costPrice ? pres.costPrice.toFixed(2) : ((currentSelectedProduct?.costPrice || 0) * pres.unitsCount).toFixed(2));
+                              } else {
+                                setItemCost(currentSelectedProduct?.costPrice ? currentSelectedProduct.costPrice.toFixed(2) : '0.00');
+                              }
+                            }}
+                            style={{ fontSize: '0.82rem' }}
+                          >
+                            <option value="">1 Unidad (Base)</option>
+                            {currentSelectedProduct?.presentations?.map(pres => (
+                              <option key={pres.id} value={pres.id}>
+                                {pres.name} ({pres.unitsCount} unid.)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div>
+                        <input type="number" placeholder="Cant." className="input-control" value={itemQty} onChange={(e) => setItemQty(e.target.value)} min="1" />
+                      </div>
+
+                      <div>
+                        <input type="number" step="0.01" placeholder="Costo Compra" className="input-control" value={itemCost} onChange={(e) => setItemCost(e.target.value)} title="Costo unitario o del empaque seleccionado" />
+                      </div>
+
+                      <button type="button" className="btn btn-secondary" onClick={handleAddItem} style={{ fontSize: '0.8rem', height: '36px' }}>
+                        + Agregar
+                      </button>
+                    </div>
+
+                    {/* Items Added Table */}
+                    {purchaseItems.length > 0 && (
+                      <div style={{ marginTop: '0.75rem' }}>
+                        <table className="table" style={{ width: '100%', fontSize: '0.78rem' }}>
+                          <thead>
+                            <tr>
+                              <th>Producto</th>
+                              <th>Cant.</th>
+                              <th>Costo Compra</th>
+                              <th>Nuevo CPP Recalculado</th>
+                              <th style={{ width: '32px' }}></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {purchaseItems.map((item, idx) => {
+                              const prod = tenantProducts.find(p => p.id === item.productId);
+                              const multiplier = item.unitsPerPackage || 1;
+                              const totalUnits = item.quantity * multiplier;
+                              const baseUnitCost = item.unitCost / multiplier;
+                              const cpp = prod ? calculateCPP(prod.currentStock, prod.costPrice, totalUnits, baseUnitCost) : { newCost: baseUnitCost };
+                              return (
+                                <tr key={idx}>
+                                  <td>
+                                    <div style={{ fontWeight: 600 }}>{item.productName}</div>
+                                    {multiplier > 1 && (
+                                      <div style={{ fontSize: '0.72rem', color: '#6366f1' }}>
+                                        Equivale a {totalUnits} unidades en inventario
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>+{item.quantity}</td>
+                                  <td>{formatCurrency(item.unitCost, tenant.currencySymbol)}</td>
+                                  <td style={{ color: '#10b981', fontWeight: 700 }}>
+                                    {formatCurrency(cpp.newCost, tenant.currencySymbol)}
+                                  </td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPurchaseItems(purchaseItems.filter((_, i) => i !== idx))}
+                                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ef4444' }}
+                                      title="Quitar ítem"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
-
-                  <div>
-                    <input type="number" placeholder="Cant." className="input-control" value={itemQty} onChange={(e) => setItemQty(e.target.value)} min="1" />
-                  </div>
-
-                  <div>
-                    <input type="number" step="0.01" placeholder="Costo Unit." className="input-control" value={itemCost} onChange={(e) => setItemCost(e.target.value)} title="Costo unitario (muestra automáticamente el costo actual)" />
-                  </div>
-
-                  <button type="button" className="btn btn-secondary" onClick={handleAddItem} style={{ fontSize: '0.8rem', height: '36px' }}>
-                    + Agregar
-                  </button>
-                </div>
-
-                {/* Items Added Table */}
-                {purchaseItems.length > 0 && (
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <table className="table" style={{ width: '100%', fontSize: '0.78rem' }}>
-                      <thead>
-                        <tr>
-                          <th>Producto</th>
-                          <th>Cant.</th>
-                          <th>Costo Unit.</th>
-                          <th>Nuevo CPP Recalculado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {purchaseItems.map((item, idx) => {
-                          const prod = tenantProducts.find(p => p.id === item.productId);
-                          const cpp = prod ? calculateCPP(prod.currentStock, prod.costPrice, item.quantity, item.unitCost) : { newCost: item.unitCost };
-                          return (
-                            <tr key={idx}>
-                              <td>{item.productName}</td>
-                              <td>+{item.quantity}</td>
-                              <td>{formatCurrency(item.unitCost, tenant.currencySymbol)}</td>
-                              <td style={{ color: '#10b981', fontWeight: 700 }}>
-                                {formatCurrency(cpp.newCost, tenant.currencySymbol)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                );
+              })()}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setIsPurchaseModalOpen(false)}>Cancelar</button>

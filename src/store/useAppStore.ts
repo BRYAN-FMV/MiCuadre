@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import {
-  Tenant, UserProfile, Product, FiscalRange, CashShift, CashMovement,
+  Tenant, UserProfile, Product, ProductPresentation, FiscalRange, CashShift, CashMovement,
   CartLine, Sale, PurchaseInvoice, Supplier, Service, Staff,
   Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment,
   SalesReturn, InventoryAdjustment
@@ -127,7 +127,7 @@ interface AppState {
   deleteProduct: (id: string) => void;
 
   // Cart & Hold Order Actions
-  addToCart: (item: { product?: Product; service?: Service; staffId?: string; quantity?: number }) => void;
+  addToCart: (item: { product?: Product; service?: Service; staffId?: string; quantity?: number; presentation?: ProductPresentation }) => void;
   updateCartLineQty: (index: number, qty: number) => void;
   updateCartLineStaff: (index: number, staffId: string) => void;
   removeCartLine: (index: number) => void;
@@ -153,7 +153,7 @@ interface AppState {
 
   // Purchase & Supplier Actions
   addSupplier: (supplier: Omit<Supplier, 'id' | 'tenantId'>) => void;
-  processPurchase: (purchase: Omit<PurchaseInvoice, 'id' | 'tenantId'>, items: Array<{ productId: string; quantity: number; unitCost: number; newSalePrice?: number }>, paidFromFundId?: string) => void;
+  processPurchase: (purchase: Omit<PurchaseInvoice, 'id' | 'tenantId'>, items: Array<{ productId: string; quantity: number; unitCost: number; newSalePrice?: number; presentationId?: string; presentationName?: string; unitsPerPackage?: number }>, paidFromFundId?: string) => void;
   payPurchaseInvoice: (invoiceId: string, fundId: string, amount: number) => void;
 
   // Fund & Expense Actions
@@ -590,7 +590,7 @@ export const useAppStore = create<AppState>()(
       }),
 
 
-  addToCart: ({ product, service, staffId, quantity = 1 }) => set((state) => {
+  addToCart: ({ product, service, staffId, quantity = 1, presentation }) => set((state) => {
     // SECURITY GUARD: Strict Multi-tenant Isolation for Cart Additions
     if (product && product.tenantId && product.tenantId !== state.tenant.id) {
       console.warn(`[SECURITY GUARD] Bloqueado intento de agregar producto de otro comercio (${product.tenantId}) al carrito de (${state.tenant.id})`);
@@ -601,46 +601,69 @@ export const useAppStore = create<AppState>()(
       return state;
     }
 
-    const existingIndex = state.cartLines.findIndex(line =>
-      product ? line.productId === product.id : (service ? line.serviceId === service.id : false)
-    );
+    const existingIndex = state.cartLines.findIndex(line => {
+      if (product) {
+        if (presentation) {
+          return line.productId === product.id && line.presentationId === presentation.id;
+        }
+        return line.productId === product.id && !line.presentationId;
+      }
+      return service ? line.serviceId === service.id : false;
+    });
 
     let newLines = [...state.cartLines];
 
     if (product) {
+      const unitsPerPackage = presentation ? presentation.unitsCount : 1;
+      const effectiveUnitPrice = presentation ? presentation.salePrice : product.salePrice;
+      const lineName = presentation ? `${product.name} [${presentation.name}]` : product.name;
+      const effectiveBarcode = (presentation && presentation.barcode) ? presentation.barcode : product.barcode;
+
       const existingQty = existingIndex >= 0 ? newLines[existingIndex].quantity : 0;
       const currentQty = existingQty + quantity;
       const allowNegative = state.tenant.allowNegativeStock === true;
+
+      // Calculate total base units already in cart for this product
+      const currentOtherUnitsInCart = newLines.reduce((acc, l, idx) => {
+        if (l.productId === product.id && idx !== existingIndex) {
+          return acc + l.quantity * (l.unitsPerPackage || 1);
+        }
+        return acc;
+      }, 0);
+      const totalUnitsNeeded = currentOtherUnitsInCart + (currentQty * unitsPerPackage);
 
       if (!allowNegative) {
         if (product.currentStock <= 0) {
           toast.error(`Producto "${product.name}" sin existencias (Stock: ${product.currentStock}).`);
           return state;
         }
-        if (currentQty > product.currentStock) {
-          toast.error(`Stock insuficiente para "${product.name}". Disponible: ${product.currentStock}, en carrito: ${existingQty}`);
+        if (totalUnitsNeeded > product.currentStock) {
+          toast.error(`Stock insuficiente para "${lineName}". Disponible: ${product.currentStock} unidades (solicitadas: ${totalUnitsNeeded}).`);
           return state;
         }
-      } else if (currentQty > product.currentStock) {
-        toast.warning(`Atención: La cantidad (${currentQty}) supera el stock disponible (${product.currentStock}).`);
+      } else if (totalUnitsNeeded > product.currentStock) {
+        toast.warning(`Atención: La cantidad (${totalUnitsNeeded} unidades) supera el stock disponible (${product.currentStock}).`);
       }
 
       const isFiscalActive = state.tenant.isFiscalEnabled === true;
       const effectiveTaxClass = isFiscalActive ? product.taxClassification : 'EXENTO';
       const lineCalculations = calculateLineTotals(
-        product.salePrice,
+        effectiveUnitPrice,
         currentQty,
         effectiveTaxClass,
         0,
-        product.tiers,
+        presentation ? undefined : product.tiers,
         state.tenant.pricesIncludeTax ?? true
       );
 
       const newLine: CartLine = {
         productId: product.id,
+        presentationId: presentation?.id,
+        presentationName: presentation?.name,
+        unitsPerPackage: unitsPerPackage,
         sku: product.sku,
-        barcode: product.barcode,
-        name: product.name,
+        barcode: effectiveBarcode,
+        name: lineName,
         quantity: currentQty,
         unitPrice: lineCalculations.unitPrice,
         originalUnitPrice: lineCalculations.originalUnitPrice,
@@ -707,13 +730,22 @@ export const useAppStore = create<AppState>()(
     const allowNegative = state.tenant.allowNegativeStock === true;
 
     if (product) {
+      const unitsPerPackage = targetLine.unitsPerPackage || 1;
+      const currentOtherUnitsInCart = state.cartLines.reduce((acc, l, idx) => {
+        if (l.productId === product.id && idx !== index) {
+          return acc + l.quantity * (l.unitsPerPackage || 1);
+        }
+        return acc;
+      }, 0);
+      const totalUnitsNeeded = currentOtherUnitsInCart + (qty * unitsPerPackage);
+
       if (!allowNegative) {
-        if (qty > product.currentStock) {
-          toast.error(`Stock insuficiente para "${product.name}". Disponible: ${product.currentStock}`);
+        if (totalUnitsNeeded > product.currentStock) {
+          toast.error(`Stock insuficiente para "${targetLine.name}". Disponible: ${product.currentStock} unidades (se requieren ${totalUnitsNeeded}).`);
           return state;
         }
-      } else if (qty > product.currentStock) {
-        toast.warning(`Atención: La cantidad (${qty}) supera el stock disponible (${product.currentStock}).`);
+      } else if (totalUnitsNeeded > product.currentStock) {
+        toast.warning(`Atención: La cantidad (${totalUnitsNeeded} unidades) supera el stock disponible (${product.currentStock}).`);
       }
     }
 
@@ -724,7 +756,7 @@ export const useAppStore = create<AppState>()(
       qty,
       effectiveTaxClass,
       targetLine.discountAmount,
-      product?.tiers,
+      targetLine.presentationId ? undefined : product?.tiers,
       state.tenant.pricesIncludeTax ?? true
     );
 
@@ -1048,8 +1080,9 @@ export const useAppStore = create<AppState>()(
       for (const item of state.cartLines) {
         if (item.productId) {
           const prod = state.products.find(p => p.id === item.productId);
-          if (prod && item.quantity > prod.currentStock) {
-            toast.error(`La venta no puede procesarse. El producto "${prod.name}" no tiene suficiente stock (Disponible: ${prod.currentStock}, Solicitado: ${item.quantity}).`);
+          const unitsNeeded = item.quantity * (item.unitsPerPackage || 1);
+          if (prod && unitsNeeded > prod.currentStock) {
+            toast.error(`La venta no puede procesarse. El producto "${prod.name}" no tiene suficiente stock (Disponible: ${prod.currentStock}, Solicitado: ${unitsNeeded} unidades).`);
             return null;
           }
         }
@@ -1171,9 +1204,10 @@ export const useAppStore = create<AppState>()(
       if (item.productId) {
         const prodIndex = updatedProducts.findIndex(p => p.id === item.productId);
         if (prodIndex >= 0) {
+          const unitsToDeduct = item.quantity * (item.unitsPerPackage || 1);
           updatedProducts[prodIndex] = {
             ...updatedProducts[prodIndex],
-            currentStock: updatedProducts[prodIndex].currentStock - item.quantity
+            currentStock: updatedProducts[prodIndex].currentStock - unitsToDeduct
           };
         }
       }
@@ -1312,9 +1346,10 @@ export const useAppStore = create<AppState>()(
         if (item.productId) {
           const pIndex = updatedProducts.findIndex(p => p.id === item.productId || p.sku === item.sku);
           if (pIndex >= 0) {
+            const unitsToRestitute = item.quantity * (item.unitsPerPackage || 1);
             updatedProducts[pIndex] = {
               ...updatedProducts[pIndex],
-              currentStock: updatedProducts[pIndex].currentStock + item.quantity
+              currentStock: updatedProducts[pIndex].currentStock + unitsToRestitute
             };
             if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
               saveProductToSupabase(updatedProducts[pIndex]).catch(e => console.warn('Supabase update product on void:', e));
@@ -1541,7 +1576,10 @@ export const useAppStore = create<AppState>()(
       const prodIndex = updatedProducts.findIndex(p => p.id === item.productId);
       if (prodIndex >= 0) {
         const prod = updatedProducts[prodIndex];
-        const cppResult = calculateCPP(prod.currentStock, prod.costPrice, item.quantity, item.unitCost);
+        const multiplier = item.unitsPerPackage || 1;
+        const totalBaseUnitsReceived = item.quantity * multiplier;
+        const baseUnitCost = item.unitCost / multiplier;
+        const cppResult = calculateCPP(prod.currentStock, prod.costPrice, totalBaseUnitsReceived, baseUnitCost);
         updatedProducts[prodIndex] = {
           ...prod,
           currentStock: cppResult.newStock,

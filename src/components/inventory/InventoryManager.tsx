@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { formatCurrency } from '../../lib/monetary';
-import { Product, TaxClassification, PriceTier } from '../../types';
+import { Product, TaxClassification, PriceTier, ProductPresentation } from '../../types';
 import { toast } from 'sonner';
-import { Plus, History, Search, Package, Edit2, Trash2, X, AlertTriangle } from 'lucide-react';
+import { Plus, History, Search, Package, Edit2, Trash2, X, AlertTriangle, Layers } from 'lucide-react';
+
+interface FormPresentation extends Omit<ProductPresentation, 'id'> {
+  id?: string;
+}
 
 export const InventoryManager: React.FC = () => {
   const { products, addProduct, updateProduct, deleteProduct, tenant, addInventoryAdjustment, inventoryAdjustments } = useAppStore();
@@ -38,6 +42,7 @@ export const InventoryManager: React.FC = () => {
   const [minStockAlert, setMinStockAlert] = useState('5');
   const [taxClassification, setTaxClassification] = useState<TaxClassification>('GRAVADO_15');
   const [tiers, setTiers] = useState<Omit<PriceTier, 'id'>[]>([]);
+  const [presentations, setPresentations] = useState<FormPresentation[]>([]);
 
   const openAddModal = () => {
     resetForm();
@@ -58,6 +63,14 @@ export const InventoryManager: React.FC = () => {
     setMinStockAlert(product.minStockAlert.toString());
     setTaxClassification(product.taxClassification);
     setTiers(product.tiers ? product.tiers.map(t => ({ minQuantity: t.minQuantity, unitPrice: t.unitPrice, tierName: t.tierName })) : []);
+    setPresentations(product.presentations ? product.presentations.map(p => ({
+      id: p.id,
+      name: p.name,
+      unitsCount: p.unitsCount,
+      salePrice: p.salePrice,
+      costPrice: p.costPrice,
+      barcode: p.barcode || ''
+    })) : []);
     setIsAddModalOpen(true);
   };
 
@@ -73,6 +86,7 @@ export const InventoryManager: React.FC = () => {
     setMinStockAlert('5');
     setTaxClassification('GRAVADO_15');
     setTiers([]);
+    setPresentations([]);
   };
 
   const handleAddTier = () => {
@@ -81,6 +95,26 @@ export const InventoryManager: React.FC = () => {
 
   const handleRemoveTier = (index: number) => {
     setTiers(tiers.filter((_, i) => i !== index));
+  };
+
+  const handleAddPresentation = () => {
+    const currentBaseSale = parseFloat(salePrice) || 0;
+    setPresentations([...presentations, {
+      name: 'Pack x3',
+      unitsCount: 3,
+      salePrice: currentBaseSale * 3,
+      barcode: ''
+    }]);
+  };
+
+  const handleRemovePresentation = (index: number) => {
+    setPresentations(presentations.filter((_, i) => i !== index));
+  };
+
+  const handleUpdatePresentation = (index: number, field: keyof FormPresentation, value: any) => {
+    const updated = [...presentations];
+    updated[index] = { ...updated[index], [field]: value };
+    setPresentations(updated);
   };
 
   const handleSaveProduct = (e: React.FormEvent) => {
@@ -95,6 +129,17 @@ export const InventoryManager: React.FC = () => {
     const parsedStock = parseInt(currentStock) || 0;
     const parsedMinStock = parseInt(minStockAlert) || 5;
 
+    const formattedPresentations = presentations
+      .filter(p => p.name.trim() && (Number(p.unitsCount) || 0) > 1 && (Number(p.salePrice) || 0) > 0)
+      .map(p => ({
+        id: p.id || `pres-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: p.name.trim(),
+        unitsCount: Number(p.unitsCount) || 2,
+        salePrice: Number(p.salePrice) || 0,
+        costPrice: p.costPrice ? Number(p.costPrice) : undefined,
+        barcode: p.barcode?.trim() || undefined
+      }));
+
     if (editingProduct) {
       updateProduct(editingProduct.id, {
         name: name.trim(),
@@ -107,7 +152,8 @@ export const InventoryManager: React.FC = () => {
         currentStock: parsedStock,
         minStockAlert: parsedMinStock,
         taxClassification,
-        tiers: tiers.map((t, idx) => ({ ...t, id: `tier-${idx}-${Date.now()}` }))
+        tiers: tiers.map((t, idx) => ({ ...t, id: `tier-${idx}-${Date.now()}` })),
+        presentations: formattedPresentations
       });
       toast.success(`Producto "${name}" actualizado correctamente`);
     } else {
@@ -123,7 +169,8 @@ export const InventoryManager: React.FC = () => {
         minStockAlert: parsedMinStock,
         taxClassification,
         isActive: true,
-        tiers: tiers.map((t, idx) => ({ ...t, id: `tier-${idx}-${Date.now()}` }))
+        tiers: tiers.map((t, idx) => ({ ...t, id: `tier-${idx}-${Date.now()}` })),
+        presentations: formattedPresentations
       });
       toast.success(`Producto "${name}" agregado al inventario`);
     }
@@ -391,6 +438,31 @@ export const InventoryManager: React.FC = () => {
                         <span className={`badge ${isLow ? 'badge-danger' : 'badge-success'}`}>
                           {p.currentStock} {p.unitOfMeasure || 'Unid.'}
                         </span>
+                        {p.presentations && p.presentations.length > 0 && (
+                          <div style={{ marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                            {p.presentations.map(pres => {
+                              const fullPacks = Math.floor(p.currentStock / pres.unitsCount);
+                              const looseUnits = p.currentStock % pres.unitsCount;
+                              return (
+                                <span
+                                  key={pres.id}
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600,
+                                    color: '#475569',
+                                    background: '#f1f5f9',
+                                    padding: '0.12rem 0.35rem',
+                                    borderRadius: '4px',
+                                    display: 'inline-block'
+                                  }}
+                                  title={`1 ${pres.name} = ${pres.unitsCount} unidades`}
+                                >
+                                  {fullPacks} {pres.name}{looseUnits > 0 ? ` + ${looseUnits} sueltas` : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
                         {formatCurrency(p.costPrice, tenant.currencySymbol)}
@@ -676,6 +748,77 @@ export const InventoryManager: React.FC = () => {
                         type="button"
                         onClick={() => handleRemoveTier(idx)}
                         style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.3rem' }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Packaging Presentations Configuration (Packs / Cajas / Fardos) */}
+              <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                  <div>
+                    <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#0f172a' }}>Presentaciones de Empaque (Packs, Cajas, Fardos)</span>
+                    <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.73rem', color: '#64748b' }}>
+                      Vende paquetes completos que descuentan automáticamente las unidades del inventario principal.
+                    </p>
+                  </div>
+                  <button type="button" className="btn btn-secondary" onClick={handleAddPresentation} style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}>
+                    + Agregar Empaque
+                  </button>
+                </div>
+
+                {presentations.length === 0 ? (
+                  <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
+                    Sin presentaciones de empaque configuradas (solo se vende por {unitOfMeasure || 'Unidad'}).
+                  </p>
+                ) : (
+                  presentations.map((pres, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1.2fr auto', gap: '0.45rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="Nombre (ej: Pack x3)"
+                        className="input-control"
+                        style={{ fontSize: '0.8rem' }}
+                        value={pres.name}
+                        onChange={(e) => handleUpdatePresentation(idx, 'name', e.target.value)}
+                        required
+                      />
+                      <input
+                        type="number"
+                        min="2"
+                        placeholder="Contiene (ej: 3)"
+                        className="input-control"
+                        style={{ fontSize: '0.8rem' }}
+                        value={pres.unitsCount || ''}
+                        onChange={(e) => handleUpdatePresentation(idx, 'unitsCount', parseInt(e.target.value) || 2)}
+                        required
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder={`Precio (${tenant.currencySymbol})`}
+                        className="input-control"
+                        style={{ fontSize: '0.8rem' }}
+                        value={pres.salePrice || ''}
+                        onChange={(e) => handleUpdatePresentation(idx, 'salePrice', parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Código de barra (opcional)"
+                        className="input-control"
+                        style={{ fontSize: '0.8rem' }}
+                        value={pres.barcode || ''}
+                        onChange={(e) => handleUpdatePresentation(idx, 'barcode', e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePresentation(idx)}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.3rem' }}
+                        title="Eliminar presentación"
                       >
                         <Trash2 size={16} />
                       </button>

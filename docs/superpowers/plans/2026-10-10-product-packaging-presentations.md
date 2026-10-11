@@ -31,14 +31,14 @@
 - Modify: `src/store/useAppStore.ts`
 - Modify: `src/store/useAppStore.test.ts`
 
-- [ ] Add `ProductPresentation` interface to `src/types/index.ts`.
-- [ ] Add `presentations?: ProductPresentation[]` to `Product`.
-- [ ] Add `presentationId?: string`, `presentationName?: string`, and `unitsPerPackage?: number` to `CartLine` and `PurchaseInvoiceItem`.
-- [ ] Update `addToCart` in `useAppStore.ts` to accept optional `presentation?: ProductPresentation` parameter.
-- [ ] Update `processSale` in `useAppStore.ts` to deduct `line.quantity * (line.unitsPerPackage || 1)` from `product.currentStock`.
-- [ ] Update Kardex movement logging to record packaging presentation name when sold.
-- [ ] Write unit tests in `src/store/useAppStore.test.ts` verifying that selling a packaging presentation deducts multiplied units and records the presentation.
-- [ ] Run `npm test` and verify tests pass.
+- [x] Add `ProductPresentation` interface to `src/types/index.ts`.
+- [x] Add `presentations?: ProductPresentation[]` to `Product`.
+- [x] Add `presentationId?: string`, `presentationName?: string`, and `unitsPerPackage?: number` to `CartLine` and `PurchaseInvoiceItem`.
+- [x] Update `addToCart` in `useAppStore.ts` to accept optional `presentation?: ProductPresentation` parameter.
+- [x] Update `processSale` in `useAppStore.ts` to deduct `line.quantity * (line.unitsPerPackage || 1)` from `product.currentStock`.
+- [x] Update Kardex movement logging to record packaging presentation name when sold.
+- [x] Write unit tests in `src/store/useAppStore.test.ts` verifying that selling a packaging presentation deducts multiplied units and records the presentation.
+- [x] Run `npm test` and verify tests pass.
 
 ---
 
@@ -47,35 +47,35 @@
 **Files:**
 - Modify: `src/components/inventory/InventoryManager.tsx`
 
-- [ ] Add UI in product creation/edit modal to configure presentations (Name, Units Count, Sale Price, Cost Price, Barcode).
-- [ ] Add visual helper badge on inventory table showing pack conversion equivalence (e.g. `35 Unidades (11 packs y 2 sueltas)`).
-- [ ] Run `npm test` and verify zero regressions.
+- [x] Add UI in product creation/edit modal to configure presentations (Name, Units Count, Sale Price, Cost Price, Barcode).
+- [x] Add visual helper badge on inventory table showing pack conversion equivalence (e.g. `35 Unidades (11 packs y 2 sueltas)`).
+- [x] Run `npm test` and verify zero regressions.
 
 ---
 
 ### Task 3: POS Quick Presentation Selector and Barcode Matcher
 
 **Files:**
-- Modify: `src/components/pos/POS.tsx`
+- Modify: `src/components/pos/PosContainer.tsx`
 
-- [ ] In `handleBarcodeScanned`, check if scanned code matches a presentation barcode. If matched, add presentation to cart directly.
-- [ ] In product grid / search, if product has presentations, open a clean presentation selection modal with large touch buttons.
-- [ ] Display presentation tag in cart line item (e.g. `[Pack x3]`).
-- [ ] Run `npm test` and verify zero regressions.
+- [x] In `handleBarcodeScanned`, check if scanned code matches a presentation barcode. If matched, add presentation to cart directly.
+- [x] In product grid / search, if product has presentations, open a clean presentation selection modal with large touch buttons.
+- [x] Display presentation tag in cart line item (e.g. `[Pack x3]`).
+- [x] Run `npm test` and verify zero regressions.
 
 ---
 
 ### Task 4: Purchases and Supabase Persistence Support
 
 **Files:**
-- Modify: `src/components/purchases/PurchaseInvoicesManager.tsx`
+- Modify: `src/components/purchases/PurchaseManager.tsx`
 - Modify: `src/lib/supabaseService.ts`
 - Modify: `supabase/migration_add_missing_tenant_columns.sql`
 
-- [ ] In `PurchaseInvoicesManager.tsx`, allow selecting a packaging presentation when adding items to a purchase invoice, multiplying received stock by `unitsPerPackage`.
-- [ ] In `supabaseService.ts`, ensure `presentations` field is serialized/deserialized when saving/loading products.
-- [ ] In `supabase/migration_add_missing_tenant_columns.sql`, add column `presentations JSONB DEFAULT '[]'::jsonb` to `products`.
-- [ ] Run `npm test` and `npm run build` to ensure clean compile.
+- [x] In `PurchaseManager.tsx`, allow selecting a packaging presentation when adding items to a purchase invoice, multiplying received stock by `unitsPerPackage`.
+- [x] In `supabaseService.ts`, ensure `presentations` field is serialized/deserialized when saving/loading products.
+- [x] In `supabase/migration_add_missing_tenant_columns.sql`, add column `presentations JSONB DEFAULT '[]'::jsonb` to `products`.
+- [x] Run `npm test` and `npm run build` to ensure clean compile.
 
 ---
 
@@ -84,6 +84,6 @@
 **Files:**
 - Modify: `e2e/pos-workflow.spec.ts`
 
-- [ ] Add an E2E test verifying packaging presentation selection and sale in the POS.
-- [ ] Run `npx playwright test` and verify all tests pass.
-- [ ] Commit and push to repository.
+- [x] Add an E2E test verifying packaging presentation selection and sale in the POS.
+- [x] Run `npx playwright test` and verify all tests pass.
+- [x] Commit and push to repository.

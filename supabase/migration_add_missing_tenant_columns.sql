@@ -26,5 +26,8 @@ CREATE POLICY "Allow public full access tenants" ON tenants
     USING (true)
     WITH CHECK (true);
 
--- 3. Recargar cache de esquema de PostgREST en Supabase de forma inmediata
+-- 3. Agregar columna de presentaciones de empaque a la tabla 'products'
+ALTER TABLE products ADD COLUMN IF NOT EXISTS presentations JSONB DEFAULT '[]'::jsonb;
+
+-- 4. Recargar cache de esquema de PostgREST en Supabase de forma inmediata
 NOTIFY pgrst, 'reload schema';

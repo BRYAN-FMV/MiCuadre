@@ -52,10 +52,10 @@ test.describe('MiCuadre POS & Terminal E2E Workflows', () => {
 
       // 6. Verify Discount Modal opens and shows Senior Citizen (25%) option
       await expect(page.getByText(/aplicar descuento al carrito/i)).toBeVisible();
-      await expect(page.getByText(/tercera edad|adulto mayor/i)).toBeVisible();
+      await expect(page.getByText(/tercera edad|adulto mayor/i).first()).toBeVisible();
 
       // 7. Close discount modal
-      const closeBtn = page.locator('button:has(svg.lucide-x)').first();
+      const closeBtn = page.getByRole('button', { name: /cerrar modal de descuento/i });
       await closeBtn.click();
     }
 
@@ -134,5 +134,78 @@ test.describe('MiCuadre POS & Terminal E2E Workflows', () => {
 
     // 13. Close modal
     await page.getByRole('button', { name: /cancelar/i }).click();
+  });
+
+  test('should support packaging presentations selection and adding to cart in POS', async ({ page }) => {
+    // 1. Pre-authenticate with a product that has packaging presentations
+    await page.addInitScript(() => {
+      const demoTenantId = '00000000-0000-0000-0000-000000000001';
+      window.localStorage.setItem('micuadre_app_state', JSON.stringify({
+        state: {
+          isAuthenticated: true,
+          activeTab: 'pos',
+          tenant: {
+            id: demoTenantId,
+            name: 'Comercio Demo',
+            businessType: 'PULPERIA',
+            isFiscalEnabled: false,
+            isServicesEnabled: true,
+            isWholesaleEnabled: true,
+            allowNegativeStock: false,
+            currencySymbol: 'L.'
+          },
+          products: [
+            {
+              id: 'prod-pack-test',
+              tenantId: demoTenantId,
+              sku: 'JABON-01',
+              barcode: '7420001',
+              name: 'Jabon Palmolive Suave',
+              category: 'Higiene',
+              unitOfMeasure: 'Unidad',
+              costPrice: 15,
+              salePrice: 20,
+              currentStock: 25,
+              minStockAlert: 5,
+              taxClassification: 'EXENTO',
+              isActive: true,
+              presentations: [
+                {
+                  id: 'pres-pack-3',
+                  name: 'Pack x3',
+                  unitsCount: 3,
+                  salePrice: 55,
+                  barcode: '7420003'
+                }
+              ]
+            }
+          ]
+        },
+        version: 0
+      }));
+    });
+
+    // 2. Navigate to POS
+    await page.goto('/?comercio=demo');
+
+    // 3. Verify product card is visible with packaging badge
+    await expect(page.getByText('Jabon Palmolive Suave')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('+1 Empaque')).toBeVisible();
+
+    // 4. Click the product card
+    await page.getByText('Jabon Palmolive Suave').click();
+
+    // 5. Verify presentation selector modal opens
+    await expect(page.getByText(/seleccione el formato o empaque/i)).toBeVisible();
+    await expect(page.getByText('1 Unidad Individual')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Pack x3/i })).toBeVisible();
+
+    // 6. Select "Pack x3"
+    await page.getByRole('button', { name: /Pack x3/i }).click();
+
+    // 7. Verify modal closes and pack is added to cart
+    await expect(page.getByText(/seleccione el formato o empaque/i)).not.toBeVisible();
+    await expect(page.getByText(/Pack x3 \(3 unids\)/i)).toBeVisible();
+    await expect(page.locator('.cart-item').first()).toBeVisible();
   });
 });

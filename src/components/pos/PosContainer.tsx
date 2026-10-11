@@ -8,7 +8,7 @@ import {
   CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle,
   Tag, Percent, Scissors, Clock
 } from 'lucide-react';
-import { Sale, Product, CartLine, Customer, Service } from '../../types';
+import { Sale, Product, CartLine, Customer, Service, ProductPresentation } from '../../types';
 
 export const PosContainer: React.FC = () => {
   const products = useAppStore(state => state.products);
@@ -54,6 +54,7 @@ export const PosContainer: React.FC = () => {
   const [cashTendered, setCashTendered] = useState<string>('');
   const [lastCompletedSale, setLastCompletedSale] = useState<Sale | null>(null);
   const [selectedTicketCopy, setSelectedTicketCopy] = useState<'ORIGINAL' | 'COPIA'>('ORIGINAL');
+  const [presentationModalProduct, setPresentationModalProduct] = useState<Product | null>(null);
 
   // Customer Modal & Registration state
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -148,9 +149,14 @@ export const PosContainer: React.FC = () => {
   const lowStockCount = tenantProducts.filter((p: Product) => p.isActive && p.currentStock > 0 && p.currentStock <= p.minStockAlert).length;
 
   const filteredProducts = tenantProducts.filter((p: Product) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (p.barcode && p.barcode.includes(searchTerm));
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = p.name.toLowerCase().includes(term) ||
+                          p.sku.toLowerCase().includes(term) ||
+                          (p.barcode && p.barcode.includes(searchTerm)) ||
+                          (p.presentations && p.presentations.some(pres =>
+                            pres.name.toLowerCase().includes(term) ||
+                            (pres.barcode && pres.barcode.includes(searchTerm))
+                          ));
     const matchesCategory = selectedCategory === 'TODOS' || p.category === selectedCategory;
     return matchesSearch && matchesCategory && p.isActive;
   });
@@ -164,8 +170,42 @@ export const PosContainer: React.FC = () => {
         }
         return;
       }
-      const match = tenantProducts.find((p: Product) => (p.barcode === searchTerm || p.sku.toLowerCase() === searchTerm.toLowerCase()) && p.isActive);
+
+      const trimmedSearch = searchTerm.trim();
+
+      // 1. Direct match on a packaging presentation's barcode
+      let presentationMatch: { product: Product; presentation: ProductPresentation } | null = null;
+      for (const p of tenantProducts) {
+        if (p.isActive && p.presentations) {
+          const matchedPres = p.presentations.find(pres => pres.barcode && pres.barcode.trim() === trimmedSearch);
+          if (matchedPres) {
+            presentationMatch = { product: p, presentation: matchedPres };
+            break;
+          }
+        }
+      }
+
+      if (presentationMatch) {
+        const { product, presentation } = presentationMatch;
+        if (!tenant.allowNegativeStock && product.currentStock < presentation.unitsCount) {
+          toast.error(`"${product.name} [${presentation.name}]" no tiene suficiente stock (Disponible: ${product.currentStock}, Requiere: ${presentation.unitsCount}).`);
+          return;
+        }
+        addToCart({ product, presentation });
+        toast.success(`+ ${product.name} [${presentation.name}]`);
+        setSearchTerm('');
+        return;
+      }
+
+      // 2. Direct match on product base barcode or SKU
+      const match = tenantProducts.find((p: Product) => (p.barcode === trimmedSearch || p.sku.toLowerCase() === trimmedSearch.toLowerCase()) && p.isActive);
       if (match) {
+        // If matched by SKU (not exact barcode) and has presentations, open presentation selector
+        if (match.presentations && match.presentations.length > 0 && match.barcode !== trimmedSearch) {
+          setPresentationModalProduct(match);
+          setSearchTerm('');
+          return;
+        }
         if (!tenant.allowNegativeStock && match.currentStock <= 0) {
           toast.error(`"${match.name}" está AGOTADO. No se puede agregar al carrito.`);
           return;
@@ -174,14 +214,20 @@ export const PosContainer: React.FC = () => {
         toast.success(`+ ${match.name}`);
         setSearchTerm('');
       } else if (filteredProducts.length === 1) {
-        if (!tenant.allowNegativeStock && filteredProducts[0].currentStock <= 0) {
-          toast.error(`"${filteredProducts[0].name}" está AGOTADO. No se puede agregar al carrito.`);
+        const single = filteredProducts[0];
+        if (single.presentations && single.presentations.length > 0) {
+          setPresentationModalProduct(single);
+          setSearchTerm('');
           return;
         }
-        addToCart({ product: filteredProducts[0] });
-        toast.success(`+ ${filteredProducts[0].name}`);
+        if (!tenant.allowNegativeStock && single.currentStock <= 0) {
+          toast.error(`"${single.name}" está AGOTADO. No se puede agregar al carrito.`);
+          return;
+        }
+        addToCart({ product: single });
+        toast.success(`+ ${single.name}`);
         setSearchTerm('');
-      } else if (searchTerm.trim() !== '') {
+      } else if (trimmedSearch !== '') {
         toast.error('Producto no encontrado');
       }
     }
@@ -531,9 +577,14 @@ export const PosContainer: React.FC = () => {
                 return (
                   <div
                     key={product.id}
+                    className="product-card"
                     onClick={() => {
                       if (isDisabled) {
                         toast.error(`"${product.name}" está AGOTADO. Habilite "Venta con Stock Negativo" en Configuración para vender sin existencia.`);
+                        return;
+                      }
+                      if (product.presentations && product.presentations.length > 0) {
+                        setPresentationModalProduct(product);
                         return;
                       }
                       addToCart({ product });
@@ -597,6 +648,13 @@ export const PosContainer: React.FC = () => {
                       <div style={{ fontSize: '0.7rem', color: isOutOfStock ? '#ef4444' : (isLowStock ? '#d97706' : '#64748b'), fontWeight: isOutOfStock || isLowStock ? 700 : 400, marginTop: '0.15rem' }}>
                         Stock: {product.currentStock} {product.unitOfMeasure}
                       </div>
+                      {product.presentations && product.presentations.length > 0 && (
+                        <div style={{ marginTop: '0.25rem' }}>
+                          <span style={{ fontSize: '0.62rem', padding: '0.1rem 0.35rem', borderRadius: '4px', background: '#e0e7ff', color: '#4338ca', fontWeight: 700 }}>
+                            +{product.presentations.length} Empaque{product.presentations.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -720,13 +778,18 @@ export const PosContainer: React.FC = () => {
             </div>
           ) : (
             cartLines.map((line: CartLine, index: number) => (
-              <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 80px', alignItems: 'center', padding: '0.6rem 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div key={index} className="cart-item" style={{ display: 'grid', gridTemplateColumns: '1fr 90px 80px', alignItems: 'center', padding: '0.6rem 0', borderBottom: '1px solid #f1f5f9' }}>
                 <div>
                   <h5 style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, margin: 0 }}>
                     {line.name}
                     {line.discountAmount > 0 && (
                       <span className="badge" style={{ fontSize: '0.62rem', background: '#fee2e2', color: '#dc2626', fontWeight: 700, marginLeft: '0.35rem' }}>
                         Desc: -{formatCurrency(line.discountAmount, tenant.currencySymbol)}
+                      </span>
+                    )}
+                    {line.presentationName && (
+                      <span className="badge" style={{ fontSize: '0.62rem', background: '#e0e7ff', color: '#4338ca', fontWeight: 700, marginLeft: '0.35rem' }}>
+                        {line.presentationName} ({line.unitsPerPackage || 1} unids)
                       </span>
                     )}
                   </h5>
@@ -1526,6 +1589,8 @@ export const PosContainer: React.FC = () => {
                 Aplicar Descuento al Carrito
               </h3>
               <button
+                type="button"
+                aria-label="Cerrar modal de descuento"
                 onClick={() => setIsDiscountModalOpen(false)}
                 style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
               >
@@ -1708,6 +1773,160 @@ export const PosContainer: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Packaging Presentation Selector Modal */}
+      {presentationModalProduct && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)',
+          zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '14px', width: '100%', maxWidth: '440px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+                  <Package size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    {presentationModalProduct.name}
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Stock disponible: <strong>{presentationModalProduct.currentStock} unidades</strong>
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPresentationModalProduct(null)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                Seleccione el formato o empaque a vender:
+              </div>
+
+              {/* Individual Base Unit */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!tenant.allowNegativeStock && presentationModalProduct.currentStock <= 0) {
+                    toast.error(`"${presentationModalProduct.name}" no tiene stock suficiente.`);
+                    return;
+                  }
+                  addToCart({ product: presentationModalProduct });
+                  toast.success(`+ ${presentationModalProduct.name}`);
+                  setPresentationModalProduct(null);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.85rem 1rem',
+                  borderRadius: '10px',
+                  border: '2px solid #e2e8f0',
+                  background: '#f8fafc',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                    1 Unidad Individual
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Venta por unidad suelta
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>
+                    {formatCurrency(presentationModalProduct.salePrice, tenant.currencySymbol)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    1 unid.
+                  </div>
+                </div>
+              </button>
+
+              {/* Packaging Presentations */}
+              {presentationModalProduct.presentations?.map((pres) => {
+                const isOutOfStock = !tenant.allowNegativeStock && presentationModalProduct.currentStock < pres.unitsCount;
+                return (
+                  <button
+                    key={pres.id}
+                    type="button"
+                    disabled={isOutOfStock}
+                    onClick={() => {
+                      if (isOutOfStock) {
+                        toast.error(`Stock insuficiente para "${pres.name}" (Requiere: ${pres.unitsCount}, Disponible: ${presentationModalProduct.currentStock})`);
+                        return;
+                      }
+                      addToCart({ product: presentationModalProduct, presentation: pres });
+                      toast.success(`+ ${presentationModalProduct.name} [${pres.name}]`);
+                      setPresentationModalProduct(null);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '10px',
+                      border: isOutOfStock ? '1px dashed #cbd5e1' : '2px solid #cbd5e1',
+                      background: isOutOfStock ? '#f8fafc' : '#ffffff',
+                      cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                      opacity: isOutOfStock ? 0.6 : 1,
+                      textAlign: 'left',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{pres.name}</span>
+                        <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
+                          {pres.unitsCount} unidades
+                        </span>
+                      </div>
+                      {pres.barcode && (
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
+                          Barras: {pres.barcode}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>
+                        {formatCurrency(pres.salePrice, tenant.currencySymbol)}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>
+                        ({formatCurrency(pres.salePrice / pres.unitsCount, tenant.currencySymbol)} / unid)
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', background: '#f8fafc' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setPresentationModalProduct(null)}
+                style={{ fontSize: '0.8rem' }}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

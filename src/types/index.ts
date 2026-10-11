@@ -62,6 +62,15 @@ export interface PriceTier {
   tierName: string;
 }
 
+export interface ProductPresentation {
+  id: string;
+  name: string;        // e.g. "Pack x3", "Fardo x24", "Caja x12"
+  unitsCount: number;  // Factor multiplicador / unidades contenidas (ej. 3, 24, 12)
+  salePrice: number;   // Precio de venta del paquete
+  costPrice?: number;  // Costo de compra referencial del paquete
+  barcode?: string;    // Codigo de barras propio del paquete exterior
+}
+
 export interface Product {
   id: string;
   tenantId: string;
@@ -77,6 +86,7 @@ export interface Product {
   taxClassification: TaxClassification;
   isActive: boolean;
   tiers?: PriceTier[];
+  presentations?: ProductPresentation[];
 }
 
 export interface CartLine {
@@ -84,6 +94,9 @@ export interface CartLine {
   serviceId?: string;
   staffId?: string;
   staffName?: string;
+  presentationId?: string;
+  presentationName?: string;
+  unitsPerPackage?: number;
   sku: string;
   barcode?: string;
   name: string;
@@ -147,6 +160,9 @@ export interface PurchaseInvoiceItem {
   quantity: number;
   unitCost: number;
   newSalePrice?: number;
+  presentationId?: string;
+  presentationName?: string;
+  unitsPerPackage?: number;
 }
 
 export interface PurchaseInvoice {
