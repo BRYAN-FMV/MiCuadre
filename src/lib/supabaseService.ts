@@ -1,8 +1,105 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense } from '../types';
+import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, UserPermissions } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
 import { useAppStore } from '../store/useAppStore';
+import { toast } from 'sonner';
+
+/**
+ * LocalStorage Fallback Helpers for Schema Extensions (presentations & permissions)
+ * Prevents loss of packaging presentations and permissions if Supabase columns have not been migrated yet.
+ */
+export function backupProductPresentations(tenantId: string, productId: string, presentations: ProductPresentation[]) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const key = `micuadre_presentations_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    const map = raw ? JSON.parse(raw) : {};
+    map[productId] = presentations;
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+export function getStoredPresentations(tenantId: string, productId: string): ProductPresentation[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const key = `micuadre_presentations_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const map = JSON.parse(raw);
+    return Array.isArray(map[productId]) ? map[productId] : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function backupProfilePermissions(tenantId: string, profileId: string, permissions?: UserPermissions) {
+  if (typeof localStorage === 'undefined' || !permissions) return;
+  try {
+    const key = `micuadre_permissions_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    const map = raw ? JSON.parse(raw) : {};
+    map[profileId] = permissions;
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+export function getStoredPermissions(tenantId: string, profileId: string): UserPermissions | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    const key = `micuadre_permissions_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return undefined;
+    const map = JSON.parse(raw);
+    return map[profileId] || undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
+let isPresentationsDbColumnAvailable: boolean | null = null;
+let isPermissionsDbColumnAvailable: boolean | null = null;
+
+if (typeof localStorage !== 'undefined') {
+  const cachedPres = localStorage.getItem('micuadre_col_presentations_exists');
+  if (cachedPres === '1') isPresentationsDbColumnAvailable = true;
+  else if (cachedPres === '0') isPresentationsDbColumnAvailable = false;
+
+  const cachedPerm = localStorage.getItem('micuadre_col_permissions_exists');
+  if (cachedPerm === '1') isPermissionsDbColumnAvailable = true;
+  else if (cachedPerm === '0') isPermissionsDbColumnAvailable = false;
+}
+
+export function getIsPresentationsDbColumnAvailable(): boolean | null {
+  return isPresentationsDbColumnAvailable;
+}
+
+export function setIsPresentationsDbColumnAvailable(val: boolean) {
+  isPresentationsDbColumnAvailable = val;
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem('micuadre_col_presentations_exists', val ? '1' : '0');
+    } catch (e) {}
+  }
+}
+
+export function getIsPermissionsDbColumnAvailable(): boolean | null {
+  return isPermissionsDbColumnAvailable;
+}
+
+export function setIsPermissionsDbColumnAvailable(val: boolean) {
+  isPermissionsDbColumnAvailable = val;
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem('micuadre_col_permissions_exists', val ? '1' : '0');
+    } catch (e) {}
+  }
+}
+
 
 export const DEMO_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 export const DEMO_SKUS = ['BEB-HAR-5LB', 'ACE-COC-1L', 'SHAM-BARB-250', 'LIC-RUM-750'];
@@ -304,6 +401,11 @@ export async function fetchProfilesFromSupabase(tenantId: string): Promise<UserP
 
   if (error || !data) return null;
 
+  if (data.length > 0) {
+    const hasCol = 'permissions' in data[0];
+    setIsPermissionsDbColumnAvailable(hasCol);
+  }
+
   return data.map((p: any) => ({
     id: p.id,
     tenantId: p.tenant_id,
@@ -311,7 +413,7 @@ export async function fetchProfilesFromSupabase(tenantId: string): Promise<UserP
     role: p.role,
     pinCode: p.pin_code,
     isActive: p.is_active,
-    permissions: p.permissions || undefined
+    permissions: p.permissions || getStoredPermissions(tenantId, p.id) || undefined
   }));
 }
 
@@ -323,6 +425,10 @@ export async function updateProfilePinInSupabase(
   newPin: string
 ): Promise<{ success: boolean; profile: UserProfile; error?: string }> {
   const updatedProfile: UserProfile = { ...profile, pinCode: newPin };
+
+  if (profile.permissions) {
+    backupProfilePermissions(profile.tenantId, profile.id, profile.permissions);
+  }
 
   if (!isSupabaseConfigured()) {
     return { success: true, profile: updatedProfile };
@@ -354,18 +460,26 @@ export async function updateProfilePinInSupabase(
       return { success: true, profile: updatedProfile };
     }
 
-
     // 4. If no profile row exists in Supabase, insert a new profile row (letting Postgres generate ID)
-    const { error: insertError } = await supabase
-      .from('profiles')
-      .insert({
-        tenant_id: profile.tenantId,
-        full_name: profile.fullName,
-        role: profile.role,
-        pin_code: newPin,
-        is_active: profile.isActive ?? true,
-        permissions: profile.permissions || {}
-      });
+    const insertPayload: any = {
+      tenant_id: profile.tenantId,
+      full_name: profile.fullName,
+      role: profile.role,
+      pin_code: newPin,
+      is_active: profile.isActive ?? true
+    };
+    if (isPermissionsDbColumnAvailable !== false && profile.permissions) {
+      insertPayload.permissions = profile.permissions;
+    }
+
+    let { error: insertError } = await supabase.from('profiles').insert(insertPayload);
+
+    if (insertError && (insertError.message.includes('permissions') || insertError.message.includes('column'))) {
+      setIsPermissionsDbColumnAvailable(false);
+      delete insertPayload.permissions;
+      const retry = await supabase.from('profiles').insert(insertPayload);
+      insertError = retry.error;
+    }
 
     if (insertError) {
       console.warn('Supabase profiles insert info:', insertError.message);
@@ -406,6 +520,11 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
       return null;
     }
 
+    if (data.length > 0) {
+      const hasCol = 'presentations' in data[0];
+      setIsPresentationsDbColumnAvailable(hasCol);
+    }
+
     let filteredData = data;
     if (tenantId !== DEMO_TENANT_ID) {
       const leakedDemoRows = data.filter((p: any) => DEMO_SKUS.includes(p.sku) || DEMO_PRODUCT_IDS.includes(p.id));
@@ -418,29 +537,36 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
       filteredData = data.filter((p: any) => !DEMO_SKUS.includes(p.sku) && !DEMO_PRODUCT_IDS.includes(p.id));
     }
 
-    return filteredData.map((p: any) => ({
-      id: p.id,
-      tenantId: p.tenant_id,
-      sku: p.sku,
-      barcode: p.barcode,
-      name: p.name,
-      category: p.category,
-      unitOfMeasure: p.unit_of_measure,
-      costPrice: Number(p.cost_price),
-      salePrice: Number(p.sale_price),
-      currentStock: Number(p.current_stock),
-      minStockAlert: Number(p.min_stock_alert),
-      taxClassification: p.tax_classification,
-      isActive: p.is_active,
-      presentations: Array.isArray(p.presentations) ? p.presentations : [],
-      tiers: p.product_price_tiers?.map((t: any) => ({
-        id: t.id,
-        minQuantity: t.min_quantity,
-        maxQuantity: t.max_quantity,
-        unitPrice: Number(t.unit_price),
-        tierName: t.tier_name
-      }))
-    }));
+    return filteredData.map((p: any) => {
+      const stored = getStoredPresentations(p.tenant_id, p.id);
+      const presentations = (Array.isArray(p.presentations) && p.presentations.length > 0)
+        ? p.presentations
+        : stored;
+
+      return {
+        id: p.id,
+        tenantId: p.tenant_id,
+        sku: p.sku,
+        barcode: p.barcode,
+        name: p.name,
+        category: p.category,
+        unitOfMeasure: p.unit_of_measure,
+        costPrice: Number(p.cost_price),
+        salePrice: Number(p.sale_price),
+        currentStock: Number(p.current_stock),
+        minStockAlert: Number(p.min_stock_alert),
+        taxClassification: p.tax_classification,
+        isActive: p.is_active,
+        presentations: presentations || [],
+        tiers: p.product_price_tiers?.map((t: any) => ({
+          id: t.id,
+          minQuantity: t.min_quantity,
+          maxQuantity: t.max_quantity,
+          unitPrice: Number(t.unit_price),
+          tierName: t.tier_name
+        }))
+      };
+    });
   } catch (err) {
     console.error('Error al cargar productos de Supabase:', err);
     return null;
@@ -455,6 +581,15 @@ export async function saveProductToSupabase(product: Product) {
 
   try {
     const prodUuid = isValidUUID(product.id) ? product.id : generateUUID();
+
+    // Always backup presentations locally so presentations are never lost even before SQL migration
+    if (product.presentations && product.presentations.length > 0) {
+      backupProductPresentations(product.tenantId, prodUuid, product.presentations);
+      if (product.id && product.id !== prodUuid) {
+        backupProductPresentations(product.tenantId, product.id, product.presentations);
+      }
+    }
+
     const payload: any = {
       id: prodUuid,
       tenant_id: product.tenantId,
@@ -468,12 +603,17 @@ export async function saveProductToSupabase(product: Product) {
       current_stock: product.currentStock != null ? product.currentStock : 0,
       min_stock_alert: product.minStockAlert != null ? product.minStockAlert : 5,
       tax_classification: product.taxClassification || 'EXENTO',
-      is_active: product.isActive ?? true,
-      presentations: product.presentations || []
+      is_active: product.isActive ?? true
     };
 
+    // If we know presentations column does NOT exist in Supabase yet, do NOT send it (prevents HTTP 400 in console)
+    if (isPresentationsDbColumnAvailable !== false) {
+      payload.presentations = product.presentations || [];
+    }
+
     let { data, error } = await supabase.from('products').upsert(payload, { onConflict: 'id' }).select().single();
-    if (error && error.message.includes('column') && error.message.includes('presentations')) {
+    if (error && (error.message.includes('column') || error.message.includes('presentations') || error.code === 'PGRST204')) {
+      setIsPresentationsDbColumnAvailable(false);
       const { presentations, ...fallbackPayload } = payload;
       const retry = await supabase.from('products').upsert(fallbackPayload, { onConflict: 'id' }).select().single();
       data = retry.data;
@@ -1366,9 +1506,20 @@ export async function syncAllCloudData(tenantId: string) {
       // 1. Products
       let products = state.products;
       if (liveProducts !== null) {
-        const cleanLiveProducts = tenantId === DEMO_TENANT_ID 
+        const cleanLiveProducts = (tenantId === DEMO_TENANT_ID 
           ? liveProducts 
-          : liveProducts.filter(p => !isDemoProduct(p));
+          : liveProducts.filter(p => !isDemoProduct(p))).map(lp => {
+            const existing = state.products.find(p => p.id === lp.id);
+            const mergedPresentations = (lp.presentations && lp.presentations.length > 0)
+              ? lp.presentations
+              : (existing?.presentations && existing.presentations.length > 0
+                  ? existing.presentations
+                  : getStoredPresentations(tenantId, lp.id));
+            return {
+              ...lp,
+              presentations: mergedPresentations
+            };
+          });
 
         const liveIds = new Set(cleanLiveProducts.map(p => p.id));
         const localOnly = state.products.filter(p => p.tenantId === tenantId && !liveIds.has(p.id) && (tenantId === DEMO_TENANT_ID || !isDemoProduct(p)));
@@ -1388,10 +1539,18 @@ export async function syncAllCloudData(tenantId: string) {
       // 3. Profiles
       let profiles = state.profiles;
       if (liveProfiles !== null && liveProfiles.length > 0) {
-        const liveIds = new Set(liveProfiles.map(p => p.id));
+        const cleanLiveProfiles = liveProfiles.map(lp => {
+          const existing = state.profiles.find(p => p.id === lp.id);
+          const mergedPermissions = lp.permissions || existing?.permissions || getStoredPermissions(tenantId, lp.id);
+          return {
+            ...lp,
+            permissions: mergedPermissions
+          };
+        });
+        const liveIds = new Set(cleanLiveProfiles.map(p => p.id));
         const localOnly = state.profiles.filter(p => p.tenantId === tenantId && !liveIds.has(p.id));
         const otherTenantProfiles = state.profiles.filter(p => p.tenantId && p.tenantId !== tenantId);
-        profiles = [...liveProfiles, ...localOnly, ...otherTenantProfiles];
+        profiles = [...cleanLiveProfiles, ...localOnly, ...otherTenantProfiles];
       }
 
       // 4. Sales

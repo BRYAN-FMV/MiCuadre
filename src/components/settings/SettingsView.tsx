@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer } from 'lucide-react';
+import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
-import { seedInitialDataToSupabase, updateProfilePinInSupabase } from '../../lib/supabaseService';
+import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
 import { compressImageToWebP } from '../../lib/imageUtils';
@@ -392,15 +392,29 @@ export const SettingsView: React.FC = () => {
     useAppStore.setState(state => ({ profiles: [...state.profiles, newProfile] }));
 
     if (isSupabaseConfigured()) {
-      const { error } = await supabase.from('profiles').insert({
+      backupProfilePermissions(tenant.id, newProfile.id, finalPermissions);
+
+      const profilePayload: any = {
         id: newProfile.id,
         tenant_id: tenant.id,
         full_name: newFullName,
         role: newRole,
         pin_code: newPinCode,
-        is_active: true,
-        permissions: finalPermissions || {}
-      });
+        is_active: true
+      };
+
+      if (getIsPermissionsDbColumnAvailable() !== false) {
+        profilePayload.permissions = finalPermissions || {};
+      }
+
+      let { error } = await supabase.from('profiles').insert(profilePayload);
+
+      if (error && (error.message.includes('permissions') || error.message.includes('column'))) {
+        setIsPermissionsDbColumnAvailable(false);
+        delete profilePayload.permissions;
+        const retry = await supabase.from('profiles').insert(profilePayload);
+        error = retry.error;
+      }
 
       if (error) {
         if (error.message.includes('profiles_id_fkey') || error.code === '23503') {
@@ -506,6 +520,38 @@ export const SettingsView: React.FC = () => {
                 <CheckCircle size={14} />
                 <span>Guardar & Conectar</span>
               </button>
+            </div>
+
+            {/* Schema Migration Assistance Card */}
+            <div style={{
+              gridColumn: 'span 2',
+              marginTop: '0.75rem',
+              padding: '0.85rem',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                  Esquema de Base de Datos (Empaques y Permisos)
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const sql = `-- Copiar y ejecutar en Supabase -> SQL Editor\nALTER TABLE products ADD COLUMN IF NOT EXISTS presentations JSONB DEFAULT '[]'::jsonb;\nALTER TABLE profiles ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{}'::jsonb;\nNOTIFY pgrst, 'reload schema';`;
+                    navigator.clipboard.writeText(sql);
+                    toast.success('Script SQL copiado al portapapeles. Pégalo en Supabase SQL Editor.');
+                  }}
+                  style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
+                >
+                  <Copy size={13} />
+                  <span>Copiar SQL de Migración</span>
+                </button>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                Si agregas productos por empaque o permisos granulares para cajeros, ejecuta este script SQL en Supabase para sincronizar dichas columnas en la nube. Mientras tanto, el sistema preserva tus datos automáticamente en almacenamiento local sin interrumpir tus ventas ni mostrar errores.
+              </p>
             </div>
           </form>
         </div>

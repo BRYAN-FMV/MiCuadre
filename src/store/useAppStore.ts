@@ -16,7 +16,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 /**
@@ -2079,12 +2079,23 @@ export const useAppStore = create<AppState>()(
     const target = updatedProfiles.find(p => p.id === profileId);
     const updatedCurrentUser = isCurrent && target ? target : state.currentUser;
 
+    if (target) {
+      backupProfilePermissions(state.tenant.id, profileId, target.permissions);
+    }
+
     if (isSupabaseConfigured() && isValidUUID(state.tenant.id) && target) {
-      supabase.from('profiles').update({
-        permissions: target.permissions
-      }).eq('id', profileId).then(({ error }) => {
-        if (error) console.warn('Supabase update profile permissions error:', error.message);
-      });
+      if (getIsPermissionsDbColumnAvailable() !== false) {
+        supabase.from('profiles').update({
+          permissions: target.permissions
+        }).eq('id', profileId).then(({ error }) => {
+          if (error) {
+            console.warn('Supabase update profile permissions error:', error.message);
+            if (error.message.includes('permissions') || error.message.includes('column')) {
+              setIsPermissionsDbColumnAvailable(false);
+            }
+          }
+        });
+      }
     }
 
     return {

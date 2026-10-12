@@ -33,6 +33,7 @@ CREATE TABLE profiles (
     role VARCHAR(20) NOT NULL DEFAULT 'CAJERO', -- 'ADMIN' | 'CAJERO' | 'BODEGUERO' | 'STAFF'
     pin_code VARCHAR(4),                       -- 4-digit fast POS PIN
     is_active BOOLEAN DEFAULT TRUE,
+    permissions JSONB DEFAULT '{}'::jsonb,     -- Granular staff permissions
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -65,6 +66,7 @@ CREATE TABLE products (
     current_stock INT NOT NULL DEFAULT 0,
     min_stock_alert INT DEFAULT 5,
     tax_classification VARCHAR(20) NOT NULL DEFAULT 'GRAVADO_15', -- 'EXENTO' | 'EXONERADO' | 'GRAVADO_15' | 'GRAVADO_18'
+    presentations JSONB DEFAULT '[]'::jsonb,                     -- Packaging presentations (unidades/fardos/cajas)
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT uq_tenant_barcode UNIQUE(tenant_id, barcode)
