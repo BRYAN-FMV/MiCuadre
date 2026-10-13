@@ -9,10 +9,18 @@
   "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
+  "categories": ["business", "finance", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/MiCuadre-logo.png",
-      "sizes": "444x443",
+      "src": "/icon-64.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-128.png",
+      "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"
     },
@@ -27,6 +35,12 @@
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { ArrowRight, Store, ShieldAlert, Lock, User, Building2, Download, Monitor, CheckCircle, HelpCircle, X } from 'lucide-react';
+import { ArrowRight, Store, ShieldAlert, Lock, User, Building2, Download, Monitor, CheckCircle, HelpCircle, X, Terminal } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
 import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase } from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
@@ -525,8 +525,31 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
                   <strong>Opción 2: Menú de Opciones del Navegador</strong>
                   <div style={{ marginTop: '0.35rem', color: '#475569' }}>
                     1. Haz clic en los <strong>tres puntos verticales (...)</strong> arriba a la derecha de Chrome o Edge.<br />
-                    2. Selecciona <strong>"Guardar y compartir"</strong> o <strong>"Instalar MiCuadre"</strong>.<br />
+                    2. Selecciona <strong>"Guardar y compartir"</strong> o <strong>"Instalar MiCuadre"</strong> (o "Crear acceso directo" y marcar "Abrir como ventana").<br />
                     3. Haz clic en <strong>Instalar</strong>.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <Terminal size={20} style={{ color: '#0f172a', flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '0.85rem', color: '#0f172a', width: '100%' }}>
+                  <strong>Opción 3: Linux (Ubuntu / Debian / Mint)</strong>
+                  <div style={{ marginTop: '0.35rem', color: '#475569', fontSize: '0.8rem' }}>
+                    Si usas Ubuntu y Chrome no muestra el botón de instalación, ejecuta este comando en tu terminal para crear el lanzador nativo en el menú de aplicaciones:
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0f172a', color: '#38bdf8', padding: '0.5rem 0.75rem', borderRadius: '6px', marginTop: '0.5rem', fontFamily: 'monospace', fontSize: '0.75rem', overflowX: 'auto' }}>
+                    <code style={{ flex: 1, whiteSpace: 'nowrap' }}>curl -sSL https://micuadre.app/install-linux.sh | bash</code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText('curl -sSL https://micuadre.app/install-linux.sh | bash');
+                        toast.success('Comando copiado al portapapeles');
+                      }}
+                      style={{ background: '#334155', color: '#ffffff', border: 'none', padding: '0.2rem 0.5rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem', flexShrink: 0 }}
+                    >
+                      Copiar
+                    </button>
                   </div>
                 </div>
               </div>

@@ -1,12 +1,15 @@
 // MiCuadre Service Worker - PWA & Offline Support
-const CACHE_NAME = 'micuadre-v1';
+const CACHE_NAME = 'micuadre-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/MiCuadre-logo.png',
   '/logo.png',
+  '/icon-64.png',
+  '/icon-128.png',
   '/icon-192.png',
+  '/icon-256.png',
   '/icon-512.png'
 ];
 
