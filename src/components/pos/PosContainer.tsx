@@ -1501,7 +1501,7 @@ export const PosContainer: React.FC = () => {
               </div>
             )}
 
-            <div id="printable-ticket" style={{ padding: '0.75rem', background: '#fff', color: '#000', fontSize: '10px', fontFamily: 'Arial, Helvetica, sans-serif' }}>
+            <div id="printable-ticket" style={{ padding: '0.75rem', background: '#fff', color: '#000', fontSize: '11px', fontFamily: 'Arial, Helvetica, sans-serif' }}>
               {lastCompletedSale.isFiscal ? (
                 <>
                   {/* Header Info */}
@@ -1610,26 +1610,26 @@ export const PosContainer: React.FC = () => {
               ) : (
                 <>
                   {/* TICKET SIMPLE / COMPROBANTE ULTRACOMPACTO */}
-                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase' }}>{tenant.name}</div>
-                  {tenant.phone && <div style={{ textAlign: 'center', fontSize: '9px', color: '#333' }}>TEL: {tenant.phone}</div>}
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', textTransform: 'uppercase' }}>{tenant.name}</div>
+                  {tenant.phone && <div style={{ textAlign: 'center', fontSize: '10px', color: '#333' }}>TEL: {tenant.phone}</div>}
                   <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', fontWeight: 'bold' }}>
                     <span>TICKET: #{lastCompletedSale.documentNumber}</span>
                     <span>
                       {new Date(lastCompletedSale.createdAt).toLocaleDateString('es-HN')} {new Date(lastCompletedSale.createdAt).toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                   {lastCompletedSale.customerName && lastCompletedSale.customerName !== 'Consumidor Final' && (
-                    <div style={{ fontSize: '9px', marginTop: '2px' }}><strong>CLIENTE:</strong> {lastCompletedSale.customerName}</div>
+                    <div style={{ fontSize: '10.5px', marginTop: '2px' }}><strong>CLIENTE:</strong> {lastCompletedSale.customerName}</div>
                   )}
                   <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
                   {/* Listado directo de articulos */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', margin: '2px 0' }}>
                     {lastCompletedSale.items?.map((it: CartLine, idx: number) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '9px', gap: '3px' }}>
-                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '10.5px', gap: '4px' }}>
+                        <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-word' }}>
                           {it.quantity}x {it.name}
                         </span>
                         <span style={{ fontWeight: 'bold', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
@@ -1642,33 +1642,31 @@ export const PosContainer: React.FC = () => {
 
                   {/* Totales directos */}
                   {lastCompletedSale.discountAmount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
                       <span>Descuento:</span>
                       <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>-{formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}</span>
                     </div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: '12px', margin: '2px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: '13.5px', margin: '3px 0' }}>
                     <span>TOTAL:</span>
                     <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCurrency(lastCompletedSale.total, tenant.currencySymbol)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '9px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px' }}>
                     <span>Forma de Pago:</span>
                     <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{lastCompletedSale.paymentMethod}</span>
                   </div>
                   <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
-                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '9px', marginTop: '4px' }}>
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', marginTop: '4px' }}>
                     ¡GRACIAS POR SU COMPRA!
-                  </div>
-                  {/* Guias fisicas de avance para obligar al filtro a expulsar el ticket de la cuchilla */}
-                  <div style={{ textAlign: 'center', fontSize: '7px', color: '#000', margin: '4px 0 0 0', letterSpacing: '1px' }}>
-                    . . . . . . . . . . . . . . . . . . . .
-                  </div>
-                  <div style={{ textAlign: 'center', fontSize: '7px', color: '#000', margin: '22px 0 0 0', letterSpacing: '1px' }}>
-                    - - - - - - - - - - - - - - - - - - - -
                   </div>
                 </>
               )}
+
+              {/* Avance fisico de papel para superar la distancia entre cabezal termico y cuchilla de corte (28mm) */}
+              <div style={{ textAlign: 'center', fontSize: '8px', color: '#000', marginTop: '28mm', letterSpacing: '1px' }}>
+                - - - - - - - - - - - - - - - - - - - -
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '1rem' }}>
