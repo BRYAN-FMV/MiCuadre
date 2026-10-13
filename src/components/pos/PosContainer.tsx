@@ -1628,11 +1628,11 @@ export const PosContainer: React.FC = () => {
                   {/* Listado directo de articulos */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
                     {lastCompletedSale.items?.map((it: CartLine, idx: number) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '9px', gap: '3px' }}>
+                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {it.quantity}x {it.name}
                         </span>
-                        <span style={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 'bold', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
                           {formatCurrency(it.total, tenant.currencySymbol)}
                         </span>
                       </div>
@@ -1644,26 +1644,31 @@ export const PosContainer: React.FC = () => {
                   {lastCompletedSale.discountAmount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
                       <span>Descuento:</span>
-                      <span>-{formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}</span>
+                      <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>-{formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}</span>
                     </div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', margin: '2px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: '12px', margin: '2px 0' }}>
                     <span>TOTAL:</span>
-                    <span>{formatCurrency(lastCompletedSale.total, tenant.currencySymbol)}</span>
+                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCurrency(lastCompletedSale.total, tenant.currencySymbol)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '9px' }}>
                     <span>Forma de Pago:</span>
-                    <span>{lastCompletedSale.paymentMethod}</span>
+                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{lastCompletedSale.paymentMethod}</span>
                   </div>
                   <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
                   <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '9px', marginTop: '4px' }}>
                     ¡GRACIAS POR SU COMPRA!
                   </div>
+                  {/* Guias fisicas de avance para obligar al filtro a expulsar el ticket de la cuchilla */}
+                  <div style={{ textAlign: 'center', fontSize: '7px', color: '#000', margin: '4px 0 0 0', letterSpacing: '1px' }}>
+                    . . . . . . . . . . . . . . . . . . . .
+                  </div>
+                  <div style={{ textAlign: 'center', fontSize: '7px', color: '#000', margin: '22px 0 0 0', letterSpacing: '1px' }}>
+                    - - - - - - - - - - - - - - - - - - - -
+                  </div>
                 </>
               )}
-              {/* Espaciador de avance de papel para despejar la cuchilla de corte */}
-              <div style={{ height: '32px', width: '100%' }}></div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '1rem' }}>
