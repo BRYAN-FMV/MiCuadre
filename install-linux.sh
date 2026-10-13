@@ -42,6 +42,8 @@ elif command -v brave-browser &> /dev/null; then
     BROWSER_EXEC="brave-browser --app=\"$APP_URL\""
 elif command -v microsoft-edge &> /dev/null; then
     BROWSER_EXEC="microsoft-edge --app=\"$APP_URL\""
+elif command -v firefox &> /dev/null; then
+    BROWSER_EXEC="firefox --new-window \"$APP_URL\""
 else
     BROWSER_EXEC="x-www-browser \"$APP_URL\""
 fi
