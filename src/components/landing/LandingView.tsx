@@ -295,7 +295,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
                 <img src="/MiCuadre-logo.png" alt="Logo" style={{ width: '36px', height: '36px' }} />
                 <span style={{ fontWeight: 900, fontSize: '1.15rem' }}>MiCuadre Dashboard</span>
               </div>
-              <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '0.78rem', fontWeight: 800, padding: '0.3rem 0.75rem', borderRadius: '50px', border: '1px solid rgba(52, 211, 153, 0.3)' }}>🟢 En Vivo</span>
+              <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '0.78rem', fontWeight: 800, padding: '0.3rem 0.75rem', borderRadius: '50px', border: '1px solid rgba(52, 211, 153, 0.3)' }}>En Vivo</span>
             </div>
 
             <div style={{ padding: '1.75rem 0' }}>

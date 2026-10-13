@@ -481,7 +481,7 @@ export const PosContainer: React.FC = () => {
               </button>
             )}
 
-            {tenant.isFiscalEnabled && (
+            {(tenant.isFiscalEnabled || tenantFiscalRanges.length > 1) && (
               <div
                 style={{
                   display: 'flex',
@@ -1501,17 +1501,17 @@ export const PosContainer: React.FC = () => {
               </div>
             )}
 
-            <div id="printable-ticket" style={{ padding: '0.5rem', background: '#fff', color: '#000', fontSize: '10px', fontFamily: 'Arial, Helvetica, sans-serif' }}>
-              {/* Header Info */}
-              <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase' }}>{tenant.name}</div>
-              {tenant.rtn && <div style={{ textAlign: 'center', fontSize: '10px' }}>RTN: {tenant.rtn}</div>}
-              {tenant.address && <div style={{ textAlign: 'center', fontSize: '9px' }}>{tenant.address}</div>}
-              {tenant.phone && <div style={{ textAlign: 'center', fontSize: '9px' }}>TEL: {tenant.phone}</div>}
-              <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
-
-              {/* Document Header & CAI */}
+            <div id="printable-ticket" style={{ padding: '0.75rem', background: '#fff', color: '#000', fontSize: '10px', fontFamily: 'Arial, Helvetica, sans-serif' }}>
               {lastCompletedSale.isFiscal ? (
                 <>
+                  {/* Header Info */}
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase' }}>{tenant.name}</div>
+                  {tenant.rtn && <div style={{ textAlign: 'center', fontSize: '10px' }}>RTN: {tenant.rtn}</div>}
+                  {tenant.address && <div style={{ textAlign: 'center', fontSize: '9px' }}>{tenant.address}</div>}
+                  {tenant.phone && <div style={{ textAlign: 'center', fontSize: '9px' }}>TEL: {tenant.phone}</div>}
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+
+                  {/* Document Header & CAI */}
                   <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>FACTURA FISCAL</div>
                   <div style={{ fontSize: '9px', wordBreak: 'break-all' }}><strong>CODIGO CAI:</strong> {lastCompletedSale.cai || 'N/A'}</div>
                   <div style={{ fontSize: '10px' }}><strong>FACTURA #:</strong> {lastCompletedSale.documentNumber}</div>
@@ -1519,44 +1519,35 @@ export const PosContainer: React.FC = () => {
                   {lastCompletedSale.caiRangeStart && lastCompletedSale.caiRangeEnd && (
                     <div style={{ fontSize: '8px' }}><strong>RANGO:</strong> {lastCompletedSale.caiRangeStart} AL {lastCompletedSale.caiRangeEnd}</div>
                   )}
-                </>
-              ) : (
-                <>
-                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>COMPROBANTE DE VENTA INTERNO</div>
-                  <div style={{ fontSize: '10px' }}><strong>TICKET #:</strong> {lastCompletedSale.documentNumber}</div>
-                </>
-              )}
-              <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
-              {/* Meta & Customer */}
-              <div style={{ fontSize: '9px' }}><strong>FECHA:</strong> {new Date(lastCompletedSale.createdAt).toLocaleDateString('es-HN')} {new Date(lastCompletedSale.createdAt).toLocaleTimeString('es-HN')}</div>
-              <div style={{ fontSize: '9px', textTransform: 'uppercase' }}><strong>CAJA:</strong> {lastCompletedSale.cajaName || 'Caja 1'}</div>
-              <div style={{ fontSize: '9px', textTransform: 'uppercase' }}><strong>CLIENTE / RTN:</strong> {lastCompletedSale.customerName} {lastCompletedSale.customerRtn ? `| ${lastCompletedSale.customerRtn}` : ''}</div>
-              <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+                  {/* Meta & Customer */}
+                  <div style={{ fontSize: '9px' }}><strong>FECHA:</strong> {new Date(lastCompletedSale.createdAt).toLocaleDateString('es-HN')} {new Date(lastCompletedSale.createdAt).toLocaleTimeString('es-HN')}</div>
+                  <div style={{ fontSize: '9px', textTransform: 'uppercase' }}><strong>CAJA:</strong> {lastCompletedSale.cajaName || 'Caja 1'}</div>
+                  <div style={{ fontSize: '9px', textTransform: 'uppercase' }}><strong>CLIENTE / RTN:</strong> {lastCompletedSale.customerName} {lastCompletedSale.customerRtn ? `| ${lastCompletedSale.customerRtn}` : ''}</div>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
-              {/* Items Detail */}
-              <div style={{ fontWeight: 'bold', fontSize: '9px', marginBottom: '2px' }}>DESCRIPCION DE PRODUCTOS</div>
-              {lastCompletedSale.items?.map((it: CartLine, idx: number) => (
-                <div key={idx} style={{ marginBottom: '3px', fontSize: '9px' }}>
-                  <div style={{ fontWeight: 'bold' }}>{it.quantity}x {it.name}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '6px' }}>
-                    <span>P.Unit: {formatCurrency(it.unitPrice, tenant.currencySymbol)}</span>
-                    <span>Total: {formatCurrency(it.total, tenant.currencySymbol)}</span>
-                  </div>
-                </div>
-              ))}
-              <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+                  {/* Items Detail */}
+                  <div style={{ fontWeight: 'bold', fontSize: '9px', marginBottom: '2px' }}>DESCRIPCION DE PRODUCTOS</div>
+                  {lastCompletedSale.items?.map((it: CartLine, idx: number) => (
+                    <div key={idx} style={{ marginBottom: '3px', fontSize: '9px' }}>
+                      <div style={{ fontWeight: 'bold' }}>{it.quantity}x {it.name}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '6px' }}>
+                        <span>P.Unit: {formatCurrency(it.unitPrice, tenant.currencySymbol)}</span>
+                        <span>Total: {formatCurrency(it.total, tenant.currencySymbol)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
-              {/* Financial Breakdown Table (SAR Honduras Standard) */}
-              <div style={{ fontSize: '9px' }}>
-                {lastCompletedSale.discountAmount > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Descuentos y Rebajas:</span>
-                    <span>{formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}</span>
-                  </div>
-                )}
-                {lastCompletedSale.isFiscal ? (
-                  <>
+                  {/* Financial Breakdown Table (SAR Honduras Standard) */}
+                  <div style={{ fontSize: '9px' }}>
+                    {lastCompletedSale.discountAmount > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Descuentos y Rebajas:</span>
+                        <span>{formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}</span>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>Importe Exonerado:</span>
                       <span>{formatCurrency(lastCompletedSale.exoneratedAmount || 0, tenant.currencySymbol)}</span>
@@ -1585,49 +1576,94 @@ export const PosContainer: React.FC = () => {
                         <span>{formatCurrency(lastCompletedSale.tax18 || 0, tenant.currencySymbol)}</span>
                       </div>
                     )}
-                  </>
-                ) : (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Subtotal:</span>
-                    <span>{formatCurrency(lastCompletedSale.subtotal, tenant.currencySymbol)}</span>
+                    <div style={{ borderBottom: '1px dashed #000', margin: '3px 0' }}></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11px' }}>
+                      <span>TOTAL A PAGAR:</span>
+                      <span>{formatCurrency(lastCompletedSale.total, tenant.currencySymbol)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', marginTop: '2px' }}>
+                      <span>Total Items:</span>
+                      <span>{lastCompletedSale.items?.reduce((acc, item) => acc + item.quantity, 0)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                      <span>Forma de Pago:</span>
+                      <span>{lastCompletedSale.paymentMethod}</span>
+                    </div>
                   </div>
-                )}
-                <div style={{ borderBottom: '1px dashed #000', margin: '3px 0' }}></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11px' }}>
-                  <span>TOTAL A PAGAR:</span>
-                  <span>{formatCurrency(lastCompletedSale.total, tenant.currencySymbol)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', marginTop: '2px' }}>
-                  <span>Total Items:</span>
-                  <span>{lastCompletedSale.items?.reduce((acc, item) => acc + item.quantity, 0)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
-                  <span>Forma de Pago:</span>
-                  <span>{lastCompletedSale.paymentMethod}</span>
-                </div>
-              </div>
 
-              {/* Savings Highlight Box */}
-              {lastCompletedSale.discountAmount > 0 && (
-                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '10px', marginTop: '4px', padding: '2px', border: '1px solid #000' }}>
-                  SU AHORRO: {formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}
-                </div>
-              )}
+                  {lastCompletedSale.discountAmount > 0 && (
+                    <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '10px', marginTop: '4px', padding: '2px', border: '1px solid #000' }}>
+                      SU AHORRO: {formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}
+                    </div>
+                  )}
 
-              {/* SAR Legal Footer */}
-              <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
-              {lastCompletedSale.isFiscal && (
-                <>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
                   <div style={{ textAlign: 'center', fontSize: '8px', fontStyle: 'italic', fontWeight: 'bold' }}>
                     "La factura es beneficio de todos, exíjala."
                   </div>
                   <div style={{ textAlign: 'center', fontSize: '8px', fontWeight: 'bold', marginTop: '2px' }}>
                     === {selectedTicketCopy === 'ORIGINAL' ? 'ORIGINAL: CLIENTE' : 'COPIA: OBLIGADO TRIBUTARIO EMISOR / SAR'} ===
                   </div>
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '9px', marginTop: '4px' }}>¡GRACIAS POR SU COMPRA!</div>
+                  <div style={{ textAlign: 'center', fontSize: '8px' }}>ESPERAMOS REGRESE PRONTO</div>
+                </>
+              ) : (
+                <>
+                  {/* TICKET SIMPLE / COMPROBANTE ULTRACOMPACTO */}
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase' }}>{tenant.name}</div>
+                  {tenant.phone && <div style={{ textAlign: 'center', fontSize: '9px', color: '#333' }}>TEL: {tenant.phone}</div>}
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 'bold' }}>
+                    <span>TICKET: #{lastCompletedSale.documentNumber}</span>
+                    <span>
+                      {new Date(lastCompletedSale.createdAt).toLocaleDateString('es-HN')} {new Date(lastCompletedSale.createdAt).toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  {lastCompletedSale.customerName && lastCompletedSale.customerName !== 'Consumidor Final' && (
+                    <div style={{ fontSize: '9px', marginTop: '2px' }}><strong>CLIENTE:</strong> {lastCompletedSale.customerName}</div>
+                  )}
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+
+                  {/* Listado directo de articulos */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
+                    {lastCompletedSale.items?.map((it: CartLine, idx: number) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
+                          {it.quantity}x {it.name}
+                        </span>
+                        <span style={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                          {formatCurrency(it.total, tenant.currencySymbol)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+
+                  {/* Totales directos */}
+                  {lastCompletedSale.discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                      <span>Descuento:</span>
+                      <span>-{formatCurrency(lastCompletedSale.discountAmount, tenant.currencySymbol)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px', margin: '2px 0' }}>
+                    <span>TOTAL:</span>
+                    <span>{formatCurrency(lastCompletedSale.total, tenant.currencySymbol)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                    <span>Forma de Pago:</span>
+                    <span>{lastCompletedSale.paymentMethod}</span>
+                  </div>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
+
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '9px', marginTop: '4px' }}>
+                    ¡GRACIAS POR SU COMPRA!
+                  </div>
                 </>
               )}
-              <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '9px', marginTop: '4px' }}>¡GRACIAS POR SU COMPRA!</div>
-              <div style={{ textAlign: 'center', fontSize: '8px' }}>ESPERAMOS REGRESE PRONTO</div>
+              {/* Espaciador de avance de papel para despejar la cuchilla de corte */}
+              <div style={{ height: '32px', width: '100%' }}></div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '1rem' }}>

@@ -391,8 +391,8 @@ export const CashShiftModal: React.FC = () => {
                         value={movType}
                         onChange={(e) => setMovType(e.target.value as any)}
                       >
-                        <option value="SALIDA">🔴 Egreso / Retiro / Gasto (-)</option>
-                        <option value="ENTRADA">🟢 Ingreso / Aporte de Sencillo (+)</option>
+                        <option value="SALIDA">Egreso / Retiro / Gasto (-)</option>
+                        <option value="ENTRADA">Ingreso / Aporte de Sencillo (+)</option>
                       </select>
                     </div>
 

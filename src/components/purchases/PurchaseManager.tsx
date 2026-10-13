@@ -1475,7 +1475,7 @@ export const PurchaseManager: React.FC = () => {
                       required
                     >
                       <option value="ACTIVE_CASH_SHIFT">
-                        💵 Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
+                        Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
                       </option>
                       {tenantFunds.map(f => (
                         <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
