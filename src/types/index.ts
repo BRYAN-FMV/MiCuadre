@@ -2,7 +2,7 @@ export type TaxClassification = 'EXENTO' | 'EXONERADO' | 'GRAVADO_15' | 'GRAVADO
 
 export type UserRole = 'ADMIN' | 'CAJERO' | 'BODEGUERO' | 'STAFF';
 
-export type BusinessType = 'RETAIL' | 'SERVICES' | 'WHOLESALE' | 'MIXED';
+export type BusinessType = 'RETAIL' | 'SERVICES' | 'WHOLESALE' | 'FOOD' | 'MIXED';
 
 export interface Tenant {
   id: string;
@@ -20,6 +20,7 @@ export interface Tenant {
   isLoyaltyEnabled?: boolean;
   isServicesEnabled?: boolean;
   isWholesaleEnabled?: boolean;
+  isFoodEnabled?: boolean; // Habilita el modulo gastronomico (Menu, Mesas, Domicilios, Repartidores)
   loyaltyEarnRate?: number; // Spend amount to earn 1 point (default 100)
   loyaltyPointValue?: number; // Currency value of 1 point (default 1.00)
   subscriptionStatus?: 'ACTIVE' | 'EXPIRED' | 'TRIAL' | 'CANCELLED';
@@ -432,6 +433,87 @@ export interface Expense {
   receiptNumber?: string;
   expenseDate: string;
   registeredBy?: string;
+  createdAt: string;
+}
+
+// =========================================================
+// MODULO GASTRONOMICO (RESTAURANTES, COMEDORES, CAFETERIAS)
+// =========================================================
+
+export interface MenuItemExtra {
+  id: string;
+  name: string;        // ej. "Extra Carne", "Extra Ensalada", "Tamano Grande"
+  price: number;       // ej. 30.00, 15.00
+}
+
+export interface MenuItem {
+  id: string;
+  tenantId: string;
+  name: string;        // ej. "Pollo Chuco con Tajadas", "Jugo de Maracuya"
+  category: string;    // ej. "Almuerzos", "Desayunos", "Bebidas Naturales"
+  price: number;
+  isAvailable: boolean; // Switch de disponibilidad del dia
+  availableExtras?: MenuItemExtra[];
+  defaultNotes?: string[]; // ej. ["Sin cebolla", "Tajadas verdes", "Poco hielo"]
+  createdAt: string;
+}
+
+export type FoodOrderDeliveryType = 'DINE_IN' | 'TAKE_OUT' | 'DELIVERY';
+export type FoodOrderStatus = 'ORDERED' | 'PREPARING' | 'SERVED' | 'DELIVERED' | 'CANCELLED';
+export type DriverType = 'INTERNAL' | 'EXTERNAL_MANDADITO';
+
+export interface FoodOrderItemExtraSelected {
+  name: string;
+  price: number;
+}
+
+export interface FoodOrderItem {
+  menuItemId?: string;
+  productId?: string;  // Si agregan un refresco o cerveza de inventario
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  selectedExtras?: FoodOrderItemExtraSelected[];
+  notes?: string;      // ej. "Sin cebolla, aderezo aparte"
+  subtotal: number;
+}
+
+export interface FoodOrder {
+  id: string;
+  tenantId: string;
+  orderNumber: string; // ej. "#042"
+  deliveryType: FoodOrderDeliveryType;
+  status: FoodOrderStatus;
+  
+  // Mesa (DINE_IN)
+  tableNumber?: string; // ej. "Mesa 4"
+  
+  // Domicilio (DELIVERY)
+  customerName?: string;
+  customerPhone?: string;
+  deliveryAddress?: string;
+  deliveryFee?: number;
+  driverId?: string;
+  driverName?: string;
+  driverType?: DriverType;
+  driverSettled?: boolean;
+  
+  items: FoodOrderItem[];
+  subtotal: number;
+  total: number;
+  paymentMethod?: 'CASH' | 'CARD' | 'TRANSFER';
+  isPaid: boolean;
+  saleId?: string;     // Vinculo a la venta fiscal final en `sales`
+  createdAt: string;
+}
+
+export interface DeliveryDriver {
+  id: string;
+  tenantId: string;
+  fullName: string;
+  phone?: string;
+  driverType: DriverType; // 'INTERNAL' o 'EXTERNAL_MANDADITO'
+  isActive: boolean;
   createdAt: string;
 }
 

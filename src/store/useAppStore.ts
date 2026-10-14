@@ -4,13 +4,13 @@ import {
   Tenant, UserProfile, UserPermissions, Product, ProductPresentation, FiscalRange, CashShift, CashMovement,
   CartLine, Sale, PurchaseInvoice, Supplier, Service, Staff,
   Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment,
-  SalesReturn, InventoryAdjustment
+  SalesReturn, InventoryAdjustment, MenuItem, MenuItemExtra, FoodOrder, FoodOrderItem, DeliveryDriver
 } from '../types';
 import {
   INITIAL_TENANT, INITIAL_PROFILES, INITIAL_PRODUCTS,
   INITIAL_FISCAL_RANGE, INITIAL_FISCAL_RANGES, INITIAL_CASH_SHIFT, INITIAL_SUPPLIERS,
   INITIAL_SERVICES, INITIAL_STAFF, INITIAL_APPOINTMENTS, INITIAL_FINANCIAL_EVENTS,
-  INITIAL_FUNDS, INITIAL_CUSTOMERS, INITIAL_ACCOUNT_PAYMENTS
+  INITIAL_FUNDS, INITIAL_CUSTOMERS, INITIAL_ACCOUNT_PAYMENTS, INITIAL_MENU_ITEMS, INITIAL_DRIVERS
 } from '../lib/mockData';
 
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
@@ -99,8 +99,13 @@ interface AppState {
   // Financial Calendar
   financialEvents: FinancialEvent[];
 
+  // Food & Restaurant Module
+  menuItems: MenuItem[];
+  foodOrders: FoodOrder[];
+  deliveryDrivers: DeliveryDriver[];
+
   // UI Modals
-  activeTab: 'pos' | 'inventory' | 'purchases' | 'services' | 'calendar' | 'reports' | 'shifts' | 'settings' | 'superadmin' | 'accounts';
+  activeTab: 'pos' | 'inventory' | 'purchases' | 'services' | 'calendar' | 'reports' | 'shifts' | 'settings' | 'superadmin' | 'accounts' | 'menu';
   isDevMode: boolean;
   isShiftModalOpen: boolean;
   isPaymentModalOpen: boolean;
@@ -199,6 +204,21 @@ interface AppState {
   payFinancialEvent: (eventId: string, fundId: string) => void;
   resetToDefaultData: () => void;
 
+  // Food & Restaurant Actions
+  addMenuItem: (item: Omit<MenuItem, 'id' | 'createdAt' | 'tenantId'>) => MenuItem;
+  updateMenuItem: (id: string, updates: Partial<MenuItem>) => void;
+  toggleMenuItemAvailability: (id: string) => void;
+  deleteMenuItem: (id: string) => void;
+  createFoodOrder: (order: Omit<FoodOrder, 'id' | 'createdAt' | 'tenantId' | 'orderNumber' | 'isPaid'>) => FoodOrder;
+  updateFoodOrder: (id: string, updates: Partial<FoodOrder>) => void;
+  addItemsToFoodOrder: (id: string, items: FoodOrderItem[]) => void;
+  completeFoodOrder: (id: string, saleId?: string) => void;
+  cancelFoodOrder: (id: string) => void;
+  addDeliveryDriver: (driver: Omit<DeliveryDriver, 'id' | 'createdAt' | 'tenantId'>) => DeliveryDriver;
+  updateDeliveryDriver: (id: string, updates: Partial<DeliveryDriver>) => void;
+  deleteDeliveryDriver: (id: string) => void;
+  settleDriverOrders: (driverId: string, cashShiftId?: string) => { totalCash: number; ordersCount: number };
+
   // Mobile Navigation
   isMobileSidebarOpen: boolean;
   setMobileSidebarOpen: (open: boolean) => void;
@@ -238,6 +258,10 @@ export const useAppStore = create<AppState>()(
       appointments: INITIAL_APPOINTMENTS,
       commissions: [],
       financialEvents: INITIAL_FINANCIAL_EVENTS,
+
+      menuItems: INITIAL_MENU_ITEMS,
+      foodOrders: [],
+      deliveryDrivers: INITIAL_DRIVERS,
 
       activeTab: 'pos',
       isDevMode: false,
@@ -2243,8 +2267,144 @@ export const useAppStore = create<AppState>()(
       activeTab: 'pos',
       isDevMode: false,
       isShiftModalOpen: false,
-      isPaymentModalOpen: false
+      isPaymentModalOpen: false,
+      menuItems: INITIAL_MENU_ITEMS,
+      foodOrders: [],
+      deliveryDrivers: INITIAL_DRIVERS
     });
+  },
+
+  // Food & Restaurant Actions
+  addMenuItem: (itemData) => {
+    const tenantId = get().tenant.id;
+    const newItem: MenuItem = {
+      ...itemData,
+      id: generateUUID(),
+      tenantId,
+      createdAt: new Date().toISOString()
+    };
+    set((s) => ({ menuItems: [...s.menuItems, newItem] }));
+    return newItem;
+  },
+
+  updateMenuItem: (id, updates) => set((s) => ({
+    menuItems: s.menuItems.map(m => m.id === id ? { ...m, ...updates } : m)
+  })),
+
+  toggleMenuItemAvailability: (id) => set((s) => ({
+    menuItems: s.menuItems.map(m => m.id === id ? { ...m, isAvailable: !m.isAvailable } : m)
+  })),
+
+  deleteMenuItem: (id) => set((s) => ({
+    menuItems: s.menuItems.filter(m => m.id !== id)
+  })),
+
+  createFoodOrder: (orderData) => {
+    const tenantId = get().tenant.id;
+    const todayOrders = (get().foodOrders || []).filter(o => o.tenantId === tenantId);
+    const orderNumber = `#${String(todayOrders.length + 1).padStart(3, '0')}`;
+    const newOrder: FoodOrder = {
+      ...orderData,
+      id: generateUUID(),
+      tenantId,
+      orderNumber,
+      isPaid: false,
+      status: orderData.status || 'ORDERED',
+      createdAt: new Date().toISOString()
+    };
+    set((s) => ({ foodOrders: [newOrder, ...s.foodOrders] }));
+    return newOrder;
+  },
+
+  updateFoodOrder: (id, updates) => set((s) => ({
+    foodOrders: s.foodOrders.map(o => o.id === id ? { ...o, ...updates } : o)
+  })),
+
+  addItemsToFoodOrder: (id, newItems) => set((s) => ({
+    foodOrders: s.foodOrders.map(o => {
+      if (o.id !== id) return o;
+      const updatedItems = [...o.items, ...newItems];
+      const subtotal = updatedItems.reduce((acc, it) => acc + it.subtotal, 0);
+      const total = subtotal + (o.deliveryFee || 0);
+      return { ...o, items: updatedItems, subtotal, total };
+    })
+  })),
+
+  completeFoodOrder: (id, saleId) => set((s) => ({
+    foodOrders: s.foodOrders.map(o => o.id === id ? { ...o, status: 'DELIVERED', isPaid: true, saleId } : o)
+  })),
+
+  cancelFoodOrder: (id) => set((s) => ({
+    foodOrders: s.foodOrders.map(o => o.id === id ? { ...o, status: 'CANCELLED' } : o)
+  })),
+
+  addDeliveryDriver: (driverData) => {
+    const tenantId = get().tenant.id;
+    const newDriver: DeliveryDriver = {
+      ...driverData,
+      id: generateUUID(),
+      tenantId,
+      createdAt: new Date().toISOString()
+    };
+    set((s) => ({ deliveryDrivers: [...s.deliveryDrivers, newDriver] }));
+    return newDriver;
+  },
+
+  updateDeliveryDriver: (id, updates) => set((s) => ({
+    deliveryDrivers: s.deliveryDrivers.map(d => d.id === id ? { ...d, ...updates } : d)
+  })),
+
+  deleteDeliveryDriver: (id) => set((s) => ({
+    deliveryDrivers: s.deliveryDrivers.filter(d => d.id !== id)
+  })),
+
+  settleDriverOrders: (driverId, cashShiftId) => {
+    const state = get();
+    const driver = (state.deliveryDrivers || []).find(d => d.id === driverId);
+    const unsettledOrders = (state.foodOrders || []).filter(
+      o => o.driverId === driverId && o.deliveryType === 'DELIVERY' && o.status !== 'CANCELLED' && !o.driverSettled
+    );
+
+    let totalCash = 0;
+    unsettledOrders.forEach(o => {
+      if (o.paymentMethod === 'CARD' || o.paymentMethod === 'TRANSFER') {
+        return;
+      }
+      if (driver?.driverType === 'INTERNAL') {
+        totalCash += (o.subtotal + (o.deliveryFee || 0));
+      } else {
+        totalCash += o.subtotal;
+      }
+    });
+
+    const settledIds = new Set(unsettledOrders.map(o => o.id));
+    const updatedOrders = (state.foodOrders || []).map(o => 
+      settledIds.has(o.id) ? { ...o, driverSettled: true } : o
+    );
+
+    const targetShiftId = cashShiftId || state.activeShift?.id;
+    let updatedMovements = state.cashMovements || [];
+    if (targetShiftId && totalCash > 0) {
+      const movement: CashMovement = {
+        id: generateUUID(),
+        tenantId: state.tenant.id,
+        cashShiftId: targetShiftId,
+        fiscalRangeId: state.selectedFiscalRangeId,
+        type: 'ENTRADA',
+        amount: totalCash,
+        concept: `Liquidación Repartidor: ${driver?.fullName || 'Repartidor'} (${unsettledOrders.length} entregas)`,
+        registeredBy: state.currentUser?.fullName || 'Sistema',
+        createdAt: new Date().toISOString()
+      };
+      updatedMovements = [...updatedMovements, movement];
+    }
+
+    set({
+      foodOrders: updatedOrders,
+      cashMovements: updatedMovements
+    });
+
+    return { totalCash, ordersCount: unsettledOrders.length };
   }
 }),
 {
@@ -2277,6 +2437,9 @@ export const useAppStore = create<AppState>()(
     appointments: state.appointments,
     commissions: state.commissions,
     financialEvents: state.financialEvents,
+    menuItems: state.menuItems,
+    foodOrders: state.foodOrders,
+    deliveryDrivers: state.deliveryDrivers,
   }),
   onRehydrateStorage: () => (state) => {
     if (!state) return;

@@ -1,4 +1,4 @@
-import { Tenant, UserProfile, Product, FiscalRange, CashShift, Supplier, Service, Staff, Appointment, FinancialEvent, FinancialFund, Customer, AccountPayment } from '../types';
+import { Tenant, UserProfile, Product, FiscalRange, CashShift, Supplier, Service, Staff, Appointment, FinancialEvent, FinancialFund, Customer, AccountPayment, MenuItem, DeliveryDriver } from '../types';
 
 export const INITIAL_TENANT: Tenant = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -308,6 +308,87 @@ export const INITIAL_ACCOUNT_PAYMENTS: AccountPayment[] = [
     notes: 'Abono a cuenta fiada quincenal',
     createdBy: 'Bryan (Administrador)',
     createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
+  }
+];
+
+export const INITIAL_MENU_ITEMS: MenuItem[] = [
+  {
+    id: 'menu-001',
+    tenantId: '00000000-0000-0000-0000-000000000001',
+    name: 'Pollo Chuco Tradicional',
+    category: 'Almuerzos & Cenas',
+    price: 135.0,
+    isAvailable: true,
+    availableExtras: [
+      { id: 'ext-1', name: 'Extra Tajadas', price: 20.0 },
+      { id: 'ext-2', name: 'Extra Ensalada y Chimol', price: 15.0 },
+      { id: 'ext-3', name: 'Pieza de Pollo Adicional', price: 35.0 }
+    ],
+    defaultNotes: ['Tajadas verdes', 'Aderezo aparte', 'Sin repollo'],
+    createdAt: '2026-01-01T08:00:00.000Z'
+  },
+  {
+    id: 'menu-002',
+    tenantId: '00000000-0000-0000-0000-000000000001',
+    name: 'Baleada Especial con Carne',
+    category: 'Desayunos & Cenas',
+    price: 55.0,
+    isAvailable: true,
+    availableExtras: [
+      { id: 'ext-4', name: 'Extra Aguacate', price: 15.0 },
+      { id: 'ext-5', name: 'Extra Huevo', price: 12.0 },
+      { id: 'ext-6', name: 'Extra Queso y Mantequilla', price: 10.0 }
+    ],
+    defaultNotes: ['Huevo picado', 'Frijoles fritos', 'Bien tostada'],
+    createdAt: '2026-01-01T08:00:00.000Z'
+  },
+  {
+    id: 'menu-003',
+    tenantId: '00000000-0000-0000-0000-000000000001',
+    name: 'Jugo Natural de Maracuyá',
+    category: 'Bebidas Naturales',
+    price: 35.0,
+    isAvailable: true,
+    availableExtras: [
+      { id: 'ext-7', name: 'Tamaño Litro', price: 20.0 },
+      { id: 'ext-8', name: 'Con Leche', price: 10.0 }
+    ],
+    defaultNotes: ['Poco hielo', 'Sin azúcar', 'Bien frío'],
+    createdAt: '2026-01-01T08:00:00.000Z'
+  },
+  {
+    id: 'menu-004',
+    tenantId: '00000000-0000-0000-0000-000000000001',
+    name: 'Horchata Casera',
+    category: 'Bebidas Naturales',
+    price: 30.0,
+    isAvailable: false, // Plato agotado
+    availableExtras: [
+      { id: 'ext-9', name: 'Tamaño Litro', price: 20.0 }
+    ],
+    defaultNotes: ['Con canela extra'],
+    createdAt: '2026-01-01T08:00:00.000Z'
+  }
+];
+
+export const INITIAL_DRIVERS: DeliveryDriver[] = [
+  {
+    id: 'drv-001',
+    tenantId: '00000000-0000-0000-0000-000000000001',
+    fullName: 'Carlos Ramos (Moto Propia - Interno)',
+    phone: '+504 9876-5432',
+    driverType: 'INTERNAL',
+    isActive: true,
+    createdAt: '2026-01-01T08:00:00.000Z'
+  },
+  {
+    id: 'drv-002',
+    tenantId: '00000000-0000-0000-0000-000000000001',
+    fullName: 'Mario Express (Mandaditos Tercerizado)',
+    phone: '+504 9123-4567',
+    driverType: 'EXTERNAL_MANDADITO',
+    isActive: true,
+    createdAt: '2026-01-01T08:00:00.000Z'
   }
 ];
 
