@@ -5,6 +5,7 @@ import { formatCurrency } from '../../lib/monetary';
 import { generateKitchenEscPosTicket, generateEscPosReceipt } from '../../lib/escPos';
 import { QuickOrderPaymentModal } from './QuickOrderPaymentModal';
 import { NewFoodOrderModal } from './NewFoodOrderModal';
+import { DriverSettlementModal } from './DriverSettlementModal';
 import {
   Utensils,
   Plus,
@@ -43,6 +44,7 @@ export const FoodOrdersBoard: React.FC = () => {
   // Modals State
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
   const [paymentModalOrder, setPaymentModalOrder] = useState<FoodOrder | null>(null);
+  const [isDriversModalOpen, setIsDriversModalOpen] = useState(false);
 
   // Time & Urgency Helper
   const getElapsedMinutes = (isoDate: string) => {
@@ -427,29 +429,53 @@ export const FoodOrdersBoard: React.FC = () => {
           </button>
         </div>
 
-        {/* CTA: Nuevo Pedido */}
-        <button
-          type="button"
-          onClick={() => setIsNewOrderModalOpen(true)}
-          style={{
-            minHeight: '42px',
-            padding: '0.55rem 1.25rem',
-            fontSize: '0.88rem',
-            fontWeight: 800,
-            borderRadius: '10px',
-            border: 'none',
-            background: '#ea580c',
-            color: '#ffffff',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            boxShadow: '0 2px 8px rgba(234, 88, 12, 0.3)'
-          }}
-        >
-          <Plus size={18} />
-          <span>+ Nuevo Pedido</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setIsDriversModalOpen(true)}
+            style={{
+              minHeight: '42px',
+              padding: '0.55rem 1rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              borderRadius: '10px',
+              border: '1px solid #cbd5e1',
+              background: '#ffffff',
+              color: '#0284c7',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <Bike size={16} />
+            <span>Repartidores & Liquidación</span>
+          </button>
+
+          {/* CTA: Nuevo Pedido */}
+          <button
+            type="button"
+            onClick={() => setIsNewOrderModalOpen(true)}
+            style={{
+              minHeight: '42px',
+              padding: '0.55rem 1.25rem',
+              fontSize: '0.88rem',
+              fontWeight: 800,
+              borderRadius: '10px',
+              border: 'none',
+              background: '#ea580c',
+              color: '#ffffff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              boxShadow: '0 2px 8px rgba(234, 88, 12, 0.3)'
+            }}
+          >
+            <Plus size={18} />
+            <span>+ Nuevo Pedido</span>
+          </button>
+        </div>
       </div>
 
       {/* 3. Orders Grid Cards (Direct In-Card Checkout Pattern) */}
@@ -876,6 +902,12 @@ export const FoodOrdersBoard: React.FC = () => {
         onSuccess={() => {
           setPaymentModalOrder(null);
         }}
+      />
+
+      {/* Delivery Drivers Settlement Modal */}
+      <DriverSettlementModal
+        isOpen={isDriversModalOpen}
+        onClose={() => setIsDriversModalOpen(false)}
       />
     </div>
   );
