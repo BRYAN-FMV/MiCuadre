@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { ShoppingCart, Package, Truck, Calendar, Scissors, Settings, Lock, BarChart3, X, Key, BookOpen } from 'lucide-react';
+import { ShoppingCart, Package, Truck, Calendar, Scissors, Settings, Lock, BarChart3, X, Key, BookOpen, UtensilsCrossed } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateProfilePinInSupabase } from '../../lib/supabaseService';
 
@@ -43,6 +43,7 @@ export const Sidebar: React.FC = () => {
 
   const navItems = [
     { id: 'pos', label: 'Ventas', icon: ShoppingCart, show: role === 'ADMIN' || role === 'CAJERO' || role === 'STAFF' },
+    { id: 'menu', label: 'Menú', icon: UtensilsCrossed, show: Boolean(tenant.isFoodEnabled) && (role === 'ADMIN' || role === 'CAJERO' || role === 'STAFF') },
     { id: 'inventory', label: 'Inventario', icon: Package, show: true },
     { id: 'purchases', label: 'Compras', icon: Truck, show: role === 'ADMIN' || role === 'BODEGUERO' },
     { id: 'accounts', label: 'Cuentas / Fiados', icon: BookOpen, show: role === 'ADMIN' || role === 'CAJERO' },

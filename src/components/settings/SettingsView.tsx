@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy } from 'lucide-react';
+import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
 import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../../lib/supabaseService';
@@ -698,6 +698,32 @@ export const SettingsView: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Restaurant & Food Module Switch */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: 'span 2' }}>
+            <div>
+              <h4 style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <UtensilsCrossed size={16} style={{ color: '#ea580c' }} />
+                Módulo Gastronómico (Comedores, Restaurantes y Cafeterías)
+              </h4>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.15rem' }}>
+                Habilita el Menú del día con switch de disponibilidad, pedidos por mesa (cuentas abiertas), pedidos para llevar, entregas a domicilio y liquidación de repartidores.
+              </p>
+            </div>
+
+            <button
+              className={`btn ${tenant.isFoodEnabled ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => {
+                const nextVal = !tenant.isFoodEnabled;
+                updateTenantSettings({ isFoodEnabled: nextVal, businessType: nextVal ? 'FOOD' : 'RETAIL' });
+                toast.success(`Módulo Gastronómico ${nextVal ? 'ACTIVADO' : 'DESACTIVADO'}`);
+              }}
+              style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', background: tenant.isFoodEnabled ? '#ea580c' : undefined, borderColor: tenant.isFoodEnabled ? '#ea580c' : undefined }}
+            >
+              {tenant.isFoodEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+              <span>{tenant.isFoodEnabled ? 'MÓDULO ACTIVO' : 'DESACTIVADO'}</span>
+            </button>
           </div>
         </div>
       </div>

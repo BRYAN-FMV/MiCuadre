@@ -4,6 +4,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { LoginView } from './components/auth/LoginView';
 import { PosContainer } from './components/pos/PosContainer';
+import { MenuView } from './components/food/MenuView';
 import { InventoryManager } from './components/inventory/InventoryManager';
 import { PurchaseManager } from './components/purchases/PurchaseManager';
 import { ServicesAppointments } from './components/services/ServicesAppointments';
@@ -396,6 +397,7 @@ export const App: React.FC = () => {
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {activeTab === 'pos' && <PosContainer />}
+            {activeTab === 'menu' && <MenuView />}
             {activeTab === 'inventory' && <InventoryManager />}
             {activeTab === 'purchases' && <PurchaseManager />}
             {activeTab === 'accounts' && <AccountsView />}
