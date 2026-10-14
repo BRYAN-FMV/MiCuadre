@@ -889,7 +889,7 @@ export const PosContainer: React.FC = () => {
             <Package size={14} />
             <span>{tenant.isFoodEnabled ? `Inventario / Bebidas (${tenantProducts.length})` : `Productos (${tenantProducts.length})`}</span>
           </button>
-          {(typeof tenant.isServicesEnabled === 'boolean' ? tenant.isServicesEnabled : (tenant.businessType === 'SERVICES' || tenant.businessType === 'MIXED')) && (
+          {tenant.isServicesEnabled !== false && (
             <button
               type="button"
               onClick={() => setCatalogMode('SERVICES')}

@@ -51,10 +51,7 @@ export const Sidebar: React.FC = () => {
       id: 'services',
       label: 'Servicios',
       icon: Scissors,
-      show: (typeof tenant.isServicesEnabled === 'boolean'
-        ? tenant.isServicesEnabled
-        : (tenant.businessType === 'SERVICES' || tenant.businessType === 'MIXED')) &&
-        (role === 'ADMIN' || role === 'STAFF' || role === 'CAJERO')
+      show: (tenant.isServicesEnabled !== false) && (role === 'ADMIN' || role === 'STAFF' || role === 'CAJERO')
     },
     { id: 'calendar', label: 'Calendario', icon: Calendar, show: role === 'ADMIN' },
     { id: 'reports', label: 'Reportes', icon: BarChart3, show: role === 'ADMIN' },
@@ -102,7 +99,7 @@ export const Sidebar: React.FC = () => {
           <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
               <span className="badge badge-wholesale">
-                {tenant.businessType === 'RETAIL' ? 'Retail' : tenant.businessType === 'SERVICES' ? 'Servicios' : 'Mixto'}
+                {tenant.businessType === 'RETAIL' ? 'Retail' : tenant.businessType === 'SERVICES' ? 'Servicios' : tenant.businessType === 'FOOD' ? 'Gastronómico' : 'Mixto'}
               </span>
               <span className="badge badge-success" style={{ background: role === 'ADMIN' ? '#dcfce7' : '#e0f2fe', color: role === 'ADMIN' ? '#15803d' : '#0369a1', border: '1px solid #bae6fd' }}>
                 {role === 'ADMIN' ? 'Admin' : role === 'CAJERO' ? 'Cajero' : role === 'BODEGUERO' ? 'Bodeguero' : 'Staff'}

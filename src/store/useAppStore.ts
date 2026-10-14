@@ -2618,6 +2618,13 @@ export const useAppStore = create<AppState>()(
         shiftHistory: updatedShiftHistory
       });
     }
+
+    // Ensure isServicesEnabled defaults to true if not explicitly set
+    if (state.tenant && state.tenant.isServicesEnabled === undefined) {
+      useAppStore.setState(s => ({
+        tenant: { ...s.tenant, isServicesEnabled: true }
+      }));
+    }
   }
 }
 ));

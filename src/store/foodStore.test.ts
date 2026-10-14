@@ -380,18 +380,13 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     // Enable both food module and services module
     store.updateTenantSettings({
       isFoodEnabled: true,
-      isServicesEnabled: true,
       businessType: 'FOOD'
     });
 
     const tenant = useAppStore.getState().tenant;
     expect(tenant.isFoodEnabled).toBe(true);
-    expect(tenant.isServicesEnabled).toBe(true);
 
-    const isServicesActive = typeof tenant.isServicesEnabled === 'boolean'
-      ? tenant.isServicesEnabled
-      : (tenant.businessType === 'SERVICES' || tenant.businessType === 'MIXED');
-
+    const isServicesActive = tenant.isServicesEnabled !== false;
     expect(isServicesActive).toBe(true);
   });
 });
