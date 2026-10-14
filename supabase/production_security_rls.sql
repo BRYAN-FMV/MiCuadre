@@ -69,6 +69,7 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS access_password VARCHAR(100);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_services_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_wholesale_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_loyalty_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_food_enabled BOOLEAN DEFAULT FALSE;
 
 -- Enable RLS on all sensitive tables
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
@@ -92,6 +93,9 @@ ALTER TABLE cash_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delivery_drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE food_orders ENABLE ROW LEVEL SECURITY;
 
 -- Drop loose development policies if present
 DROP POLICY IF EXISTS "Allow public full access tenants" ON tenants;
@@ -210,6 +214,24 @@ CREATE POLICY "Strict Tenant Isolation Customers" ON customers
 
 DROP POLICY IF EXISTS "Strict Tenant Isolation Account Payments" ON account_payments;
 CREATE POLICY "Strict Tenant Isolation Account Payments" ON account_payments
+    FOR ALL
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+    WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+
+DROP POLICY IF EXISTS "Strict Tenant Isolation Menu Items" ON menu_items;
+CREATE POLICY "Strict Tenant Isolation Menu Items" ON menu_items
+    FOR ALL
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+    WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+
+DROP POLICY IF EXISTS "Strict Tenant Isolation Delivery Drivers" ON delivery_drivers;
+CREATE POLICY "Strict Tenant Isolation Delivery Drivers" ON delivery_drivers
+    FOR ALL
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
+    WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+
+DROP POLICY IF EXISTS "Strict Tenant Isolation Food Orders" ON food_orders;
+CREATE POLICY "Strict Tenant Isolation Food Orders" ON food_orders
     FOR ALL
     USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL)
     WITH CHECK (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);

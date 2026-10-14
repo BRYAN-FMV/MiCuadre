@@ -20,6 +20,7 @@ CREATE TABLE tenants (
     is_services_enabled BOOLEAN DEFAULT TRUE,
     is_wholesale_enabled BOOLEAN DEFAULT TRUE,
     is_loyalty_enabled BOOLEAN DEFAULT TRUE,
+    is_food_enabled BOOLEAN DEFAULT FALSE,
     allow_negative_stock BOOLEAN DEFAULT FALSE,
     currency_symbol VARCHAR(5) DEFAULT 'L.',
     access_password VARCHAR(100),                -- Store master access password
@@ -323,6 +324,67 @@ CREATE TABLE IF NOT EXISTS financial_events (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 12. FOOD & RESTAURANT MODULE
+CREATE TABLE IF NOT EXISTS menu_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL,
+    category VARCHAR(100) NOT NULL DEFAULT 'General',
+    price NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    tax_classification VARCHAR(20) DEFAULT 'EXENTO',
+    is_available BOOLEAN DEFAULT TRUE,
+    available_extras JSONB DEFAULT '[]'::jsonb,
+    default_notes TEXT[] DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_menu_items_tenant_id ON menu_items(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_availability ON menu_items(tenant_id, is_available);
+CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(tenant_id, category);
+
+CREATE TABLE IF NOT EXISTS delivery_drivers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    full_name VARCHAR(150) NOT NULL,
+    phone VARCHAR(30),
+    driver_type VARCHAR(30) NOT NULL DEFAULT 'INTERNAL',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_delivery_drivers_tenant ON delivery_drivers(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_drivers_active ON delivery_drivers(tenant_id, is_active);
+
+CREATE TABLE IF NOT EXISTS food_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    order_number VARCHAR(30) NOT NULL,
+    delivery_type VARCHAR(30) NOT NULL DEFAULT 'DINE_IN',
+    status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
+    table_number VARCHAR(50),
+    customer_name VARCHAR(150),
+    customer_phone VARCHAR(30),
+    delivery_phone VARCHAR(30),
+    delivery_address TEXT,
+    delivery_fee NUMERIC(12, 2) DEFAULT 0.00,
+    driver_id UUID REFERENCES delivery_drivers(id) ON DELETE SET NULL,
+    driver_name VARCHAR(150),
+    driver_type VARCHAR(30),
+    driver_settled BOOLEAN DEFAULT FALSE,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    total NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    payment_method VARCHAR(20),
+    is_paid BOOLEAN DEFAULT FALSE,
+    sale_id UUID REFERENCES sales(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_food_orders_tenant_status ON food_orders(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_food_orders_tenant_delivery ON food_orders(tenant_id, delivery_type);
+CREATE INDEX IF NOT EXISTS idx_food_orders_driver ON food_orders(driver_id);
+CREATE INDEX IF NOT EXISTS idx_food_orders_created_at ON food_orders(tenant_id, created_at DESC);
+
 -- RLS POLICIES FOR ALL TABLES (Permite acceso de lectura y escritura para la llave anon pública)
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -341,6 +403,9 @@ ALTER TABLE services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_commissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delivery_drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE food_orders ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de acceso para anon (Desarrollo y Multi-tenant público)
 CREATE POLICY "Allow public full access tenants" ON tenants FOR ALL USING (true) WITH CHECK (true);
@@ -360,6 +425,9 @@ CREATE POLICY "Allow public full access services" ON services FOR ALL USING (tru
 CREATE POLICY "Allow public full access appointments" ON appointments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public full access staff_commissions" ON staff_commissions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public full access financial_events" ON financial_events FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public full access menu_items" ON menu_items FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public full access delivery_drivers" ON delivery_drivers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public full access food_orders" ON food_orders FOR ALL USING (true) WITH CHECK (true);
 
 -- SEED DATA INICIAL
 INSERT INTO tenants (id, name, rtn, phone, email, address, business_type, is_fiscal_enabled, allow_negative_stock)
