@@ -3,7 +3,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { ArrowRight, Store, ShieldAlert, Lock, User, Building2, Download, Monitor, CheckCircle, HelpCircle, X, Terminal } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
-import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase } from '../../lib/supabaseService';
+import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase, getStoredTenantFoodEnabled } from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
 import { setRememberedStore, updateDynamicManifest, isPwaStandalone, promptPwaInstall, hasInstallPrompt } from '../../lib/pwa';
 
@@ -170,7 +170,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
       const slug = normalizeSlug(matchedTenant.name);
       setRememberedStore(slug, matchedTenant.id);
       updateDynamicManifest(matchedTenant.name, slug);
-      useAppStore.setState({ tenant: matchedTenant });
+
+      const localTenant = useAppStore.getState().tenant;
+      const storedFood = getStoredTenantFoodEnabled(matchedTenant.id);
+      const isFood = (typeof matchedTenant.isFoodEnabled === 'boolean' && matchedTenant.isFoodEnabled)
+        || (localTenant?.id === matchedTenant.id ? localTenant.isFoodEnabled : undefined)
+        || storedFood
+        || false;
+      const finalMatchedTenant = { ...matchedTenant, isFoodEnabled: isFood };
+      useAppStore.setState({ tenant: finalMatchedTenant });
 
       // 2. Fetch profiles for this tenant
       const liveProfiles = await fetchProfilesFromSupabase(matchedTenant.id);

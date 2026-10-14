@@ -61,6 +61,29 @@ export function getStoredPermissions(tenantId: string, profileId: string): UserP
   }
 }
 
+export function backupTenantFoodEnabled(tenantId: string, isFoodEnabled: boolean) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const key = `micuadre_food_enabled_${tenantId}`;
+    localStorage.setItem(key, isFoodEnabled ? 'true' : 'false');
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+export function getStoredTenantFoodEnabled(tenantId: string): boolean | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    const key = `micuadre_food_enabled_${tenantId}`;
+    const val = localStorage.getItem(key);
+    if (val === 'true') return true;
+    if (val === 'false') return false;
+    return undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
 let isPresentationsDbColumnAvailable: boolean | null = null;
 let isPermissionsDbColumnAvailable: boolean | null = null;
 
@@ -205,6 +228,10 @@ export async function fetchTenantFromSupabase(tenantId: string): Promise<Tenant 
     return null;
   }
 
+  const isFoodEnabled = typeof data.is_food_enabled === 'boolean'
+    ? data.is_food_enabled
+    : getStoredTenantFoodEnabled(data.id);
+
   return {
     id: data.id,
     name: data.name,
@@ -217,6 +244,7 @@ export async function fetchTenantFromSupabase(tenantId: string): Promise<Tenant 
     isServicesEnabled: data.is_services_enabled ?? true,
     isWholesaleEnabled: data.is_wholesale_enabled ?? true,
     isLoyaltyEnabled: data.is_loyalty_enabled ?? true,
+    isFoodEnabled: isFoodEnabled ?? false,
     allowNegativeStock: data.allow_negative_stock,
     currencySymbol: data.currency_symbol || 'L.',
     accessPassword: data.access_password || undefined
@@ -235,22 +263,29 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
     return [];
   }
 
-  return data.map((t: any) => ({
-    id: t.id,
-    name: t.name,
-    rtn: t.rtn,
-    phone: t.phone,
-    email: t.email,
-    address: t.address,
-    businessType: t.business_type,
-    isFiscalEnabled: t.is_fiscal_enabled ?? false,
-    isServicesEnabled: t.is_services_enabled ?? true,
-    isWholesaleEnabled: t.is_wholesale_enabled ?? true,
-    isLoyaltyEnabled: t.is_loyalty_enabled ?? true,
-    allowNegativeStock: t.allow_negative_stock,
-    currencySymbol: t.currency_symbol || 'L.',
-    accessPassword: t.access_password || undefined
-  }));
+  return data.map((t: any) => {
+    const isFoodEnabled = typeof t.is_food_enabled === 'boolean'
+      ? t.is_food_enabled
+      : getStoredTenantFoodEnabled(t.id);
+
+    return {
+      id: t.id,
+      name: t.name,
+      rtn: t.rtn,
+      phone: t.phone,
+      email: t.email,
+      address: t.address,
+      businessType: t.business_type,
+      isFiscalEnabled: t.is_fiscal_enabled ?? false,
+      isServicesEnabled: t.is_services_enabled ?? true,
+      isWholesaleEnabled: t.is_wholesale_enabled ?? true,
+      isLoyaltyEnabled: t.is_loyalty_enabled ?? true,
+      isFoodEnabled: isFoodEnabled ?? false,
+      allowNegativeStock: t.allow_negative_stock,
+      currencySymbol: t.currency_symbol || 'L.',
+      accessPassword: t.access_password || undefined
+    };
+  });
 }
 
 /**
@@ -258,6 +293,10 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
  */
 export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
   if (!isSupabaseConfigured() || !isValidUUID(tenant.id)) return false;
+
+  if (typeof tenant.isFoodEnabled === 'boolean') {
+    backupTenantFoodEnabled(tenant.id, tenant.isFoodEnabled);
+  }
 
   try {
     let { error } = await supabase.from('tenants').upsert({
@@ -272,6 +311,7 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
       is_services_enabled: tenant.isServicesEnabled ?? true,
       is_wholesale_enabled: tenant.isWholesaleEnabled ?? true,
       is_loyalty_enabled: tenant.isLoyaltyEnabled ?? true,
+      is_food_enabled: tenant.isFoodEnabled ?? false,
       allow_negative_stock: tenant.allowNegativeStock,
       currency_symbol: tenant.currencySymbol || 'L.',
       access_password: tenant.accessPassword || null

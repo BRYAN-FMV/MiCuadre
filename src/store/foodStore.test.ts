@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from './useAppStore';
 import { generateKitchenEscPosTicket } from '../lib/escPos';
+import { backupTenantFoodEnabled, getStoredTenantFoodEnabled } from '../lib/supabaseService';
 
 describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
   beforeEach(() => {
@@ -281,5 +282,43 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     expect(decoded).not.toContain('CAI:');
     expect(decoded).not.toContain('RTN:');
   });
+
+  it('should persist isFoodEnabled across tenant updates and prevent deactivation on restart/reload', () => {
+    const store = useAppStore.getState();
+    const currentTenant = store.tenant;
+
+    // 1. Activate food module
+    store.updateTenantSettings({ isFoodEnabled: true, businessType: 'FOOD' });
+    expect(useAppStore.getState().tenant.isFoodEnabled).toBe(true);
+    expect(useAppStore.getState().tenant.businessType).toBe('FOOD');
+    expect(getStoredTenantFoodEnabled(currentTenant.id)).toBe(true);
+
+    // 2. Simulate page reload / startup where cloud returns tenant without is_food_enabled column
+    const simulatedCloudTenant = {
+      ...currentTenant,
+      isFoodEnabled: undefined
+    };
+
+    // Resolving logic (as in App.tsx / LoginView.tsx)
+    const stored = getStoredTenantFoodEnabled(simulatedCloudTenant.id);
+    const resolvedFoodEnabled = (typeof simulatedCloudTenant.isFoodEnabled === 'boolean' && simulatedCloudTenant.isFoodEnabled)
+      || useAppStore.getState().tenant.isFoodEnabled
+      || stored
+      || false;
+
+    const mergedTenant = {
+      ...simulatedCloudTenant,
+      isFoodEnabled: resolvedFoodEnabled
+    };
+
+    useAppStore.setState({ tenant: mergedTenant });
+    expect(useAppStore.getState().tenant.isFoodEnabled).toBe(true);
+
+    // 3. Deactivate food module explicitly
+    store.updateTenantSettings({ isFoodEnabled: false, businessType: 'RETAIL' });
+    expect(useAppStore.getState().tenant.isFoodEnabled).toBe(false);
+    expect(getStoredTenantFoodEnabled(currentTenant.id)).toBe(false);
+  });
 });
+
 

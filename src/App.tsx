@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from './store/useAppStore';
+import { Tenant } from './types';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { LoginView } from './components/auth/LoginView';
@@ -29,7 +30,8 @@ import {
   fetchShiftsFromSupabase,
   pushLocalDataToCloud,
   syncAllCloudData,
-  processOfflineQueue
+  processOfflineQueue,
+  getStoredTenantFoodEnabled
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -133,9 +135,22 @@ export const App: React.FC = () => {
           );
 
           if (matched) {
-            setRememberedStore(rawSlug, matched.id);
-            useAppStore.setState({ tenant: matched, isAuthenticated: false });
-            updateDynamicManifest(matched.name, rawSlug);
+            const localMatched = localTenants.find(lt => lt.id === matched.id) || (useAppStore.getState().tenant?.id === matched.id ? useAppStore.getState().tenant : null);
+            const storedFood = getStoredTenantFoodEnabled(matched.id);
+            const resolvedFoodEnabled = (typeof matched.isFoodEnabled === 'boolean' && matched.isFoodEnabled)
+              || localMatched?.isFoodEnabled
+              || storedFood
+              || false;
+
+            const mergedMatched: Tenant = {
+              ...localMatched,
+              ...matched,
+              isFoodEnabled: resolvedFoodEnabled
+            };
+
+            setRememberedStore(rawSlug, mergedMatched.id);
+            useAppStore.setState({ tenant: mergedMatched, isAuthenticated: false });
+            updateDynamicManifest(mergedMatched.name, rawSlug);
           }
         }
       });
@@ -329,9 +344,14 @@ export const App: React.FC = () => {
           <LandingView
             onSelectStore={(selectedTenant) => {
               const slug = normalizeSlug(selectedTenant.name);
-              setRememberedStore(slug, selectedTenant.id);
-              updateDynamicManifest(selectedTenant.name, slug);
-              useAppStore.setState({ tenant: selectedTenant, isAuthenticated: false });
+              const storedFood = getStoredTenantFoodEnabled(selectedTenant.id);
+              const resolvedTenant = {
+                ...selectedTenant,
+                isFoodEnabled: (typeof selectedTenant.isFoodEnabled === 'boolean' && selectedTenant.isFoodEnabled) || storedFood || false
+              };
+              setRememberedStore(slug, resolvedTenant.id);
+              updateDynamicManifest(resolvedTenant.name, slug);
+              useAppStore.setState({ tenant: resolvedTenant, isAuthenticated: false });
               setShowLanding(false);
             }}
             onEnterDemo={() => {

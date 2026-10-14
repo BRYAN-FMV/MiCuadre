@@ -16,7 +16,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 /**
@@ -397,6 +397,10 @@ export const useAppStore = create<AppState>()(
         const updatedTenant = { ...state.tenant, ...settings };
         const updatedTenants = (state.tenants || [state.tenant]).map(t => t.id === updatedTenant.id ? updatedTenant : t);
         
+        if (typeof updatedTenant.isFoodEnabled === 'boolean') {
+          backupTenantFoodEnabled(updatedTenant.id, updatedTenant.isFoodEnabled);
+        }
+
         if (isSupabaseConfigured()) {
           supabase.from('tenants').update({
             name: updatedTenant.name,
@@ -409,6 +413,7 @@ export const useAppStore = create<AppState>()(
             is_services_enabled: updatedTenant.isServicesEnabled ?? true,
             is_wholesale_enabled: updatedTenant.isWholesaleEnabled ?? true,
             is_loyalty_enabled: updatedTenant.isLoyaltyEnabled ?? true,
+            is_food_enabled: updatedTenant.isFoodEnabled ?? false,
             access_password: updatedTenant.accessPassword || null
           }).eq('id', updatedTenant.id).then(async ({ error }) => {
             if (error && error.message.includes('column')) {
@@ -442,6 +447,10 @@ export const useAppStore = create<AppState>()(
       updateTenant: (id, tenantData) => set((state) => {
         const updatedTenants = (state.tenants || [state.tenant]).map(t => t.id === id ? { ...t, ...tenantData } : t);
         const updatedActiveTenant = state.tenant.id === id ? { ...state.tenant, ...tenantData } : state.tenant;
+
+        if (typeof updatedActiveTenant.isFoodEnabled === 'boolean') {
+          backupTenantFoodEnabled(id, updatedActiveTenant.isFoodEnabled);
+        }
 
         return { tenants: updatedTenants, tenant: updatedActiveTenant };
       }),

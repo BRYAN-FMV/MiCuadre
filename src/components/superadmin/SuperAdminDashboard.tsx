@@ -179,6 +179,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
       isServicesEnabled: newIsServices,
       isWholesaleEnabled: newIsWholesale,
       isLoyaltyEnabled: newIsLoyalty,
+      isFoodEnabled: newBusinessType === 'FOOD',
       accessPassword: newAccessPassword.trim() || undefined,
       allowNegativeStock: false,
       currencySymbol: 'L.',
@@ -966,6 +967,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onExit
                   <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
                     <input type="checkbox" checked={editingTenant.isLoyaltyEnabled ?? true} onChange={(e) => setEditingTenant({ ...editingTenant, isLoyaltyEnabled: e.target.checked })} />
                     Clientes & Lealtad
+                  </label>
+                  <label style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={editingTenant.isFoodEnabled ?? false} onChange={(e) => setEditingTenant({ ...editingTenant, isFoodEnabled: e.target.checked })} />
+                    Restaurante & Comida
                   </label>
                 </div>
               </div>
