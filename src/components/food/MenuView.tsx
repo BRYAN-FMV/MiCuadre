@@ -7,7 +7,11 @@ import { toast } from 'sonner';
 
 export const MenuView: React.FC = () => {
   const tenant = useAppStore(state => state.tenant);
-  const menuItems = useAppStore(state => state.menuItems) || [];
+  const allMenuItems = useAppStore(state => state.menuItems) || [];
+  const isDemo = tenant.id === '00000000-0000-0000-0000-000000000001';
+  const menuItems = allMenuItems.filter(
+    m => m.tenantId === tenant.id || (isDemo && (!m.tenantId || m.tenantId === '00000000-0000-0000-0000-000000000001'))
+  );
   const addMenuItem = useAppStore(state => state.addMenuItem);
   const updateMenuItem = useAppStore(state => state.updateMenuItem);
   const toggleMenuItemAvailability = useAppStore(state => state.toggleMenuItemAvailability);

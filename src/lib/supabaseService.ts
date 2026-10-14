@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, UserPermissions } from '../types';
+import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, UserPermissions, MenuItem, DeliveryDriver, FoodOrder } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
 import { useAppStore } from '../store/useAppStore';
@@ -1531,7 +1531,7 @@ export async function syncAllCloudData(tenantId: string) {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId) || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
 
   try {
-    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts, liveMovements, liveExpenses] = await Promise.all([
+    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts, liveMovements, liveExpenses, liveMenuItems, liveDrivers, liveFoodOrders] = await Promise.all([
       fetchProductsFromSupabase(tenantId),
       fetchSuppliersFromSupabase(tenantId),
       fetchProfilesFromSupabase(tenantId),
@@ -1539,7 +1539,10 @@ export async function syncAllCloudData(tenantId: string) {
       fetchFiscalRangesFromSupabase(tenantId),
       fetchShiftsFromSupabase(tenantId),
       fetchCashMovementsFromSupabase(tenantId),
-      fetchExpensesFromSupabase(tenantId)
+      fetchExpensesFromSupabase(tenantId),
+      fetchMenuItemsFromSupabase(tenantId),
+      fetchDeliveryDriversFromSupabase(tenantId),
+      fetchFoodOrdersFromSupabase(tenantId)
     ]);
 
     useAppStore.setState(state => {
@@ -1654,6 +1657,33 @@ export async function syncAllCloudData(tenantId: string) {
         expenses = [...liveExpenses, ...localOnly, ...otherTenantExpenses];
       }
 
+      // 9. Menu Items
+      let menuItems = state.menuItems;
+      if (liveMenuItems !== null) {
+        const liveIds = new Set(liveMenuItems.map(m => m.id));
+        const localOnly = (state.menuItems || []).filter(m => m.tenantId === tenantId && !liveIds.has(m.id));
+        const otherTenantItems = (state.menuItems || []).filter(m => m.tenantId && m.tenantId !== tenantId);
+        menuItems = [...liveMenuItems, ...localOnly, ...otherTenantItems];
+      }
+
+      // 10. Delivery Drivers
+      let deliveryDrivers = state.deliveryDrivers;
+      if (liveDrivers !== null) {
+        const liveIds = new Set(liveDrivers.map(d => d.id));
+        const localOnly = (state.deliveryDrivers || []).filter(d => d.tenantId === tenantId && !liveIds.has(d.id));
+        const otherTenantDrivers = (state.deliveryDrivers || []).filter(d => d.tenantId && d.tenantId !== tenantId);
+        deliveryDrivers = [...liveDrivers, ...localOnly, ...otherTenantDrivers];
+      }
+
+      // 11. Food Orders
+      let foodOrders = state.foodOrders;
+      if (liveFoodOrders !== null) {
+        const liveIds = new Set(liveFoodOrders.map(o => o.id));
+        const localOnly = (state.foodOrders || []).filter(o => o.tenantId === tenantId && !liveIds.has(o.id));
+        const otherTenantOrders = (state.foodOrders || []).filter(o => o.tenantId && o.tenantId !== tenantId);
+        foodOrders = [...liveFoodOrders, ...localOnly, ...otherTenantOrders];
+      }
+
       return {
         products,
         suppliers,
@@ -1665,7 +1695,10 @@ export async function syncAllCloudData(tenantId: string) {
         shiftHistory,
         activeShift,
         cashMovements,
-        expenses
+        expenses,
+        menuItems,
+        deliveryDrivers,
+        foodOrders
       };
     });
   } catch (err) {
@@ -1708,6 +1741,227 @@ export async function processOfflineQueue() {
     } catch (err) {
       console.warn(`Error procesando elemento offline ${item.id}:`, err);
     }
+  }
+}
+
+/**
+ * =========================================================================
+ * FOOD & RESTAURANT MODULE SUPABASE INTEGRATION
+ * =========================================================================
+ */
+
+export async function fetchMenuItemsFromSupabase(tenantId: string): Promise<MenuItem[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select('*')
+      .eq('tenant_id', tenantId);
+
+    if (error) {
+      // If table has not been created yet in Supabase, fail gracefully
+      return null;
+    }
+
+    if (!data) return [];
+
+    return data.map((m: any) => ({
+      id: m.id,
+      tenantId: m.tenant_id,
+      name: m.name,
+      category: m.category || 'General',
+      price: Number(m.price) || 0,
+      taxClassification: m.tax_classification || 'EXENTO',
+      isAvailable: Boolean(m.is_available),
+      availableExtras: Array.isArray(m.available_extras) ? m.available_extras : [],
+      defaultNotes: Array.isArray(m.default_notes) ? m.default_notes : [],
+      createdAt: m.created_at || new Date().toISOString()
+    }));
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function saveMenuItemToSupabase(item: MenuItem): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(item.tenantId)) return false;
+
+  try {
+    const { error } = await supabase.from('menu_items').upsert({
+      id: isValidUUID(item.id) ? item.id : generateUUID(),
+      tenant_id: item.tenantId,
+      name: item.name,
+      category: item.category || 'General',
+      price: item.price,
+      tax_classification: item.taxClassification || 'EXENTO',
+      is_available: item.isAvailable,
+      available_extras: item.availableExtras || [],
+      default_notes: item.defaultNotes || []
+    }, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Supabase save menu item info:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function deleteMenuItemFromSupabase(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(id)) return false;
+
+  try {
+    const { error } = await supabase.from('menu_items').delete().eq('id', id);
+    if (error) {
+      console.warn('Supabase delete menu item info:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function fetchDeliveryDriversFromSupabase(tenantId: string): Promise<DeliveryDriver[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('delivery_drivers')
+      .select('*')
+      .eq('tenant_id', tenantId);
+
+    if (error || !data) return null;
+
+    return data.map((d: any) => ({
+      id: d.id,
+      tenantId: d.tenant_id,
+      fullName: d.full_name,
+      phone: d.phone || undefined,
+      driverType: d.driver_type || 'INTERNAL',
+      isActive: Boolean(d.is_active),
+      createdAt: d.created_at || new Date().toISOString()
+    }));
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function saveDeliveryDriverToSupabase(driver: DeliveryDriver): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(driver.tenantId)) return false;
+
+  try {
+    const { error } = await supabase.from('delivery_drivers').upsert({
+      id: isValidUUID(driver.id) ? driver.id : generateUUID(),
+      tenant_id: driver.tenantId,
+      full_name: driver.fullName,
+      phone: driver.phone || null,
+      driver_type: driver.driverType,
+      is_active: driver.isActive
+    }, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Supabase save delivery driver info:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function deleteDeliveryDriverFromSupabase(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(id)) return false;
+
+  try {
+    const { error } = await supabase.from('delivery_drivers').delete().eq('id', id);
+    if (error) {
+      console.warn('Supabase delete delivery driver info:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function fetchFoodOrdersFromSupabase(tenantId: string): Promise<FoodOrder[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('food_orders')
+      .select('*')
+      .eq('tenant_id', tenantId);
+
+    if (error || !data) return null;
+
+    return data.map((o: any) => ({
+      id: o.id,
+      tenantId: o.tenant_id,
+      orderNumber: o.order_number,
+      deliveryType: o.delivery_type,
+      status: o.status,
+      tableNumber: o.table_number || undefined,
+      customerName: o.customer_name || undefined,
+      customerPhone: o.customer_phone || undefined,
+      deliveryPhone: o.delivery_phone || undefined,
+      deliveryAddress: o.delivery_address || undefined,
+      deliveryFee: Number(o.delivery_fee) || 0,
+      driverId: o.driver_id || undefined,
+      driverName: o.driver_name || undefined,
+      driverType: o.driver_type || undefined,
+      driverSettled: Boolean(o.driver_settled),
+      items: Array.isArray(o.items) ? o.items : [],
+      subtotal: Number(o.subtotal) || 0,
+      total: Number(o.total) || 0,
+      paymentMethod: o.payment_method || undefined,
+      isPaid: Boolean(o.is_paid),
+      saleId: o.sale_id || undefined,
+      createdAt: o.created_at || new Date().toISOString()
+    }));
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function saveFoodOrderToSupabase(order: FoodOrder): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(order.tenantId)) return false;
+
+  try {
+    const { error } = await supabase.from('food_orders').upsert({
+      id: isValidUUID(order.id) ? order.id : generateUUID(),
+      tenant_id: order.tenantId,
+      order_number: order.orderNumber,
+      delivery_type: order.deliveryType,
+      status: order.status,
+      table_number: order.tableNumber || null,
+      customer_name: order.customerName || null,
+      customer_phone: order.customerPhone || null,
+      delivery_phone: order.deliveryPhone || null,
+      delivery_address: order.deliveryAddress || null,
+      delivery_fee: order.deliveryFee || 0,
+      driver_id: isValidUUID(order.driverId) ? order.driverId : null,
+      driver_name: order.driverName || null,
+      driver_type: order.driverType || null,
+      driver_settled: order.driverSettled ?? false,
+      items: order.items || [],
+      subtotal: order.subtotal,
+      total: order.total,
+      payment_method: order.paymentMethod || null,
+      is_paid: order.isPaid ?? false,
+      sale_id: isValidUUID(order.saleId) ? order.saleId : null
+    }, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Supabase save food order info:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
   }
 }
 

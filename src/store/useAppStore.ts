@@ -16,7 +16,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 /**
@@ -2343,20 +2343,38 @@ export const useAppStore = create<AppState>()(
       createdAt: new Date().toISOString()
     };
     set((s) => ({ menuItems: [...s.menuItems, newItem] }));
+    if (isSupabaseConfigured() && isValidUUID(tenantId)) {
+      saveMenuItemToSupabase(newItem).catch(err => console.warn('Supabase save menu item info:', err));
+    }
     return newItem;
   },
 
-  updateMenuItem: (id, updates) => set((s) => ({
-    menuItems: s.menuItems.map(m => m.id === id ? { ...m, ...updates } : m)
-  })),
+  updateMenuItem: (id, updates) => set((s) => {
+    const updated = s.menuItems.map(m => m.id === id ? { ...m, ...updates } : m);
+    const target = updated.find(m => m.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveMenuItemToSupabase(target).catch(err => console.warn('Supabase update menu item info:', err));
+    }
+    return { menuItems: updated };
+  }),
 
-  toggleMenuItemAvailability: (id) => set((s) => ({
-    menuItems: s.menuItems.map(m => m.id === id ? { ...m, isAvailable: !m.isAvailable } : m)
-  })),
+  toggleMenuItemAvailability: (id) => set((s) => {
+    const updated = s.menuItems.map(m => m.id === id ? { ...m, isAvailable: !m.isAvailable } : m);
+    const target = updated.find(m => m.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveMenuItemToSupabase(target).catch(err => console.warn('Supabase toggle availability menu item info:', err));
+    }
+    return { menuItems: updated };
+  }),
 
-  deleteMenuItem: (id) => set((s) => ({
-    menuItems: s.menuItems.filter(m => m.id !== id)
-  })),
+  deleteMenuItem: (id) => {
+    set((s) => ({
+      menuItems: s.menuItems.filter(m => m.id !== id)
+    }));
+    if (isSupabaseConfigured() && isValidUUID(id)) {
+      deleteMenuItemFromSupabase(id).catch(err => console.warn('Supabase delete menu item info:', err));
+    }
+  },
 
   createFoodOrder: (orderData) => {
     const tenantId = get().tenant.id;
@@ -2372,30 +2390,53 @@ export const useAppStore = create<AppState>()(
       createdAt: new Date().toISOString()
     };
     set((s) => ({ foodOrders: [newOrder, ...s.foodOrders] }));
+    if (isSupabaseConfigured() && isValidUUID(tenantId)) {
+      saveFoodOrderToSupabase(newOrder).catch(err => console.warn('Supabase save food order info:', err));
+    }
     return newOrder;
   },
 
-  updateFoodOrder: (id, updates) => set((s) => ({
-    foodOrders: s.foodOrders.map(o => o.id === id ? { ...o, ...updates } : o)
-  })),
+  updateFoodOrder: (id, updates) => set((s) => {
+    const updated = s.foodOrders.map(o => o.id === id ? { ...o, ...updates } : o);
+    const target = updated.find(o => o.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase update food order info:', err));
+    }
+    return { foodOrders: updated };
+  }),
 
-  addItemsToFoodOrder: (id, newItems) => set((s) => ({
-    foodOrders: s.foodOrders.map(o => {
+  addItemsToFoodOrder: (id, newItems) => set((s) => {
+    const updated = s.foodOrders.map(o => {
       if (o.id !== id) return o;
       const updatedItems = [...o.items, ...newItems];
       const subtotal = updatedItems.reduce((acc, it) => acc + it.subtotal, 0);
       const total = subtotal + (o.deliveryFee || 0);
       return { ...o, items: updatedItems, subtotal, total };
-    })
-  })),
+    });
+    const target = updated.find(o => o.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase add items food order info:', err));
+    }
+    return { foodOrders: updated };
+  }),
 
-  completeFoodOrder: (id, saleId) => set((s) => ({
-    foodOrders: s.foodOrders.map(o => o.id === id ? { ...o, status: 'DELIVERED', isPaid: true, saleId } : o)
-  })),
+  completeFoodOrder: (id, saleId) => set((s) => {
+    const updated = s.foodOrders.map(o => o.id === id ? { ...o, status: 'DELIVERED' as const, isPaid: true, saleId } : o);
+    const target = updated.find(o => o.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase complete food order info:', err));
+    }
+    return { foodOrders: updated };
+  }),
 
-  cancelFoodOrder: (id) => set((s) => ({
-    foodOrders: s.foodOrders.map(o => o.id === id ? { ...o, status: 'CANCELLED' } : o)
-  })),
+  cancelFoodOrder: (id) => set((s) => {
+    const updated = s.foodOrders.map(o => o.id === id ? { ...o, status: 'CANCELLED' as const } : o);
+    const target = updated.find(o => o.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase cancel food order info:', err));
+    }
+    return { foodOrders: updated };
+  }),
 
   addDeliveryDriver: (driverData) => {
     const tenantId = get().tenant.id;
@@ -2406,16 +2447,29 @@ export const useAppStore = create<AppState>()(
       createdAt: new Date().toISOString()
     };
     set((s) => ({ deliveryDrivers: [...s.deliveryDrivers, newDriver] }));
+    if (isSupabaseConfigured() && isValidUUID(tenantId)) {
+      saveDeliveryDriverToSupabase(newDriver).catch(err => console.warn('Supabase save delivery driver info:', err));
+    }
     return newDriver;
   },
 
-  updateDeliveryDriver: (id, updates) => set((s) => ({
-    deliveryDrivers: s.deliveryDrivers.map(d => d.id === id ? { ...d, ...updates } : d)
-  })),
+  updateDeliveryDriver: (id, updates) => set((s) => {
+    const updated = s.deliveryDrivers.map(d => d.id === id ? { ...d, ...updates } : d);
+    const target = updated.find(d => d.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveDeliveryDriverToSupabase(target).catch(err => console.warn('Supabase update delivery driver info:', err));
+    }
+    return { deliveryDrivers: updated };
+  }),
 
-  deleteDeliveryDriver: (id) => set((s) => ({
-    deliveryDrivers: s.deliveryDrivers.filter(d => d.id !== id)
-  })),
+  deleteDeliveryDriver: (id) => {
+    set((s) => ({
+      deliveryDrivers: s.deliveryDrivers.filter(d => d.id !== id)
+    }));
+    if (isSupabaseConfigured() && isValidUUID(id)) {
+      deleteDeliveryDriverFromSupabase(id).catch(err => console.warn('Supabase delete delivery driver info:', err));
+    }
+  },
 
   settleDriverOrders: (driverId, cashShiftId) => {
     const state = get();

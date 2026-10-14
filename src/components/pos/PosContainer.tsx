@@ -176,7 +176,8 @@ export const PosContainer: React.FC = () => {
   );
 
   // Food Menu filtering (strictly only available dishes/drinks)
-  const tenantMenuItems = menuItems.filter(m => (!m.tenantId || m.tenantId === tenant.id) && m.isAvailable === true);
+  const isDemo = tenant.id === '00000000-0000-0000-0000-000000000001';
+  const tenantMenuItems = menuItems.filter(m => (m.tenantId === tenant.id || (isDemo && (!m.tenantId || m.tenantId === '00000000-0000-0000-0000-000000000001'))) && m.isAvailable === true);
   const menuCategories = ['TODOS', ...Array.from(new Set(tenantMenuItems.map(m => m.category)))];
   const filteredMenuItems = tenantMenuItems.filter((m: MenuItem) => {
     const term = searchTerm.toLowerCase();
