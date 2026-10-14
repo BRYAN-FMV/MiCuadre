@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from './useAppStore';
+import { generateKitchenEscPosTicket } from '../lib/escPos';
 
 describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
   beforeEach(() => {
@@ -156,4 +157,129 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     const allOrders = useAppStore.getState().foodOrders;
     expect(allOrders.every(o => o.driverSettled === true)).toBe(true);
   });
+
+  it('should add food dish with extras and notes to cart, calculate totals, and not deduct inventory stock upon sale', () => {
+    const store = useAppStore.getState();
+
+    // 1. Setup food item
+    const dish = store.addMenuItem({
+      name: 'Carne Asada Especial',
+      category: 'Almuerzos',
+      price: 150.0,
+      isAvailable: true,
+      availableExtras: [
+        { id: 'ext-carne', name: 'Extra Carne', price: 35.0 },
+        { id: 'ext-chismol', name: 'Extra Chismol', price: 10.0 }
+      ]
+    });
+
+    // 2. Setup inventory product (e.g. Coca Cola) with stock 20
+    const testProduct = {
+      id: 'prod-coca-1',
+      tenantId: store.tenant.id,
+      name: 'Coca Cola 500ml',
+      sku: 'REF-001',
+      costPrice: 15.0,
+      salePrice: 25.0,
+      currentStock: 20,
+      minStockAlert: 5,
+      unitOfMeasure: 'Unidad',
+      category: 'Bebidas',
+      taxClassification: 'GRAVADO_15' as const,
+      isActive: true
+    };
+    useAppStore.setState({ products: [testProduct], cartLines: [] });
+
+    // 3. Open shift
+    store.openCashShift(500.0);
+
+    // 4. Add dish with 2 extras to cart
+    const selectedExtras = [
+      { id: 'ext-carne', name: 'Extra Carne', price: 35.0 },
+      { id: 'ext-chismol', name: 'Extra Chismol', price: 10.0 }
+    ];
+    const finalUnitPrice = dish.price + 35.0 + 10.0; // 195.00
+    store.addToCart({
+      menuItem: dish,
+      quantity: 2,
+      selectedExtras,
+      notes: 'Bien cocida, poco chismol',
+      finalUnitPrice
+    });
+
+    // Also add 1 bottle of Coca Cola from inventory
+    store.addToCart({
+      product: testProduct,
+      quantity: 1
+    });
+
+    const cart = useAppStore.getState().cartLines;
+    expect(cart.length).toBe(2);
+
+    // Verify food line details
+    const foodLine = cart[0];
+    expect(foodLine.menuItemId).toBe(dish.id);
+    expect(foodLine.name).toContain('Carne Asada Especial');
+    expect(foodLine.name).toContain('+Extra Carne');
+    expect(foodLine.name).toContain('+Extra Chismol');
+    expect(foodLine.notes).toBe('Bien cocida, poco chismol');
+    expect(foodLine.unitPrice).toBe(195.0);
+    expect(foodLine.quantity).toBe(2);
+    expect(foodLine.total).toBe(390.0);
+
+    // Verify drink line details
+    const drinkLine = cart[1];
+    expect(drinkLine.productId).toBe(testProduct.id);
+    expect(drinkLine.quantity).toBe(1);
+    expect(drinkLine.total).toBe(25.0);
+
+    // 5. Process sale
+    const sale = store.processSale('CASH', 0, false);
+    expect(sale).toBeDefined();
+    expect(sale?.total).toBe(415.0);
+
+    // 6. Verify inventory deduction:
+    // Regular product stock must be deducted: 20 - 1 = 19
+    const updatedProducts = useAppStore.getState().products;
+    const updatedDrink = updatedProducts.find(p => p.id === testProduct.id);
+    expect(updatedDrink?.currentStock).toBe(19);
+
+    // Menú dish does not affect products table or deduct arbitrary stock
+    expect(updatedProducts.length).toBe(1);
+  });
+
+  it('should generate compact kitchen ticket without prices or fiscal data', () => {
+    const ticketBytes = generateKitchenEscPosTicket({
+      orderNumber: '007',
+      tableNumber: 'Mesa 5',
+      deliveryType: 'DINE_IN',
+      customerName: 'Familia Reyes',
+      serverName: 'Juan Mesero',
+      items: [
+        {
+          name: 'Pollo Chuco Especial',
+          quantity: 2,
+          notes: 'Tajadas bien doradas, salsa aparte',
+          extras: [{ name: 'Extra Tajadas', price: 20.0 }]
+        }
+      ]
+    });
+
+    expect(ticketBytes).toBeInstanceOf(Uint8Array);
+    expect(ticketBytes.length).toBeGreaterThan(50);
+
+    const decoded = new TextDecoder().decode(ticketBytes);
+    expect(decoded).toContain('ORDEN DE COCINA');
+    expect(decoded).toContain('Mesa 5');
+    expect(decoded).toContain('Pollo Chuco Especial');
+    expect(decoded).toContain('EXTRA: Extra Tajadas');
+    expect(decoded).toContain('Tajadas bien doradas');
+    expect(decoded).toContain('MESERO: Juan Mesero');
+
+    // Strictly no prices or fiscal declarations
+    expect(decoded).not.toContain('TOTAL A PAGAR');
+    expect(decoded).not.toContain('CAI:');
+    expect(decoded).not.toContain('RTN:');
+  });
 });
+

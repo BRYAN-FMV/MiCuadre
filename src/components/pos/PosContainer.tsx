@@ -1,19 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore, HeldOrder, hasUserPermission } from '../../store/useAppStore';
 import { formatCurrency } from '../../lib/monetary';
-import { generateEscPosReceipt } from '../../lib/escPos';
+import { generateEscPosReceipt, generateKitchenEscPosTicket } from '../../lib/escPos';
+import { generateUUID } from '../../lib/security';
 import { toast } from 'sonner';
 import {
   Search, ShoppingCart, UserCheck, Trash2, Plus, Minus,
   CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle,
-  Tag, Percent, Scissors, Clock
+  Tag, Percent, Scissors, Clock, UtensilsCrossed, Utensils, Bike, Send
 } from 'lucide-react';
-import { Sale, Product, CartLine, Customer, Service, ProductPresentation, UserProfile } from '../../types';
+import {
+  Sale, Product, CartLine, Customer, Service, ProductPresentation, UserProfile,
+  MenuItem, MenuItemExtra, FoodOrder, FoodOrderItem, FoodOrderDeliveryType
+} from '../../types';
 import { AdminPinModal } from '../common/AdminPinModal';
+import { MenuItemCustomizerModal } from '../food/MenuItemCustomizerModal';
+import { TablesGridModal } from '../food/TablesGridModal';
+import { DriverSettlementModal } from '../food/DriverSettlementModal';
 
 export const PosContainer: React.FC = () => {
   const products = useAppStore(state => state.products);
   const services = useAppStore(state => state.services);
+  const menuItems = useAppStore(state => state.menuItems) || [];
+  const foodOrders = useAppStore(state => state.foodOrders) || [];
+  const deliveryDrivers = useAppStore(state => state.deliveryDrivers) || [];
   const cartLines = useAppStore(state => state.cartLines);
   const cartCustomer = useAppStore(state => state.cartCustomer);
   const customers = useAppStore(state => state.customers);
@@ -41,6 +51,26 @@ export const PosContainer: React.FC = () => {
   const deleteHeldCart = useAppStore(state => state.deleteHeldCart);
   const processSale = useAppStore(state => state.processSale);
   const applyGlobalCartDiscount = useAppStore(state => state.applyGlobalCartDiscount);
+  const createFoodOrder = useAppStore(state => state.createFoodOrder);
+  const updateFoodOrder = useAppStore(state => state.updateFoodOrder);
+  const addItemsToFoodOrder = useAppStore(state => state.addItemsToFoodOrder);
+  const completeFoodOrder = useAppStore(state => state.completeFoodOrder);
+  const cancelFoodOrder = useAppStore(state => state.cancelFoodOrder);
+
+  // Food & Restaurant Module State
+  const [deliveryType, setDeliveryType] = useState<FoodOrderDeliveryType>('DINE_IN');
+  const [selectedTableNumber, setSelectedTableNumber] = useState<string>('Mesa 1');
+  const [deliveryDriverId, setDeliveryDriverId] = useState<string>('');
+  const [deliveryFee, setDeliveryFee] = useState<string>('0');
+  const [deliveryAddress, setDeliveryAddress] = useState<string>('');
+  const [deliveryPhone, setDeliveryPhone] = useState<string>('');
+  const [activeFoodOrderId, setActiveFoodOrderId] = useState<string | null>(null);
+
+  const [isTablesModalOpen, setIsTablesModalOpen] = useState(false);
+  const [isDriversModalOpen, setIsDriversModalOpen] = useState(false);
+  const [customizingMenuItem, setCustomizingMenuItem] = useState<MenuItem | null>(null);
+  const [isCustomizerModalOpen, setIsCustomizerModalOpen] = useState(false);
+  const [menuSelectedCategory, setMenuSelectedCategory] = useState<string>('TODOS');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('TODOS');
@@ -112,9 +142,17 @@ export const PosContainer: React.FC = () => {
   }, [cartLines]);
 
   // Catalog Mode & Walk-in Services State
-  const [catalogMode, setCatalogMode] = useState<'PRODUCTS' | 'SERVICES'>('PRODUCTS');
+  const [catalogMode, setCatalogMode] = useState<'PRODUCTS' | 'SERVICES' | 'FOOD_MENU'>(
+    tenant.isFoodEnabled ? 'FOOD_MENU' : 'PRODUCTS'
+  );
   const [serviceModalService, setServiceModalService] = useState<Service | null>(null);
   const [serviceSelectedStaffId, setServiceSelectedStaffId] = useState<string>('');
+
+  useEffect(() => {
+    if (tenant.isFoodEnabled && catalogMode === 'PRODUCTS') {
+      setCatalogMode('FOOD_MENU');
+    }
+  }, [tenant.isFoodEnabled]);
 
   // Multi-tenant staff list for service assignment
   const tenantStaff = staff.filter(s => s.tenantId === tenant.id && s.isActive);
@@ -136,6 +174,24 @@ export const PosContainer: React.FC = () => {
   const filteredServices = tenantServices.filter((s: Service) =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Food Menu filtering (strictly only available dishes/drinks)
+  const tenantMenuItems = menuItems.filter(m => (!m.tenantId || m.tenantId === tenant.id) && m.isAvailable === true);
+  const menuCategories = ['TODOS', ...Array.from(new Set(tenantMenuItems.map(m => m.category)))];
+  const filteredMenuItems = tenantMenuItems.filter((m: MenuItem) => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = m.name.toLowerCase().includes(term) || m.category.toLowerCase().includes(term);
+    const matchesCategory = menuSelectedCategory === 'TODOS' || m.category === menuSelectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const activeDineInOrders = foodOrders.filter(
+    o => (!o.tenantId || o.tenantId === tenant.id) && o.status === 'OPEN' && o.deliveryType === 'DINE_IN'
+  );
+
+  const unsettledDriversOrdersCount = foodOrders.filter(
+    o => (!o.tenantId || o.tenantId === tenant.id) && o.deliveryType === 'DELIVERY' && !o.driverSettled && o.status !== 'CANCELLED'
+  ).length;
 
   const handleAddServiceToCart = (service: Service) => {
     if (availableStaff.length === 1) {
@@ -177,6 +233,15 @@ export const PosContainer: React.FC = () => {
 
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      if (catalogMode === 'FOOD_MENU') {
+        if (filteredMenuItems.length === 1) {
+          setCustomizingMenuItem(filteredMenuItems[0]);
+          setIsCustomizerModalOpen(true);
+          setSearchTerm('');
+        }
+        return;
+      }
+
       if (catalogMode === 'SERVICES') {
         if (filteredServices.length === 1) {
           handleAddServiceToCart(filteredServices[0]);
@@ -379,6 +444,10 @@ export const PosContainer: React.FC = () => {
         onSuccess: () => {
           const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
           if (!completedSale) return;
+          if (activeFoodOrderId) {
+            completeFoodOrder(activeFoodOrderId, completedSale.id);
+            setActiveFoodOrderId(null);
+          }
           setLastCompletedSale(completedSale);
           setIsPaymentModalOpen(false);
           setCashTendered('');
@@ -392,11 +461,214 @@ export const PosContainer: React.FC = () => {
     const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
     if (!completedSale) return;
 
+    if (activeFoodOrderId) {
+      completeFoodOrder(activeFoodOrderId, completedSale.id);
+      setActiveFoodOrderId(null);
+    }
+
     setLastCompletedSale(completedSale);
     setIsPaymentModalOpen(false);
     setCashTendered('');
     setRedeemedPoints(0);
     toast.success(`Venta ${completedSale.isFiscal ? 'Fiscal SAR' : 'Ticket Interno'} ${paymentMethod === 'CREDIT' ? '(Crédito)' : ''} #${completedSale.documentNumber} realizada con éxito`);
+  };
+
+  const handleConfirmCustomizer = (data: {
+    menuItem: MenuItem;
+    quantity: number;
+    selectedExtras: MenuItemExtra[];
+    notes: string;
+    finalUnitPrice: number;
+  }) => {
+    addToCart({
+      menuItem: data.menuItem,
+      quantity: data.quantity,
+      selectedExtras: data.selectedExtras,
+      notes: data.notes,
+      finalUnitPrice: data.finalUnitPrice
+    });
+    toast.success(`+ ${data.quantity}x ${data.menuItem.name}`);
+    setCustomizingMenuItem(null);
+    setIsCustomizerModalOpen(false);
+  };
+
+  const handleSaveDineInOrder = () => {
+    if (cartLines.length === 0) {
+      toast.error('El carrito está vacío');
+      return;
+    }
+
+    const orderItems: FoodOrderItem[] = cartLines.map(line => ({
+      id: generateUUID(),
+      menuItemId: line.menuItemId,
+      productId: line.productId,
+      name: line.name,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      subtotal: line.subtotal,
+      notes: line.notes,
+      selectedExtras: line.extras
+    }));
+
+    const existingOrder = activeFoodOrderId
+      ? foodOrders.find(o => o.id === activeFoodOrderId)
+      : foodOrders.find(
+          o => (!o.tenantId || o.tenantId === tenant.id) &&
+               o.status === 'OPEN' &&
+               o.deliveryType === 'DINE_IN' &&
+               o.tableNumber === selectedTableNumber
+        );
+
+    if (existingOrder) {
+      addItemsToFoodOrder(existingOrder.id, orderItems);
+      toast.success(`Ronda agregada a la comanda de ${selectedTableNumber}`);
+    } else {
+      createFoodOrder({
+        deliveryType: 'DINE_IN',
+        tableNumber: selectedTableNumber,
+        status: 'OPEN',
+        customerName: cartCustomer.name !== 'Consumidor Final' ? cartCustomer.name : selectedTableNumber,
+        items: orderItems,
+        subtotal: cartSubtotal,
+        deliveryFee: 0,
+        total: cartGrandTotal
+      });
+      toast.success(`Comanda guardada para ${selectedTableNumber}`);
+    }
+
+    try {
+      generateKitchenEscPosTicket({
+        orderNumber: existingOrder ? existingOrder.orderNumber : (foodOrders.length + 1),
+        tableNumber: selectedTableNumber,
+        deliveryType: 'DINE_IN',
+        customerName: cartCustomer.name,
+        serverName: currentUser?.fullName,
+        items: cartLines.map(l => ({
+          name: l.name,
+          quantity: l.quantity,
+          notes: l.notes,
+          extras: l.extras
+        }))
+      });
+    } catch (err) {
+      console.warn('Error al generar ticket de cocina:', err);
+    }
+
+    clearCart();
+    setActiveFoodOrderId(null);
+  };
+
+  const handleDispatchDeliveryOrder = () => {
+    if (cartLines.length === 0) {
+      toast.error('El carrito está vacío');
+      return;
+    }
+    const fee = parseFloat(deliveryFee) || 0;
+    const orderItems: FoodOrderItem[] = cartLines.map(line => ({
+      id: generateUUID(),
+      menuItemId: line.menuItemId,
+      productId: line.productId,
+      name: line.name,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      subtotal: line.subtotal,
+      notes: line.notes,
+      selectedExtras: line.extras
+    }));
+
+    const driverObj = deliveryDrivers.find(d => d.id === deliveryDriverId);
+
+    const newOrder = createFoodOrder({
+      deliveryType: 'DELIVERY',
+      deliveryDriverId: deliveryDriverId || undefined,
+      deliveryAddress: deliveryAddress.trim() || undefined,
+      deliveryPhone: deliveryPhone.trim() || undefined,
+      deliveryFee: fee,
+      status: 'IN_TRANSIT',
+      customerName: cartCustomer.name !== 'Consumidor Final' ? cartCustomer.name : 'Cliente Domicilio',
+      items: orderItems,
+      subtotal: cartSubtotal,
+      total: cartGrandTotal + fee,
+      driverSettled: false
+    });
+
+    try {
+      generateKitchenEscPosTicket({
+        orderNumber: newOrder.orderNumber,
+        deliveryType: 'DELIVERY',
+        customerName: cartCustomer.name,
+        serverName: currentUser?.fullName,
+        notes: `Dirección: ${deliveryAddress || 'N/A'} - Tel: ${deliveryPhone || 'N/A'} - Repartidor: ${driverObj?.fullName || 'Por asignar'}`,
+        items: cartLines.map(l => ({
+          name: l.name,
+          quantity: l.quantity,
+          notes: l.notes,
+          extras: l.extras
+        }))
+      });
+    } catch (err) {
+      console.warn('Error al generar ticket de cocina:', err);
+    }
+
+    clearCart();
+    setDeliveryAddress('');
+    setDeliveryPhone('');
+    setDeliveryFee('0');
+    toast.success(`Pedido a domicilio #${newOrder.orderNumber} despachado`);
+  };
+
+  const handleChargeTableOrder = (order: FoodOrder) => {
+    clearCart();
+    setActiveFoodOrderId(order.id);
+    setSelectedTableNumber(order.tableNumber || 'Mesa 1');
+    setDeliveryType('DINE_IN');
+    setCartCustomer({ name: order.customerName || order.tableNumber || 'Consumidor Final' });
+
+    for (const it of order.items) {
+      const itemMenu = menuItems.find(m => m.id === it.menuItemId);
+      if (itemMenu) {
+        addToCart({
+          menuItem: itemMenu,
+          quantity: it.quantity,
+          selectedExtras: it.selectedExtras?.map((e, idx) => ({ id: e.id || `extra-${idx}`, name: e.name, price: e.price })),
+          notes: it.notes,
+          finalUnitPrice: it.unitPrice
+        });
+      } else {
+        const prod = products.find(p => p.id === it.productId);
+        if (prod) {
+          addToCart({ product: prod, quantity: it.quantity });
+        }
+      }
+    }
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleEditTableOrder = (order: FoodOrder) => {
+    clearCart();
+    setActiveFoodOrderId(order.id);
+    setSelectedTableNumber(order.tableNumber || 'Mesa 1');
+    setDeliveryType('DINE_IN');
+    setCartCustomer({ name: order.customerName || order.tableNumber || 'Consumidor Final' });
+
+    for (const it of order.items) {
+      const itemMenu = menuItems.find(m => m.id === it.menuItemId);
+      if (itemMenu) {
+        addToCart({
+          menuItem: itemMenu,
+          quantity: it.quantity,
+          selectedExtras: it.selectedExtras?.map((e, idx) => ({ id: e.id || `extra-${idx}`, name: e.name, price: e.price })),
+          notes: it.notes,
+          finalUnitPrice: it.unitPrice
+        });
+      } else {
+        const prod = products.find(p => p.id === it.productId);
+        if (prod) {
+          addToCart({ product: prod, quantity: it.quantity });
+        }
+      }
+    }
+    toast.info(`Comanda de ${order.tableNumber} cargada en carrito`);
   };
 
   const handleCreateNewCustomer = (e: React.FormEvent) => {
@@ -526,8 +798,31 @@ export const PosContainer: React.FC = () => {
           </div>
         </div>
 
-        {/* Catalog Mode Selector (Productos vs Servicios) */}
+        {/* Catalog Mode Selector (Productos vs Servicios vs Menú) */}
         <div style={{ display: 'flex', gap: '0.4rem', background: '#f1f5f9', padding: '0.25rem', borderRadius: '8px', border: '1px solid #e2e8f0', width: 'fit-content' }}>
+          {tenant.isFoodEnabled && (
+            <button
+              type="button"
+              onClick={() => setCatalogMode('FOOD_MENU')}
+              style={{
+                padding: '0.35rem 0.8rem',
+                borderRadius: '6px',
+                border: 'none',
+                background: catalogMode === 'FOOD_MENU' ? '#ea580c' : 'transparent',
+                color: catalogMode === 'FOOD_MENU' ? '#ffffff' : '#64748b',
+                fontWeight: catalogMode === 'FOOD_MENU' ? 700 : 500,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <UtensilsCrossed size={14} />
+              <span>Menú del Día ({tenantMenuItems.length})</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setCatalogMode('PRODUCTS')}
@@ -547,32 +842,125 @@ export const PosContainer: React.FC = () => {
             }}
           >
             <Package size={14} />
-            <span>Productos ({tenantProducts.length})</span>
+            <span>{tenant.isFoodEnabled ? `Inventario / Bebidas (${tenantProducts.length})` : `Productos (${tenantProducts.length})`}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setCatalogMode('SERVICES')}
-            style={{
-              padding: '0.35rem 0.8rem',
-              borderRadius: '6px',
-              border: 'none',
-              background: catalogMode === 'SERVICES' ? '#9333ea' : 'transparent',
-              color: catalogMode === 'SERVICES' ? '#ffffff' : '#64748b',
-              fontWeight: catalogMode === 'SERVICES' ? 700 : 500,
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Scissors size={14} />
-            <span>Servicios ({tenantServices.length})</span>
-          </button>
+          {(tenant.isServicesEnabled ?? true) && (
+            <button
+              type="button"
+              onClick={() => setCatalogMode('SERVICES')}
+              style={{
+                padding: '0.35rem 0.8rem',
+                borderRadius: '6px',
+                border: 'none',
+                background: catalogMode === 'SERVICES' ? '#9333ea' : 'transparent',
+                color: catalogMode === 'SERVICES' ? '#ffffff' : '#64748b',
+                fontWeight: catalogMode === 'SERVICES' ? 700 : 500,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Scissors size={14} />
+              <span>Servicios ({tenantServices.length})</span>
+            </button>
+          )}
         </div>
 
-        {catalogMode === 'PRODUCTS' ? (
+        {catalogMode === 'FOOD_MENU' ? (
+          <>
+            {/* Category Pills Slider for Food Menu */}
+            <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
+              {menuCategories.map((cat: string) => {
+                const isActive = menuSelectedCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setMenuSelectedCategory(cat)}
+                    style={{
+                      padding: '0.45rem 0.9rem',
+                      background: isActive ? '#ea580c' : '#ffffff',
+                      color: isActive ? '#ffffff' : '#475569',
+                      border: isActive ? '1px solid #ea580c' : '1px solid #cbd5e1',
+                      borderRadius: '20px',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: isActive ? 700 : 500,
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Food Menu Dish Cards Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
+              {filteredMenuItems.length === 0 ? (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
+                  <UtensilsCrossed size={40} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+                  <p style={{ fontSize: '0.88rem', fontWeight: 600, color: '#64748b' }}>No hay platillos disponibles en esta categoría hoy.</p>
+                  <p style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Active los platillos preparados en la pestaña Menú.</p>
+                </div>
+              ) : (
+                filteredMenuItems.map((item: MenuItem) => {
+                  const hasExtras = item.availableExtras && item.availableExtras.length > 0;
+                  return (
+                    <div
+                      key={item.id}
+                      className="product-card"
+                      onClick={() => {
+                        setCustomizingMenuItem(item);
+                        setIsCustomizerModalOpen(true);
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        padding: '0.85rem',
+                        background: '#ffffff',
+                        border: '1px solid #fed7aa',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                        position: 'relative'
+                      }}
+                    >
+                      <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fff7ed', color: '#c2410c', fontWeight: 700 }}>
+                        {item.category}
+                      </span>
+
+                      <div>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: '#ea580c' }}>
+                          <Utensils size={20} />
+                        </div>
+
+                        <h4 style={{ fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, lineHeight: '1.25', height: '2.5em', overflow: 'hidden', marginBottom: '0.4rem' }}>
+                          {item.name}
+                        </h4>
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#ea580c' }}>
+                          {formatCurrency(item.price, tenant.currencySymbol)}
+                        </div>
+                        {hasExtras && item.availableExtras && (
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.2rem' }}>
+                            +{item.availableExtras.length} extras disponibles
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </>
+        ) : catalogMode === 'PRODUCTS' ? (
           <>
             {/* Category Pills Slider */}
             <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.2rem' }}>
@@ -794,6 +1182,157 @@ export const PosContainer: React.FC = () => {
       {/* RIGHT: Modern Checkout Panel */}
       <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
 
+        {/* Delivery / Order Mode Selector for Food Businesses */}
+        {tenant.isFoodEnabled && (
+          <div style={{ padding: '0.6rem 0.85rem', background: '#fff7ed', borderBottom: '1px solid #fed7aa', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryType('DINE_IN')}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '6px',
+                    border: deliveryType === 'DINE_IN' ? '1px solid #ea580c' : '1px solid #cbd5e1',
+                    background: deliveryType === 'DINE_IN' ? '#ea580c' : '#ffffff',
+                    color: deliveryType === 'DINE_IN' ? '#ffffff' : '#475569',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  En Mesa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryType('TAKE_OUT')}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '6px',
+                    border: deliveryType === 'TAKE_OUT' ? '1px solid #ea580c' : '1px solid #cbd5e1',
+                    background: deliveryType === 'TAKE_OUT' ? '#ea580c' : '#ffffff',
+                    color: deliveryType === 'TAKE_OUT' ? '#ffffff' : '#475569',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Para Llevar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryType('DELIVERY')}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '6px',
+                    border: deliveryType === 'DELIVERY' ? '1px solid #ea580c' : '1px solid #cbd5e1',
+                    background: deliveryType === 'DELIVERY' ? '#ea580c' : '#ffffff',
+                    color: deliveryType === 'DELIVERY' ? '#ffffff' : '#475569',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  A Domicilio
+                </button>
+              </div>
+
+              {deliveryType === 'DINE_IN' && (
+                <button
+                  type="button"
+                  onClick={() => setIsTablesModalOpen(true)}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '6px',
+                    border: '1px solid #ea580c',
+                    background: '#ffffff',
+                    color: '#ea580c',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  <Utensils size={13} />
+                  <span>{selectedTableNumber} ({activeDineInOrders.length} ocupadas)</span>
+                </button>
+              )}
+
+              {deliveryType === 'DELIVERY' && (
+                <button
+                  type="button"
+                  onClick={() => setIsDriversModalOpen(true)}
+                  style={{
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '6px',
+                    border: '1px solid #0284c7',
+                    background: '#ffffff',
+                    color: '#0284c7',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  <Bike size={13} />
+                  <span>Repartidores {unsettledDriversOrdersCount > 0 ? `(${unsettledDriversOrdersCount})` : ''}</span>
+                </button>
+              )}
+            </div>
+
+            {deliveryType === 'DELIVERY' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', paddingTop: '0.35rem', borderTop: '1px dashed #fed7aa' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 700, color: '#9a3412', fontSize: '0.72rem', minWidth: '65px' }}>Repartidor:</span>
+                  <select
+                    className="input-control"
+                    value={deliveryDriverId}
+                    onChange={(e) => setDeliveryDriverId(e.target.value)}
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', flex: 1 }}
+                  >
+                    <option value="">-- Sin asignar --</option>
+                    {deliveryDrivers.filter(d => (!d.tenantId || d.tenantId === tenant.id) && d.isActive).map(d => (
+                      <option key={d.id} value={d.id}>
+                        {d.fullName} ({d.driverType === 'INTERNAL' ? 'Interno' : 'Mandadito'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Dirección de entrega"
+                    className="input-control"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    style={{ fontSize: '0.72rem', padding: '0.2rem 0.4rem', flex: 2 }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Teléfono"
+                    className="input-control"
+                    value={deliveryPhone}
+                    onChange={(e) => setDeliveryPhone(e.target.value)}
+                    style={{ fontSize: '0.72rem', padding: '0.2rem 0.4rem', flex: 1 }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Envío L."
+                    className="input-control"
+                    value={deliveryFee}
+                    onChange={(e) => setDeliveryFee(e.target.value)}
+                    style={{ fontSize: '0.72rem', padding: '0.2rem 0.4rem', width: '65px' }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Customer Header */}
         <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa' }}>
           <div>
@@ -859,6 +1398,11 @@ export const PosContainer: React.FC = () => {
                     <span className="badge badge-wholesale" style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem' }}>
                       {line.appliedTierName}
                     </span>
+                  )}
+                  {line.notes && (
+                    <div style={{ fontSize: '0.72rem', color: '#c2410c', background: '#fff7ed', padding: '0.1rem 0.35rem', borderRadius: '4px', marginTop: '0.2rem', width: 'fit-content', fontWeight: 600 }}>
+                      Nota: {line.notes}
+                    </div>
                   )}
                   {line.serviceId && (
                     <div style={{ marginTop: '0.2rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -990,16 +1534,62 @@ export const PosContainer: React.FC = () => {
               <Tag size={13} />
               <span>{cartDiscountTotal > 0 ? 'Descuento Activo' : 'Descuento'}</span>
             </button>
-            <button
-              className="btn btn-secondary"
-              onClick={handleHoldCart}
-              disabled={cartLines.length === 0}
-              style={{ padding: '0.55rem', fontSize: '0.78rem', color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
-            >
-              <PauseCircle size={13} />
-              <span>Retener</span>
-            </button>
+            {tenant.isFoodEnabled && deliveryType === 'DINE_IN' ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleSaveDineInOrder}
+                disabled={cartLines.length === 0}
+                style={{
+                  padding: '0.55rem',
+                  fontSize: '0.78rem',
+                  color: '#ea580c',
+                  borderColor: '#ea580c',
+                  background: '#fff7ed',
+                  fontWeight: 700
+                }}
+                title="Guardar comanda y enviar a cocina sin alterar caja"
+              >
+                <UtensilsCrossed size={13} />
+                <span>Enviar Cocina</span>
+              </button>
+            ) : (
+              <button
+                className="btn btn-secondary"
+                onClick={handleHoldCart}
+                disabled={cartLines.length === 0}
+                style={{ padding: '0.55rem', fontSize: '0.78rem', color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
+              >
+                <PauseCircle size={13} />
+                <span>Retener</span>
+              </button>
+            )}
           </div>
+
+          {tenant.isFoodEnabled && deliveryType === 'DELIVERY' && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleDispatchDeliveryOrder}
+              disabled={cartLines.length === 0}
+              style={{
+                padding: '0.65rem',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                color: '#0284c7',
+                borderColor: '#0284c7',
+                background: '#f0f9ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+                marginTop: '0.25rem'
+              }}
+            >
+              <Send size={15} />
+              <span>Despachar a Repartidor (Contra Entrega)</span>
+            </button>
+          )}
 
           <button
             className="btn btn-primary"
@@ -2070,6 +2660,36 @@ export const PosContainer: React.FC = () => {
           adminPinConfig.onSuccess(admin);
         }}
         onCancel={() => setAdminPinConfig(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* MenuItem Customizer Modal (Extras con cobro & Notas de cocina) */}
+      <MenuItemCustomizerModal
+        item={customizingMenuItem}
+        isOpen={isCustomizerModalOpen}
+        onClose={() => {
+          setIsCustomizerModalOpen(false);
+          setCustomizingMenuItem(null);
+        }}
+        onConfirm={handleConfirmCustomizer}
+      />
+
+      {/* Tables Grid & Dine-In Orders Modal */}
+      <TablesGridModal
+        isOpen={isTablesModalOpen}
+        onClose={() => setIsTablesModalOpen(false)}
+        onSelectTable={(tableNumber) => {
+          setSelectedTableNumber(tableNumber);
+          setDeliveryType('DINE_IN');
+          toast.info(`Mesa seleccionada: ${tableNumber}`);
+        }}
+        onChargeTable={handleChargeTableOrder}
+        onEditOrder={handleEditTableOrder}
+      />
+
+      {/* Delivery Drivers Settlement Modal */}
+      <DriverSettlementModal
+        isOpen={isDriversModalOpen}
+        onClose={() => setIsDriversModalOpen(false)}
       />
 
     </div>

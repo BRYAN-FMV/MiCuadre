@@ -33,19 +33,19 @@
 - Modify: `src/store/useAppStore.ts`
 - Test: `src/store/foodStore.test.ts`
 
-- [ ] Add `isFoodEnabled?: boolean` to `Tenant` interface in `src/types/index.ts`.
-- [ ] Define `MenuItem`, `MenuItemExtra`, `FoodOrder`, `FoodOrderItem`, `DeliveryDriver`, and related enums in `src/types/index.ts`.
-- [ ] Implement store actions in `src/store/useAppStore.ts`:
+- [x] Add `isFoodEnabled?: boolean` to `Tenant` interface in `src/types/index.ts`.
+- [x] Define `MenuItem`, `MenuItemExtra`, `FoodOrder`, `FoodOrderItem`, `DeliveryDriver`, and related enums in `src/types/index.ts`.
+- [x] Implement store actions in `src/store/useAppStore.ts`:
   - `menuItems: MenuItem[]`, `foodOrders: FoodOrder[]`, `deliveryDrivers: DeliveryDriver[]`
   - `addMenuItem`, `updateMenuItem`, `toggleMenuItemAvailability`, `deleteMenuItem`
   - `createFoodOrder`, `addItemsToFoodOrder`, `completeFoodOrder`, `cancelFoodOrder`
   - `addDeliveryDriver`, `updateDeliveryDriver`, `settleDriverOrders`
-- [ ] Write unit tests in `src/store/foodStore.test.ts` verifying:
+- [x] Write unit tests in `src/store/foodStore.test.ts` verifying:
   - Menu item creation and availability toggling.
   - Food order creation, adding extra rounds of food, calculating totals.
   - Driver cash settlement calculation (internal 100% vs mandadito food-only).
-- [ ] Run `npm test` and verify all tests pass.
-- [ ] Commit: `feat(food): agregar modelos de datos y acciones de estado para menu, comandas y repartidores`.
+- [x] Run `npm test` and verify all tests pass.
+- [x] Commit: `feat(food): agregar modelos de datos y acciones de estado para menu, comandas y repartidores`.
 
 ---
 
@@ -57,16 +57,16 @@
 - Modify: `src/App.tsx`
 - Modify: `src/components/settings/SettingsView.tsx`
 
-- [ ] Add "Menú" item in `Sidebar.tsx` (using `UtensilsCrossed` icon from `lucide-react`) conditionally shown when `tenant.isFoodEnabled` is true.
-- [ ] Add `isFoodEnabled` switch in `SettingsView.tsx` so users can toggle restaurant mode on/off.
-- [ ] Build `MenuView.tsx`:
+- [x] Add "Menú" item in `Sidebar.tsx` (using `UtensilsCrossed` icon from `lucide-react`) conditionally shown when `tenant.isFoodEnabled` is true.
+- [x] Add `isFoodEnabled` switch in `SettingsView.tsx` so users can toggle restaurant mode on/off.
+- [x] Build `MenuView.tsx`:
   - Category tabs (Desayunos, Almuerzos, Bebidas Naturales, Postres, etc.).
   - Search bar and category filter.
   - Dish card with price, category, list of extras, and 1-touch switch: "Disponible Hoy" (Verde / Gris).
   - Modal to create / edit menu items with customizable extras (+Carne L 30, +Ensalada L 15).
-- [ ] Route `activeTab === 'menu'` in `App.tsx` to render `MenuView`.
-- [ ] Run `npx tsc -b` and test rendering.
-- [ ] Commit: `feat(food): vista de gestion de menu con switches de disponibilidad diaria`.
+- [x] Route `activeTab === 'menu'` in `App.tsx` to render `MenuView`.
+- [x] Run `npx tsc -b` and test rendering.
+- [x] Commit: `feat(food): vista de gestion de menu con switches de disponibilidad diaria`.
 
 ---
 
@@ -76,19 +76,19 @@
 - Create: `src/components/food/MenuItemCustomizerModal.tsx`
 - Modify: `src/components/pos/PosContainer.tsx`
 
-- [ ] Build `MenuItemCustomizerModal.tsx`:
+- [x] Build `MenuItemCustomizerModal.tsx`:
   - Displays dish name and base price.
   - Checkboxes for chargeable extras (+L 30 Extra Carne, +L 15 Extra Ensalada).
   - Quick chips for preferences ("Sin cebolla", "Tajadas verdes", "Poco hielo").
   - Free note input for custom requests.
   - Real-time subtotal calculation.
-- [ ] Update `PosContainer.tsx`:
+- [x] Update `PosContainer.tsx`:
   - When `tenant.isFoodEnabled` is active, show source selector: `[Menú de Cocina]` vs `[Inventario / Bebidas]`.
   - Filter menu items to only show `isAvailable: true` dishes to prevent clutter.
   - Clicking a menu dish opens `MenuItemCustomizerModal`.
   - Adding to cart includes extras in description and unit price.
-- [ ] Test cart calculations with single and multiple extras.
-- [ ] Commit: `feat(food): modal de modificadores y extras en el punto de venta`.
+- [x] Test cart calculations with single and multiple extras.
+- [x] Commit: `feat(food): modal de modificadores y extras en el punto de venta`.
 
 ---
 
@@ -98,17 +98,17 @@
 - Create: `src/components/food/TablesGridModal.tsx`
 - Modify: `src/components/pos/PosContainer.tsx`
 
-- [ ] Create `TablesGridModal.tsx`:
+- [x] Create `TablesGridModal.tsx`:
   - Visual grid of tables (Mesa 1 to Mesa 12, Barra, Terraza).
   - State coloring: Green (Libre), Blue (Ocupada con comanda abierta).
   - Shows order summary, elapsed time, and accumulated total.
   - Actions: "Ver / Agregar Pedido", "Cobrar Cuenta en Caja", "Liberar Mesa".
-- [ ] Integrate with POS:
+- [x] Integrate with POS:
   - In POS header, add delivery mode selector: `[Mesa / En Local]` | `[Para Llevar]` | `[A Domicilio]`.
   - When in `[Mesa]`, button "Guardar Comanda" updates the table without triggering cash checkout.
   - "Cobrar Cuenta" loads the table's items into the POS cart for immediate checkout, fiscal invoice emission, and marks the order as paid.
-- [ ] Run `npm test` and verify table workflow.
-- [ ] Commit: `feat(food): gestion de mesas y comandas activas sin afectar caja registradora`.
+- [x] Run `npm test` and verify table workflow.
+- [x] Commit: `feat(food): gestion de mesas y comandas activas sin afectar caja registradora`.
 
 ---
 
@@ -118,8 +118,8 @@
 - Create: `src/components/food/DriverSettlementModal.tsx`
 - Modify: `src/components/pos/PosContainer.tsx`
 
-- [ ] In POS delivery mode (`DELIVERY`), collect: Customer Name, Phone, Delivery Address, Delivery Fee, and Driver assignment.
-- [ ] Build `DriverSettlementModal.tsx`:
+- [x] In POS delivery mode (`DELIVERY`), collect: Customer Name, Phone, Delivery Address, Delivery Fee, and Driver assignment.
+- [x] Build `DriverSettlementModal.tsx`:
   - Filter orders by selected driver for today.
   - Clearly split:
     - Internal Driver: Total delivered = Food + Delivery Fee.
@@ -127,8 +127,8 @@
   - Single-click action "Liquidar Efectivo y Registrar en Caja":
     - Registers `CashMovement` (`ENTRADA`) into current `CashShift`.
     - Marks orders as settled (`driverSettled: true`).
-- [ ] Verify arithmetic with unit tests in `src/store/foodStore.test.ts`.
-- [ ] Commit: `feat(food): modulo de liquidacion de repartidores internos y mandaditos`.
+- [x] Verify arithmetic with unit tests in `src/store/foodStore.test.ts`.
+- [x] Commit: `feat(food): modulo de liquidacion de repartidores internos y mandaditos`.
 
 ---
 
@@ -138,8 +138,8 @@
 - Modify: `src/lib/escPos.ts`
 - Modify: `src/components/pos/PosContainer.tsx`
 
-- [ ] Add `printKitchenTicket` helper in `src/lib/escPos.ts` and HTML printable view for SAT Q15U (58mm/80mm):
+- [x] Add `generateKitchenEscPosTicket` helper in `src/lib/escPos.ts` for SAT Q15U (58mm/80mm):
   - Prints: Table # or Order #, Time, Dish names, Extras in bold (`** EXTRA CARNE **`), and notes.
   - Zero prices or fiscal data.
-- [ ] Run full test suite: `npx tsc -b && npm test`.
-- [ ] Commit: `feat(food): impresion termica de comanda de cocina y validacion completa`.
+- [x] Run full test suite: `npx tsc -b && npm test`.
+- [x] Commit: `feat(food): impresion termica de comanda de cocina y validacion completa`.

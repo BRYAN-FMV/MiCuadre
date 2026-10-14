@@ -146,7 +146,17 @@ interface AppState {
   deleteProduct: (id: string) => void;
 
   // Cart & Hold Order Actions
-  addToCart: (item: { product?: Product; service?: Service; staffId?: string; quantity?: number; presentation?: ProductPresentation }) => void;
+  addToCart: (item: {
+    product?: Product;
+    service?: Service;
+    menuItem?: MenuItem;
+    staffId?: string;
+    quantity?: number;
+    presentation?: ProductPresentation;
+    selectedExtras?: MenuItemExtra[];
+    notes?: string;
+    finalUnitPrice?: number;
+  }) => void;
   updateCartLineQty: (index: number, qty: number) => void;
   updateCartLineStaff: (index: number, staffId: string) => void;
   removeCartLine: (index: number) => void;
@@ -629,7 +639,7 @@ export const useAppStore = create<AppState>()(
       }),
 
 
-  addToCart: ({ product, service, staffId, quantity = 1, presentation }) => set((state) => {
+  addToCart: ({ product, service, menuItem, staffId, quantity = 1, presentation, selectedExtras, notes, finalUnitPrice }) => set((state) => {
     // SECURITY GUARD: Strict Multi-tenant Isolation for Cart Additions
     if (product && product.tenantId && product.tenantId !== state.tenant.id) {
       console.warn(`[SECURITY GUARD] Bloqueado intento de agregar producto de otro comercio (${product.tenantId}) al carrito de (${state.tenant.id})`);
@@ -638,6 +648,46 @@ export const useAppStore = create<AppState>()(
     if (service && service.tenantId && service.tenantId !== state.tenant.id) {
       console.warn(`[SECURITY GUARD] Bloqueado intento de agregar servicio de otro comercio (${service.tenantId}) al carrito de (${state.tenant.id})`);
       return state;
+    }
+    if (menuItem && menuItem.tenantId && menuItem.tenantId !== state.tenant.id) {
+      console.warn(`[SECURITY GUARD] Bloqueado intento de agregar platillo de otro comercio (${menuItem.tenantId}) al carrito de (${state.tenant.id})`);
+      return state;
+    }
+
+    if (menuItem) {
+      const effectiveUnitPrice = finalUnitPrice !== undefined ? finalUnitPrice : menuItem.price;
+      const extrasText = selectedExtras && selectedExtras.length > 0
+        ? selectedExtras.map(e => `+${e.name}`).join(', ')
+        : '';
+      const lineName = extrasText ? `${menuItem.name} (${extrasText})` : menuItem.name;
+      const isFiscalActive = state.tenant.isFiscalEnabled === true;
+      const effectiveTaxClass = isFiscalActive ? (menuItem.taxClassification || 'GRAVADO_15') : 'EXENTO';
+      const lineCalculations = calculateLineTotals(
+        effectiveUnitPrice,
+        quantity,
+        effectiveTaxClass,
+        0,
+        undefined,
+        state.tenant.pricesIncludeTax ?? true
+      );
+
+      const newLine: CartLine = {
+        menuItemId: menuItem.id,
+        sku: `MENU-${menuItem.id.slice(0, 6)}`,
+        name: lineName,
+        quantity: quantity,
+        unitPrice: lineCalculations.unitPrice,
+        originalUnitPrice: lineCalculations.originalUnitPrice,
+        discountAmount: 0,
+        taxClassification: effectiveTaxClass,
+        extras: selectedExtras,
+        notes: notes,
+        subtotal: lineCalculations.subtotal,
+        taxAmount: lineCalculations.taxAmount,
+        total: lineCalculations.total
+      };
+
+      return { cartLines: [...state.cartLines, newLine] };
     }
 
     const existingIndex = state.cartLines.findIndex(line => {
@@ -2362,7 +2412,7 @@ export const useAppStore = create<AppState>()(
     const state = get();
     const driver = (state.deliveryDrivers || []).find(d => d.id === driverId);
     const unsettledOrders = (state.foodOrders || []).filter(
-      o => o.driverId === driverId && o.deliveryType === 'DELIVERY' && o.status !== 'CANCELLED' && !o.driverSettled
+      o => (o.driverId === driverId || o.deliveryDriverId === driverId) && o.deliveryType === 'DELIVERY' && o.status !== 'CANCELLED' && !o.driverSettled
     );
 
     let totalCash = 0;

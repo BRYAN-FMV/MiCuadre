@@ -107,6 +107,7 @@ export interface Product {
 export interface CartLine {
   productId?: string;
   serviceId?: string;
+  menuItemId?: string;
   staffId?: string;
   staffName?: string;
   presentationId?: string;
@@ -121,6 +122,8 @@ export interface CartLine {
   discountAmount: number;
   taxClassification: TaxClassification;
   appliedTierName?: string;
+  extras?: MenuItemExtra[];
+  notes?: string;
   subtotal: number;
   taxAmount: number;
   total: number;
@@ -452,6 +455,7 @@ export interface MenuItem {
   name: string;        // ej. "Pollo Chuco con Tajadas", "Jugo de Maracuya"
   category: string;    // ej. "Almuerzos", "Desayunos", "Bebidas Naturales"
   price: number;
+  taxClassification?: TaxClassification;
   isAvailable: boolean; // Switch de disponibilidad del dia
   availableExtras?: MenuItemExtra[];
   defaultNotes?: string[]; // ej. ["Sin cebolla", "Tajadas verdes", "Poco hielo"]
@@ -459,10 +463,11 @@ export interface MenuItem {
 }
 
 export type FoodOrderDeliveryType = 'DINE_IN' | 'TAKE_OUT' | 'DELIVERY';
-export type FoodOrderStatus = 'ORDERED' | 'PREPARING' | 'SERVED' | 'DELIVERED' | 'CANCELLED';
+export type FoodOrderStatus = 'OPEN' | 'ORDERED' | 'PREPARING' | 'SERVED' | 'IN_TRANSIT' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
 export type DriverType = 'INTERNAL' | 'EXTERNAL_MANDADITO';
 
 export interface FoodOrderItemExtraSelected {
+  id?: string;
   name: string;
   price: number;
 }
@@ -473,7 +478,7 @@ export interface FoodOrderItem {
   name: string;
   quantity: number;
   unitPrice: number;
-  selectedExtras?: FoodOrderItemExtraSelected[];
+  selectedExtras?: (FoodOrderItemExtraSelected | MenuItemExtra)[];
   notes?: string;      // ej. "Sin cebolla, aderezo aparte"
   subtotal: number;
 }
@@ -491,9 +496,11 @@ export interface FoodOrder {
   // Domicilio (DELIVERY)
   customerName?: string;
   customerPhone?: string;
+  deliveryPhone?: string;
   deliveryAddress?: string;
   deliveryFee?: number;
   driverId?: string;
+  deliveryDriverId?: string;
   driverName?: string;
   driverType?: DriverType;
   driverSettled?: boolean;
