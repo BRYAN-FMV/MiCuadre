@@ -43,7 +43,7 @@ export const Sidebar: React.FC = () => {
 
   const navItems = [
     { id: 'pos', label: 'Ventas', icon: ShoppingCart, show: role === 'ADMIN' || role === 'CAJERO' || role === 'STAFF' },
-    { id: 'menu', label: 'Menú', icon: UtensilsCrossed, show: Boolean(tenant.isFoodEnabled) && (role === 'ADMIN' || role === 'CAJERO' || role === 'STAFF') },
+    { id: 'menu', label: 'Menú & Comandas', icon: UtensilsCrossed, show: Boolean(tenant.isFoodEnabled) && (role === 'ADMIN' || role === 'CAJERO' || role === 'STAFF') },
     { id: 'inventory', label: 'Inventario', icon: Package, show: true },
     { id: 'purchases', label: 'Compras', icon: Truck, show: role === 'ADMIN' || role === 'BODEGUERO' },
     { id: 'accounts', label: 'Cuentas / Fiados', icon: BookOpen, show: role === 'ADMIN' || role === 'CAJERO' },

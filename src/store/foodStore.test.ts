@@ -11,7 +11,10 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
       tenant: { ...tenant, isFoodEnabled: true },
       menuItems: [],
       foodOrders: [],
-      deliveryDrivers: []
+      deliveryDrivers: [],
+      sales: [],
+      cashMovements: [],
+      activeShift: null
     });
   });
 
@@ -388,6 +391,107 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
 
     const isServicesActive = tenant.isServicesEnabled !== false;
     expect(isServicesActive).toBe(true);
+  });
+
+  it('should process food order sale directly without affecting POS counter cart', () => {
+    const store = useAppStore.getState();
+    const tenantId = store.tenant.id;
+
+    // 1. Open active cash shift
+    store.openCashShift(500);
+    const activeShift = useAppStore.getState().activeShift;
+    expect(activeShift).toBeDefined();
+    expect(activeShift?.status).toBe('OPEN');
+
+    // 2. Setup inventory product (Refresco) with initial stock 10
+    const testProduct = {
+      id: 'prod-soda-123',
+      tenantId,
+      sku: 'SODA01',
+      name: 'Refresco Coca Cola 500ml',
+      price: 25.0,
+      salePrice: 25.0,
+      unitOfMeasure: 'UNIDAD',
+      costPrice: 15.0,
+      currentStock: 10,
+      minStockAlert: 2,
+      category: 'Bebidas',
+      taxClassification: 'GRAVADO_15' as const,
+      priceTiers: [],
+      isActive: true,
+      createdAt: new Date().toISOString()
+    };
+    useAppStore.setState({
+      products: [testProduct],
+      cartLines: [
+        {
+          productId: 'prod-retail-counter',
+          name: 'Bolsa de Papas Fritas',
+          sku: 'PAPAS',
+          quantity: 1,
+          unitPrice: 30.0,
+          originalUnitPrice: 30.0,
+          discountAmount: 0,
+          taxClassification: 'GRAVADO_15',
+          subtotal: 26.09,
+          taxAmount: 3.91,
+          total: 30.0
+        }
+      ]
+    });
+
+    // 3. Create food comanda
+    const order = store.createFoodOrder({
+      deliveryType: 'DINE_IN',
+      tableNumber: 'Mesa 7',
+      status: 'ORDERED',
+      items: [
+        {
+          name: 'Plato del Día (Pollo con Tajadas)',
+          quantity: 1,
+          unitPrice: 120.0,
+          subtotal: 120.0,
+          notes: 'Con repollo y aderezo extra'
+        },
+        {
+          productId: testProduct.id,
+          name: testProduct.name,
+          quantity: 2,
+          unitPrice: 25.0,
+          subtotal: 50.0
+        }
+      ],
+      subtotal: 170.0,
+      total: 170.0
+    });
+
+    // 4. Directly checkout the food order in cash
+    const completedSale = store.processFoodOrderSale(order.id, 'CASH', false);
+
+    expect(completedSale).toBeDefined();
+    expect(completedSale?.total).toBe(170.0);
+    expect(completedSale?.paymentMethod).toBe('CASH');
+    expect(completedSale?.cashShiftId).toBe(activeShift?.id);
+
+    // 5. Verify the order state was updated to COMPLETED with sale reference
+    const updatedOrder = useAppStore.getState().foodOrders.find(o => o.id === order.id);
+    expect(updatedOrder?.isPaid).toBe(true);
+    expect(updatedOrder?.status).toBe('COMPLETED');
+    expect(updatedOrder?.saleId).toBe(completedSale?.id);
+
+    // 6. Verify inventory stock was deducted for the sodas (10 - 2 = 8)
+    const updatedProduct = useAppStore.getState().products.find(p => p.id === testProduct.id);
+    expect(updatedProduct?.currentStock).toBe(8);
+
+    // 7. CRITICAL: Verify POS counter cart was NOT cleared or modified!
+    const counterCart = useAppStore.getState().cartLines;
+    expect(counterCart.length).toBe(1);
+    expect(counterCart[0].name).toBe('Bolsa de Papas Fritas');
+
+    // 8. Verify cash shift closing accurately accounts for this direct cash sale
+    const shiftSummary = store.closeCashShift(670); // 500 opening + 170 cash sale = 670
+    expect(shiftSummary.closingSystem).toBe(670);
+    expect(shiftSummary.difference).toBe(0);
   });
 });
 

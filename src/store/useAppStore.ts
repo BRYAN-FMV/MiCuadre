@@ -4,7 +4,7 @@ import {
   Tenant, UserProfile, UserPermissions, Product, ProductPresentation, FiscalRange, CashShift, CashMovement,
   CartLine, Sale, PurchaseInvoice, Supplier, Service, Staff,
   Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment,
-  SalesReturn, InventoryAdjustment, MenuItem, MenuItemExtra, FoodOrder, FoodOrderItem, DeliveryDriver
+  SalesReturn, InventoryAdjustment, MenuItem, MenuItemExtra, FoodOrder, FoodOrderItem, FoodOrderStatus, DeliveryDriver
 } from '../types';
 import {
   INITIAL_TENANT, INITIAL_PROFILES, INITIAL_PRODUCTS,
@@ -224,6 +224,7 @@ interface AppState {
   addItemsToFoodOrder: (id: string, items: FoodOrderItem[]) => void;
   completeFoodOrder: (id: string, saleId?: string) => void;
   cancelFoodOrder: (id: string) => void;
+  processFoodOrderSale: (orderId: string, paymentMethod: 'CASH' | 'CARD' | 'TRANSFER', overrideIsFiscal?: boolean) => Sale | null;
   addDeliveryDriver: (driver: Omit<DeliveryDriver, 'id' | 'createdAt' | 'tenantId'>) => DeliveryDriver;
   updateDeliveryDriver: (id: string, updates: Partial<DeliveryDriver>) => void;
   deleteDeliveryDriver: (id: string) => void;
@@ -2437,6 +2438,215 @@ export const useAppStore = create<AppState>()(
     }
     return { foodOrders: updated };
   }),
+
+  processFoodOrderSale: (orderId, paymentMethod, overrideIsFiscal) => {
+    const state = get();
+    const order = state.foodOrders.find(o => o.id === orderId);
+    if (!order) {
+      toast.error('Orden de comida no encontrada.');
+      return null;
+    }
+
+    if (!state.activeShift || state.activeShift.status !== 'OPEN') {
+      toast.error('Debes abrir un turno de caja registradora antes de cobrar una orden.');
+      return null;
+    }
+
+    if (!state.tenant.allowNegativeStock) {
+      for (const item of order.items) {
+        if (item.productId) {
+          const prod = state.products.find(p => p.id === item.productId);
+          if (prod && item.quantity > prod.currentStock) {
+            toast.error(`Inventario insuficiente para ${prod.name} (Disponible: ${prod.currentStock}, Requerido: ${item.quantity}).`);
+            return null;
+          }
+        }
+      }
+    }
+
+    const isFiscal = overrideIsFiscal !== undefined ? overrideIsFiscal : state.tenant.isFiscalEnabled;
+    let docNumber = `TICK-${Math.floor(100000 + Math.random() * 900000)}`;
+    let cai: string | undefined;
+    let caiDeadline: string | undefined;
+    let caiRangeStart: string | undefined;
+    let caiRangeEnd: string | undefined;
+
+    if (isFiscal) {
+      const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+      const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
+      const selectedId = state.selectedFiscalRangeId || state.fiscalRange?.id;
+      const targetRange = ranges.find(r => r.id === selectedId) || ranges[0] || state.fiscalRange;
+
+      if (!targetRange) {
+        toast.error('No hay un rango fiscal activo configurado para este comercio.');
+        return null;
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (targetRange.deadline && targetRange.deadline < todayStr) {
+        toast.error(`El rango fiscal ${targetRange.name || ''} venció el ${targetRange.deadline}. Revisa la configuración de CAI.`);
+        return null;
+      }
+
+      if (targetRange.currentNumber >= targetRange.rangeEnd) {
+        toast.error(`El rango fiscal ${targetRange.name || ''} alcanzó el límite máximo de emisión (${targetRange.rangeEnd}).`);
+        return null;
+      }
+
+      const nextNum = targetRange.currentNumber + 1;
+      const padded = String(nextNum).padStart(8, '0');
+      docNumber = `${targetRange.prefix}${padded}`;
+      cai = targetRange.cai;
+      caiDeadline = targetRange.deadline;
+      caiRangeStart = `${targetRange.prefix}${String(targetRange.rangeStart).padStart(8, '0')}`;
+      caiRangeEnd = `${targetRange.prefix}${String(targetRange.rangeEnd).padStart(8, '0')}`;
+
+      const updatedRange: FiscalRange = {
+        ...targetRange,
+        currentNumber: nextNum,
+        isActive: nextNum <= targetRange.rangeEnd
+      };
+
+      const updatedRanges = (state.fiscalRanges || [state.fiscalRange]).map(r =>
+        r.id === targetRange.id ? updatedRange : r
+      );
+
+      set({
+        fiscalRanges: updatedRanges,
+        fiscalRange: updatedRange
+      });
+
+      saveFiscalRangeToSupabase(updatedRange).catch(err => console.warn('Error al guardar correlativo fiscal:', err));
+    }
+
+    const activeShift = (state.activeShift && state.activeShift.tenantId === state.tenant.id) ? state.activeShift : null;
+
+    // Convert food items into CartLines
+    const isTaxIncluded = state.tenant.pricesIncludeTax ?? true;
+    const saleItems: CartLine[] = order.items.map(it => {
+      const lineNotes = [
+        ...(it.selectedExtras || []).map(e => `+ ${e.name} (L. ${e.price})`),
+        it.notes ? `Nota: ${it.notes}` : ''
+      ].filter(Boolean).join(' | ');
+
+      const lineTotal = it.subtotal || (it.unitPrice * it.quantity);
+      const calculated = calculateLineTotals(it.unitPrice, it.quantity, 'GRAVADO_15', 0, undefined, isTaxIncluded);
+
+      return {
+        productId: it.productId,
+        menuItemId: it.menuItemId,
+        name: it.name,
+        sku: it.menuItemId || it.productId || 'FOOD',
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        originalUnitPrice: calculated.originalUnitPrice,
+        discountAmount: 0,
+        taxClassification: 'GRAVADO_15',
+        subtotal: calculated.subtotal,
+        taxAmount: calculated.taxAmount,
+        total: lineTotal,
+        notes: lineNotes || undefined
+      };
+    });
+
+    if (order.deliveryFee && order.deliveryFee > 0) {
+      saleItems.push({
+        name: 'Servicio a Domicilio',
+        sku: 'DELIVERY',
+        quantity: 1,
+        unitPrice: order.deliveryFee,
+        originalUnitPrice: order.deliveryFee,
+        discountAmount: 0,
+        taxClassification: 'EXENTO',
+        subtotal: order.deliveryFee,
+        taxAmount: 0,
+        total: order.deliveryFee
+      });
+    }
+
+    const totals = calculateCartTotals(saleItems);
+
+    const newSale: Sale = {
+      id: generateUUID(),
+      tenantId: state.tenant.id,
+      cashShiftId: activeShift?.id,
+      documentNumber: docNumber,
+      isFiscal,
+      cai,
+      caiDeadline,
+      caiRangeStart,
+      caiRangeEnd,
+      fiscalRangeId: activeShift?.fiscalRangeId,
+      cajaName: activeShift?.cajaName || 'Caja 1 - Principal',
+      customerName: order.customerName || (order.tableNumber ? `${order.tableNumber}` : 'Consumidor Final'),
+      subtotal: totals.subtotal,
+      discountAmount: 0,
+      exemptAmount: totals.exemptAmount,
+      exoneratedAmount: totals.exoneratedAmount,
+      taxable15: totals.taxable15,
+      tax15: totals.tax15,
+      taxable18: 0,
+      tax18: 0,
+      total: order.total,
+      paymentMethod,
+      createdAt: new Date().toISOString(),
+      items: saleItems
+    };
+
+    // Deduct stock for any inventory products
+    const updatedProducts = [...state.products];
+    for (const item of order.items) {
+      if (item.productId) {
+        const prodIndex = updatedProducts.findIndex(p => p.id === item.productId);
+        if (prodIndex >= 0) {
+          updatedProducts[prodIndex] = {
+            ...updatedProducts[prodIndex],
+            currentStock: updatedProducts[prodIndex].currentStock - item.quantity
+          };
+          if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+            saveProductToSupabase(updatedProducts[prodIndex]).catch(e => console.warn('Supabase update product on food order:', e));
+          }
+        }
+      }
+    }
+
+    // Mark food order as COMPLETED or DELIVERED
+    const finalStatus: FoodOrderStatus = order.deliveryType === 'DELIVERY' ? 'DELIVERED' : 'COMPLETED';
+    const updatedOrders = state.foodOrders.map(o => {
+      if (o.id !== order.id) return o;
+      return {
+        ...o,
+        status: finalStatus,
+        isPaid: true,
+        saleId: newSale.id,
+        paymentMethod
+      };
+    });
+
+    set(s => ({
+      sales: [newSale, ...s.sales],
+      products: updatedProducts,
+      foodOrders: updatedOrders
+    }));
+
+    if (isSupabaseConfigured() && isValidUUID(newSale.tenantId)) {
+      saveSaleToSupabase(newSale).catch(err => {
+        console.warn('Supabase save food order sale info:', err);
+        get().enqueueOfflineItem({
+          id: newSale.id,
+          tenantId: newSale.tenantId,
+          type: 'SALE',
+          payload: newSale
+        });
+      });
+      const targetOrder = updatedOrders.find(o => o.id === order.id);
+      if (targetOrder) {
+        saveFoodOrderToSupabase(targetOrder).catch(err => console.warn('Supabase save food order on checkout:', err));
+      }
+    }
+
+    return newSale;
+  },
 
   addDeliveryDriver: (driverData) => {
     const tenantId = get().tenant.id;

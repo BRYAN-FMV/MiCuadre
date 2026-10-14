@@ -17,6 +17,7 @@ import { AdminPinModal } from '../common/AdminPinModal';
 import { MenuItemCustomizerModal } from '../food/MenuItemCustomizerModal';
 import { TablesGridModal } from '../food/TablesGridModal';
 import { DriverSettlementModal } from '../food/DriverSettlementModal';
+import { QuickOrderPaymentModal } from '../food/QuickOrderPaymentModal';
 
 export const PosContainer: React.FC = () => {
   const products = useAppStore(state => state.products);
@@ -86,6 +87,7 @@ export const PosContainer: React.FC = () => {
   const [lastCompletedSale, setLastCompletedSale] = useState<Sale | null>(null);
   const [selectedTicketCopy, setSelectedTicketCopy] = useState<'ORIGINAL' | 'COPIA'>('ORIGINAL');
   const [presentationModalProduct, setPresentationModalProduct] = useState<Product | null>(null);
+  const [quickOrderToPay, setQuickOrderToPay] = useState<FoodOrder | null>(null);
 
   // Admin PIN Authorization Modal State (Mechanism B)
   const [adminPinConfig, setAdminPinConfig] = useState<{
@@ -640,30 +642,8 @@ export const PosContainer: React.FC = () => {
   };
 
   const handleChargeTableOrder = (order: FoodOrder) => {
-    clearCart();
-    setActiveFoodOrderId(order.id);
-    setSelectedTableNumber(order.tableNumber || 'Mesa 1');
-    setDeliveryType('DINE_IN');
-    setCartCustomer({ name: order.customerName || order.tableNumber || 'Consumidor Final' });
-
-    for (const it of order.items) {
-      const itemMenu = menuItems.find(m => m.id === it.menuItemId);
-      if (itemMenu) {
-        addToCart({
-          menuItem: itemMenu,
-          quantity: it.quantity,
-          selectedExtras: it.selectedExtras?.map((e, idx) => ({ id: e.id || `extra-${idx}`, name: e.name, price: e.price })),
-          notes: it.notes,
-          finalUnitPrice: it.unitPrice
-        });
-      } else {
-        const prod = products.find(p => p.id === it.productId);
-        if (prod) {
-          addToCart({ product: prod, quantity: it.quantity });
-        }
-      }
-    }
-    setIsPaymentModalOpen(true);
+    setIsTablesModalOpen(false);
+    setQuickOrderToPay(order);
   };
 
   const handleEditTableOrder = (order: FoodOrder) => {
@@ -2756,6 +2736,13 @@ export const PosContainer: React.FC = () => {
       <DriverSettlementModal
         isOpen={isDriversModalOpen}
         onClose={() => setIsDriversModalOpen(false)}
+      />
+
+      {/* Direct In-Card Quick Payment Modal for Tables */}
+      <QuickOrderPaymentModal
+        order={quickOrderToPay}
+        isOpen={Boolean(quickOrderToPay)}
+        onClose={() => setQuickOrderToPay(null)}
       />
 
     </div>

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { MenuItem, MenuItemExtra } from '../../types';
-import { UtensilsCrossed, Plus, Search, Check, X, Edit2, Trash2, ToggleLeft, ToggleRight, Coffee, Sparkles } from 'lucide-react';
+import { UtensilsCrossed, Plus, Search, Check, X, Edit2, Trash2, ToggleLeft, ToggleRight, Coffee, Sparkles, ClipboardList } from 'lucide-react';
+import { FoodOrdersBoard } from './FoodOrdersBoard';
 import { formatCurrency } from '../../lib/monetary';
 import { toast } from 'sonner';
 
@@ -17,6 +18,13 @@ export const MenuView: React.FC = () => {
   const toggleMenuItemAvailability = useAppStore(state => state.toggleMenuItemAvailability);
   const deleteMenuItem = useAppStore(state => state.deleteMenuItem);
 
+  const allFoodOrders = useAppStore(state => state.foodOrders) || [];
+  const activeOrdersCount = allFoodOrders.filter(
+    o => (o.tenantId === tenant.id || (isDemo && (!o.tenantId || o.tenantId === '00000000-0000-0000-0000-000000000001'))) &&
+         !o.isPaid && o.status !== 'CANCELLED'
+  ).length;
+
+  const [activeSubTab, setActiveSubTab] = useState<'ORDERS' | 'MENU'>('ORDERS');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('TODAS');
 
@@ -143,27 +151,92 @@ export const MenuView: React.FC = () => {
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       
-      {/* 1. Header Section */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-        <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <UtensilsCrossed size={26} style={{ color: '#ea580c' }} />
-            Menú del Día (Comida & Bebidas)
-          </h2>
-          <p style={{ margin: '0.25rem 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
-            Platillos cocinados y bebidas preparadas sin control de inventario rígido. Activa o desactiva su disponibilidad diaria en 1 toque.
-          </p>
-        </div>
+      {/* 0. Subtabs Navigation Bar */}
+      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('ORDERS')}
+          style={{
+            padding: '0.65rem 1.25rem',
+            borderRadius: '10px',
+            fontSize: '0.9rem',
+            fontWeight: 800,
+            border: 'none',
+            background: activeSubTab === 'ORDERS' ? '#ea580c' : '#f1f5f9',
+            color: activeSubTab === 'ORDERS' ? '#ffffff' : '#475569',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            boxShadow: activeSubTab === 'ORDERS' ? '0 2px 8px rgba(234, 88, 12, 0.25)' : 'none'
+          }}
+        >
+          <ClipboardList size={18} />
+          <span>Comandas & Pedidos</span>
+          {activeOrdersCount > 0 && (
+            <span
+              style={{
+                background: activeSubTab === 'ORDERS' ? '#ffffff' : '#ea580c',
+                color: activeSubTab === 'ORDERS' ? '#ea580c' : '#ffffff',
+                borderRadius: '9999px',
+                fontSize: '0.72rem',
+                fontWeight: 900,
+                padding: '0.1rem 0.45rem'
+              }}
+            >
+              {activeOrdersCount}
+            </span>
+          )}
+        </button>
 
         <button
-          onClick={handleOpenCreate}
-          className="btn btn-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.1rem', background: '#ea580c', borderColor: '#ea580c', fontWeight: 700 }}
+          type="button"
+          onClick={() => setActiveSubTab('MENU')}
+          style={{
+            padding: '0.65rem 1.25rem',
+            borderRadius: '10px',
+            fontSize: '0.9rem',
+            fontWeight: 800,
+            border: 'none',
+            background: activeSubTab === 'MENU' ? '#ea580c' : '#f1f5f9',
+            color: activeSubTab === 'MENU' ? '#ffffff' : '#475569',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            boxShadow: activeSubTab === 'MENU' ? '0 2px 8px rgba(234, 88, 12, 0.25)' : 'none'
+          }}
         >
-          <Plus size={18} />
-          <span>Nuevo Platillo / Bebida</span>
+          <UtensilsCrossed size={18} />
+          <span>Menú & Platillos ({menuItems.length})</span>
         </button>
       </div>
+
+      {activeSubTab === 'ORDERS' ? (
+        <FoodOrdersBoard />
+      ) : (
+        <>
+          {/* 1. Header Section */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <UtensilsCrossed size={26} style={{ color: '#ea580c' }} />
+                Menú del Día (Comida & Bebidas)
+              </h2>
+              <p style={{ margin: '0.25rem 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
+                Platillos cocinados y bebidas preparadas sin control de inventario rígido. Activa o desactiva su disponibilidad diaria en 1 toque.
+              </p>
+            </div>
+
+            <button
+              onClick={handleOpenCreate}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.1rem', background: '#ea580c', borderColor: '#ea580c', fontWeight: 700 }}
+            >
+              <Plus size={18} />
+              <span>Nuevo Platillo / Bebida</span>
+            </button>
+          </div>
 
       {/* 2. Operational Counters */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
@@ -364,6 +437,8 @@ export const MenuView: React.FC = () => {
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
 
       {/* 5. Create / Edit Dish Modal */}
