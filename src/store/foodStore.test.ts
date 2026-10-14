@@ -319,6 +319,61 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     expect(useAppStore.getState().tenant.isFoodEnabled).toBe(false);
     expect(getStoredTenantFoodEnabled(currentTenant.id)).toBe(false);
   });
+
+  it('should detect unassigned delivery orders and allow assigning them to a driver for settlement', () => {
+    const store = useAppStore.getState();
+
+    const driver = store.addDeliveryDriver({
+      fullName: 'Carlos Express',
+      phone: '9900-1122',
+      driverType: 'EXTERNAL_MANDADITO',
+      isActive: true
+    });
+
+    // Create delivery order without driver assigned
+    const unassignedOrder = store.createFoodOrder({
+      deliveryType: 'DELIVERY',
+      status: 'IN_TRANSIT',
+      customerName: 'Cliente Sin Asignar',
+      items: [{ name: 'Hamburguesa', quantity: 2, unitPrice: 120.0, subtotal: 240.0 }],
+      subtotal: 240.0,
+      deliveryFee: 40.0,
+      total: 280.0
+    });
+
+    expect(unassignedOrder.driverId).toBeUndefined();
+    expect(unassignedOrder.deliveryDriverId).toBeUndefined();
+
+    // Verify it is detected as unassigned
+    const ordersBefore = useAppStore.getState().foodOrders;
+    const unassignedList = ordersBefore.filter(
+      o => o.deliveryType === 'DELIVERY' && !o.driverSettled && o.status !== 'CANCELLED' && (!o.driverId && !o.deliveryDriverId)
+    );
+    expect(unassignedList.length).toBe(1);
+    expect(unassignedList[0].id).toBe(unassignedOrder.id);
+
+    // Assign to driver
+    store.updateFoodOrder(unassignedOrder.id, {
+      driverId: driver.id,
+      deliveryDriverId: driver.id,
+      driverName: driver.fullName,
+      driverType: driver.driverType
+    });
+
+    // Verify order is now assigned to driver
+    const updatedOrder = useAppStore.getState().foodOrders.find(o => o.id === unassignedOrder.id);
+    expect(updatedOrder?.driverId).toBe(driver.id);
+    expect(updatedOrder?.deliveryDriverId).toBe(driver.id);
+
+    // Settle driver orders
+    const settlement = store.settleDriverOrders(driver.id);
+    expect(settlement.ordersCount).toBe(1);
+    expect(settlement.totalCash).toBe(240.0); // Food subtotal for mandadito
+
+    const settledOrder = useAppStore.getState().foodOrders.find(o => o.id === unassignedOrder.id);
+    expect(settledOrder?.driverSettled).toBe(true);
+  });
 });
+
 
 

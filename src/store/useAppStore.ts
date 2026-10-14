@@ -2510,12 +2510,21 @@ export const useAppStore = create<AppState>()(
         createdAt: new Date().toISOString()
       };
       updatedMovements = [...updatedMovements, movement];
+      if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+        saveCashMovementToSupabase(movement).catch(err => console.warn('Supabase save settlement movement info:', err));
+      }
     }
 
     set({
       foodOrders: updatedOrders,
       cashMovements: updatedMovements
     });
+
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      unsettledOrders.forEach(o => {
+        saveFoodOrderToSupabase({ ...o, driverSettled: true }).catch(err => console.warn('Supabase sync settled order info:', err));
+      });
+    }
 
     return { totalCash, ordersCount: unsettledOrders.length };
   }

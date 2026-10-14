@@ -1911,6 +1911,7 @@ export async function fetchFoodOrdersFromSupabase(tenantId: string): Promise<Foo
       deliveryAddress: o.delivery_address || undefined,
       deliveryFee: Number(o.delivery_fee) || 0,
       driverId: o.driver_id || undefined,
+      deliveryDriverId: o.driver_id || undefined,
       driverName: o.driver_name || undefined,
       driverType: o.driver_type || undefined,
       driverSettled: Boolean(o.driver_settled),
@@ -1931,6 +1932,10 @@ export async function saveFoodOrderToSupabase(order: FoodOrder): Promise<boolean
   if (!isSupabaseConfigured() || !isValidUUID(order.tenantId)) return false;
 
   try {
+    const resolvedDriverId = isValidUUID(order.driverId)
+      ? order.driverId
+      : (isValidUUID(order.deliveryDriverId) ? order.deliveryDriverId : null);
+
     const { error } = await supabase.from('food_orders').upsert({
       id: isValidUUID(order.id) ? order.id : generateUUID(),
       tenant_id: order.tenantId,
@@ -1943,7 +1948,7 @@ export async function saveFoodOrderToSupabase(order: FoodOrder): Promise<boolean
       delivery_phone: order.deliveryPhone || null,
       delivery_address: order.deliveryAddress || null,
       delivery_fee: order.deliveryFee || 0,
-      driver_id: isValidUUID(order.driverId) ? order.driverId : null,
+      driver_id: resolvedDriverId,
       driver_name: order.driverName || null,
       driver_type: order.driverType || null,
       driver_settled: order.driverSettled ?? false,

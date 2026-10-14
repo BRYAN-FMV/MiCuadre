@@ -20,6 +20,7 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
   const foodOrders = useAppStore(state => state.foodOrders);
   const addDeliveryDriver = useAppStore(state => state.addDeliveryDriver);
   const settleDriverOrders = useAppStore(state => state.settleDriverOrders);
+  const updateFoodOrder = useAppStore(state => state.updateFoodOrder);
 
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [isNewDriverModalOpen, setIsNewDriverModalOpen] = useState(false);
@@ -31,8 +32,28 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
 
   const tenantDrivers = deliveryDrivers.filter(d => (!d.tenantId || d.tenantId === tenant.id) && d.isActive);
 
+  // Unassigned delivery orders (dispatched without driver or missing assignment)
+  const unassignedOrders = foodOrders.filter(
+    o => (!o.tenantId || o.tenantId === tenant.id) &&
+         o.deliveryType === 'DELIVERY' &&
+         !o.driverSettled &&
+         o.status !== 'CANCELLED' &&
+         (!o.driverId && !o.deliveryDriverId)
+  );
+
+  // Driver with pending unsettled deliveries
+  const driverWithPending = tenantDrivers.find(d =>
+    foodOrders.some(
+      o => (!o.tenantId || o.tenantId === tenant.id) &&
+           (o.deliveryDriverId === d.id || o.driverId === d.id) &&
+           o.deliveryType === 'DELIVERY' &&
+           !o.driverSettled &&
+           o.status !== 'CANCELLED'
+    )
+  );
+
   // Set default driver if none selected
-  const activeDriver = tenantDrivers.find(d => d.id === selectedDriverId) || tenantDrivers[0];
+  const activeDriver = tenantDrivers.find(d => d.id === selectedDriverId) || driverWithPending || tenantDrivers[0];
 
   const unsettledOrders = activeDriver
     ? foodOrders.filter(
@@ -123,11 +144,21 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
                 {tenantDrivers.length === 0 ? (
                   <option value="">Sin repartidores registrados</option>
                 ) : (
-                  tenantDrivers.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.fullName} ({d.driverType === 'INTERNAL' ? 'Personal Interno' : 'Mandadito Externo'})
-                    </option>
-                  ))
+                  tenantDrivers.map(d => {
+                    const count = foodOrders.filter(
+                      o => (!o.tenantId || o.tenantId === tenant.id) &&
+                           (o.deliveryDriverId === d.id || o.driverId === d.id) &&
+                           o.deliveryType === 'DELIVERY' &&
+                           !o.driverSettled &&
+                           o.status !== 'CANCELLED'
+                    ).length;
+
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {d.fullName} ({d.driverType === 'INTERNAL' ? 'Personal Interno' : 'Mandadito Externo'}) {count > 0 ? `• [${count} pendiente(s)]` : ''}
+                      </option>
+                    );
+                  })
                 )}
               </select>
             </div>
@@ -142,6 +173,92 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
               <span>Nuevo Repartidor</span>
             </button>
           </div>
+
+          {/* Unassigned Delivery Orders Banner */}
+          {unassignedOrders.length > 0 && (
+            <div style={{
+              background: '#fffbeb',
+              border: '1px solid #fde68a',
+              borderRadius: '10px',
+              padding: '0.75rem 1rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#92400e', fontWeight: 700, fontSize: '0.82rem' }}>
+                  <AlertCircle size={16} style={{ color: '#d97706', flexShrink: 0 }} />
+                  <span>Pedidos a domicilio sin repartidor asignado ({unassignedOrders.length}):</span>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#b45309' }}>
+                  Asigne estos pedidos a un repartidor para incluirlos en la liquidación
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '130px', overflowY: 'auto' }}>
+                {unassignedOrders.map(order => (
+                  <div
+                    key={order.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: '#ffffff',
+                      border: '1px solid #fef3c7',
+                      borderRadius: '6px',
+                      padding: '0.45rem 0.65rem',
+                      fontSize: '0.78rem'
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontWeight: 800, color: '#0f172a', marginRight: '0.4rem' }}>
+                        #{order.orderNumber}
+                      </span>
+                      <span style={{ color: '#475569', fontWeight: 600 }}>
+                        {order.customerName || 'Cliente Domicilio'}
+                      </span>
+                      {order.deliveryAddress && (
+                        <span style={{ color: '#94a3b8', fontSize: '0.72rem', marginLeft: '0.35rem' }}>
+                          - {order.deliveryAddress}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <span style={{ fontWeight: 800, color: '#0f172a' }}>
+                        {formatCurrency(order.total, tenant.currencySymbol)}
+                      </span>
+                      {activeDriver && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateFoodOrder(order.id, {
+                              driverId: activeDriver.id,
+                              deliveryDriverId: activeDriver.id,
+                              driverName: activeDriver.fullName,
+                              driverType: activeDriver.driverType
+                            });
+                            toast.success(`Pedido #${order.orderNumber} asignado a ${activeDriver.fullName}`);
+                          }}
+                          className="btn btn-secondary"
+                          style={{
+                            fontSize: '0.72rem',
+                            padding: '0.2rem 0.55rem',
+                            background: '#f0f9ff',
+                            borderColor: '#bae6fd',
+                            color: '#0284c7',
+                            fontWeight: 700
+                          }}
+                        >
+                          Asignar a {activeDriver.fullName}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {activeDriver ? (
             <>

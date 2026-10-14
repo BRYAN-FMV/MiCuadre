@@ -564,6 +564,25 @@ export const PosContainer: React.FC = () => {
       toast.error('El carrito está vacío');
       return;
     }
+
+    const tenantDrivers = deliveryDrivers.filter(d => (!d.tenantId || d.tenantId === tenant.id) && d.isActive);
+    if (tenantDrivers.length === 0) {
+      toast.error('No tienes repartidores registrados. Abre "Repartidores" para agregar tu primer repartidor.');
+      setIsDriversModalOpen(true);
+      return;
+    }
+
+    if (!deliveryDriverId) {
+      toast.error('Debes seleccionar un repartidor antes de despachar el pedido a domicilio');
+      return;
+    }
+
+    const driverObj = tenantDrivers.find(d => d.id === deliveryDriverId);
+    if (!driverObj) {
+      toast.error('El repartidor seleccionado no es válido');
+      return;
+    }
+
     const fee = parseFloat(deliveryFee) || 0;
     const orderItems: FoodOrderItem[] = cartLines.map(line => ({
       id: generateUUID(),
@@ -577,11 +596,12 @@ export const PosContainer: React.FC = () => {
       selectedExtras: line.extras
     }));
 
-    const driverObj = deliveryDrivers.find(d => d.id === deliveryDriverId);
-
     const newOrder = createFoodOrder({
       deliveryType: 'DELIVERY',
-      deliveryDriverId: deliveryDriverId || undefined,
+      driverId: driverObj.id,
+      deliveryDriverId: driverObj.id,
+      driverName: driverObj.fullName,
+      driverType: driverObj.driverType,
       deliveryAddress: deliveryAddress.trim() || undefined,
       deliveryPhone: deliveryPhone.trim() || undefined,
       deliveryFee: fee,
@@ -599,7 +619,7 @@ export const PosContainer: React.FC = () => {
         deliveryType: 'DELIVERY',
         customerName: cartCustomer.name,
         serverName: currentUser?.fullName,
-        notes: `Dirección: ${deliveryAddress || 'N/A'} - Tel: ${deliveryPhone || 'N/A'} - Repartidor: ${driverObj?.fullName || 'Por asignar'}`,
+        notes: `Dirección: ${deliveryAddress || 'N/A'} - Tel: ${deliveryPhone || 'N/A'} - Repartidor: ${driverObj.fullName} (${driverObj.driverType === 'INTERNAL' ? 'Interno' : 'Mandadito'})`,
         items: cartLines.map(l => ({
           name: l.name,
           quantity: l.quantity,
@@ -615,7 +635,8 @@ export const PosContainer: React.FC = () => {
     setDeliveryAddress('');
     setDeliveryPhone('');
     setDeliveryFee('0');
-    toast.success(`Pedido a domicilio #${newOrder.orderNumber} despachado`);
+    setDeliveryDriverId('');
+    toast.success(`Pedido a domicilio #${newOrder.orderNumber} despachado a ${driverObj.fullName}`);
   };
 
   const handleChargeTableOrder = (order: FoodOrder) => {
@@ -743,6 +764,29 @@ export const PosContainer: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            {tenant.isFoodEnabled && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsDriversModalOpen(true)}
+                style={{
+                  padding: '0.4rem 0.65rem',
+                  fontSize: '0.78rem',
+                  color: unsettledDriversOrdersCount > 0 ? '#0284c7' : '#64748b',
+                  borderColor: unsettledDriversOrdersCount > 0 ? '#38bdf8' : '#cbd5e1',
+                  background: unsettledDriversOrdersCount > 0 ? '#f0f9ff' : '#ffffff',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
+                title="Liquidación de Repartidores & Mandaditos"
+              >
+                <Bike size={14} />
+                <span>Repartidores {unsettledDriversOrdersCount > 0 ? `(${unsettledDriversOrdersCount})` : ''}</span>
+              </button>
+            )}
+
             {heldOrders.length > 0 && (
               <button
                 className="btn btn-secondary"
@@ -1261,28 +1305,27 @@ export const PosContainer: React.FC = () => {
                 </button>
               )}
 
-              {deliveryType === 'DELIVERY' && (
-                <button
-                  type="button"
-                  onClick={() => setIsDriversModalOpen(true)}
-                  style={{
-                    padding: '0.3rem 0.65rem',
-                    borderRadius: '6px',
-                    border: '1px solid #0284c7',
-                    background: '#ffffff',
-                    color: '#0284c7',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.3rem'
-                  }}
-                >
-                  <Bike size={13} />
-                  <span>Repartidores {unsettledDriversOrdersCount > 0 ? `(${unsettledDriversOrdersCount})` : ''}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsDriversModalOpen(true)}
+                style={{
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '6px',
+                  border: unsettledDriversOrdersCount > 0 ? '1px solid #0284c7' : '1px solid #cbd5e1',
+                  background: unsettledDriversOrdersCount > 0 ? '#f0f9ff' : '#ffffff',
+                  color: unsettledDriversOrdersCount > 0 ? '#0284c7' : '#64748b',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem'
+                }}
+                title="Liquidación de repartidores y pedidos a domicilio"
+              >
+                <Bike size={13} />
+                <span>Repartidores {unsettledDriversOrdersCount > 0 ? `(${unsettledDriversOrdersCount})` : ''}</span>
+              </button>
             </div>
 
             {deliveryType === 'DELIVERY' && (
@@ -1295,13 +1338,23 @@ export const PosContainer: React.FC = () => {
                     onChange={(e) => setDeliveryDriverId(e.target.value)}
                     style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', flex: 1 }}
                   >
-                    <option value="">-- Sin asignar --</option>
+                    <option value="">-- Seleccionar Repartidor * --</option>
                     {deliveryDrivers.filter(d => (!d.tenantId || d.tenantId === tenant.id) && d.isActive).map(d => (
                       <option key={d.id} value={d.id}>
                         {d.fullName} ({d.driverType === 'INTERNAL' ? 'Interno' : 'Mandadito'})
                       </option>
                     ))}
                   </select>
+                  {deliveryDrivers.filter(d => (!d.tenantId || d.tenantId === tenant.id) && d.isActive).length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDriversModalOpen(true)}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.7rem', padding: '0.2rem 0.45rem', whiteSpace: 'nowrap' }}
+                    >
+                      + Crear
+                    </button>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
                   <input
@@ -1567,39 +1620,51 @@ export const PosContainer: React.FC = () => {
             )}
           </div>
 
-          {tenant.isFoodEnabled && deliveryType === 'DELIVERY' && (
+          {tenant.isFoodEnabled && deliveryType === 'DELIVERY' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleDispatchDeliveryOrder}
+                disabled={cartLines.length === 0}
+                style={{
+                  padding: '0.75rem',
+                  fontSize: '0.95rem',
+                  fontWeight: 800,
+                  color: '#ffffff',
+                  background: '#0284c7',
+                  borderColor: '#0284c7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem',
+                  borderRadius: '8px',
+                  width: '100%'
+                }}
+              >
+                <Send size={16} />
+                <span>Despachar a Repartidor (Contra Entrega)</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsPaymentModalOpen(true)}
+                disabled={cartLines.length === 0}
+                style={{ padding: '0.45rem', fontSize: '0.78rem', color: '#64748b', textAlign: 'center' }}
+              >
+                Cobrar en Caja Anticipado ({formatCurrency(cartGrandTotal, tenant.currencySymbol)})
+              </button>
+            </div>
+          ) : (
             <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleDispatchDeliveryOrder}
+              className="btn btn-primary"
+              onClick={() => setIsPaymentModalOpen(true)}
               disabled={cartLines.length === 0}
-              style={{
-                padding: '0.65rem',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                color: '#0284c7',
-                borderColor: '#0284c7',
-                background: '#f0f9ff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.4rem',
-                marginTop: '0.25rem'
-              }}
+              style={{ padding: '0.75rem', fontSize: '1rem', fontWeight: 800, borderRadius: '8px', width: '100%', marginTop: '0.25rem' }}
             >
-              <Send size={15} />
-              <span>Despachar a Repartidor (Contra Entrega)</span>
+              Cobrar Venta ({formatCurrency(cartGrandTotal, tenant.currencySymbol)})
             </button>
           )}
-
-          <button
-            className="btn btn-primary"
-            onClick={() => setIsPaymentModalOpen(true)}
-            disabled={cartLines.length === 0}
-            style={{ padding: '0.75rem', fontSize: '1rem', fontWeight: 800, borderRadius: '8px', width: '100%', marginTop: '0.25rem' }}
-          >
-            Cobrar Venta ({formatCurrency(cartGrandTotal, tenant.currencySymbol)})
-          </button>
         </div>
       </div>
 
