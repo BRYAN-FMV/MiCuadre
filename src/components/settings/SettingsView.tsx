@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed } from 'lucide-react';
+import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
 import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../../lib/supabaseService';
@@ -716,13 +716,39 @@ export const SettingsView: React.FC = () => {
               className={`btn ${tenant.isFoodEnabled ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => {
                 const nextVal = !tenant.isFoodEnabled;
-                updateTenantSettings({ isFoodEnabled: nextVal, businessType: nextVal ? 'FOOD' : 'RETAIL' });
+                updateTenantSettings({ isFoodEnabled: nextVal });
                 toast.success(`Módulo Gastronómico ${nextVal ? 'ACTIVADO' : 'DESACTIVADO'}`);
               }}
               style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', background: tenant.isFoodEnabled ? '#ea580c' : undefined, borderColor: tenant.isFoodEnabled ? '#ea580c' : undefined }}
             >
               {tenant.isFoodEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
               <span>{tenant.isFoodEnabled ? 'MÓDULO ACTIVO' : 'DESACTIVADO'}</span>
+            </button>
+          </div>
+
+          {/* Services & Appointments Module Switch */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: 'span 2' }}>
+            <div>
+              <h4 style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Scissors size={16} style={{ color: '#9333ea' }} />
+                Módulo de Servicios, Citas & Comisiones de Personal
+              </h4>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.15rem' }}>
+                Habilita el catálogo de servicios (cortes, talleres, atenciones), asignación de colaboradores y cálculo automático de comisiones por servicio.
+              </p>
+            </div>
+
+            <button
+              className={`btn ${(tenant.isServicesEnabled ?? true) ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => {
+                const nextVal = !(tenant.isServicesEnabled ?? true);
+                updateTenantSettings({ isServicesEnabled: nextVal });
+                toast.success(`Módulo de Servicios ${nextVal ? 'ACTIVADO' : 'DESACTIVADO'}`);
+              }}
+              style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', background: (tenant.isServicesEnabled ?? true) ? '#9333ea' : undefined, borderColor: (tenant.isServicesEnabled ?? true) ? '#9333ea' : undefined }}
+            >
+              {(tenant.isServicesEnabled ?? true) ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+              <span>{(tenant.isServicesEnabled ?? true) ? 'MÓDULO ACTIVO' : 'DESACTIVADO'}</span>
             </button>
           </div>
         </div>
@@ -806,7 +832,8 @@ export const SettingsView: React.FC = () => {
             >
               <option value="RETAIL">Retail / Supermercado / Abarrotes / Ferretería</option>
               <option value="SERVICES">Servicios / Barbería / Salón de Belleza / Taller</option>
-              <option value="MIXED">Mixto (Productos + Servicios de Barbería/Citas)</option>
+              <option value="FOOD">Gastronómico / Restaurante / Comedor / Cafetería</option>
+              <option value="MIXED">Mixto (Productos + Servicios de Barbería/Citas / Comida)</option>
             </select>
           </div>
 

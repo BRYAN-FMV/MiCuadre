@@ -373,7 +373,29 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     const settledOrder = useAppStore.getState().foodOrders.find(o => o.id === unassignedOrder.id);
     expect(settledOrder?.driverSettled).toBe(true);
   });
+
+  it('should allow services module and food module to coexist seamlessly', () => {
+    const store = useAppStore.getState();
+
+    // Enable both food module and services module
+    store.updateTenantSettings({
+      isFoodEnabled: true,
+      isServicesEnabled: true,
+      businessType: 'FOOD'
+    });
+
+    const tenant = useAppStore.getState().tenant;
+    expect(tenant.isFoodEnabled).toBe(true);
+    expect(tenant.isServicesEnabled).toBe(true);
+
+    const isServicesActive = typeof tenant.isServicesEnabled === 'boolean'
+      ? tenant.isServicesEnabled
+      : (tenant.businessType === 'SERVICES' || tenant.businessType === 'MIXED');
+
+    expect(isServicesActive).toBe(true);
+  });
 });
+
 
 
 

@@ -47,7 +47,15 @@ export const Sidebar: React.FC = () => {
     { id: 'inventory', label: 'Inventario', icon: Package, show: true },
     { id: 'purchases', label: 'Compras', icon: Truck, show: role === 'ADMIN' || role === 'BODEGUERO' },
     { id: 'accounts', label: 'Cuentas / Fiados', icon: BookOpen, show: role === 'ADMIN' || role === 'CAJERO' },
-    { id: 'services', label: 'Servicios', icon: Scissors, show: (tenant.isServicesEnabled ?? true) && (tenant.businessType === 'SERVICES' || tenant.businessType === 'MIXED') && (role === 'ADMIN' || role === 'STAFF' || role === 'CAJERO') },
+    {
+      id: 'services',
+      label: 'Servicios',
+      icon: Scissors,
+      show: (typeof tenant.isServicesEnabled === 'boolean'
+        ? tenant.isServicesEnabled
+        : (tenant.businessType === 'SERVICES' || tenant.businessType === 'MIXED')) &&
+        (role === 'ADMIN' || role === 'STAFF' || role === 'CAJERO')
+    },
     { id: 'calendar', label: 'Calendario', icon: Calendar, show: role === 'ADMIN' },
     { id: 'reports', label: 'Reportes', icon: BarChart3, show: role === 'ADMIN' },
     { id: 'settings', label: 'Configuración', icon: Settings, show: role === 'ADMIN' }
