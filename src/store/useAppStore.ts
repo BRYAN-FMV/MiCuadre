@@ -199,6 +199,7 @@ interface AppState {
   deleteAppointment: (id: string) => void;
   updateAppointmentStatus: (id: string, status: Appointment['status']) => void;
   sendAppointmentToPos: (app: Appointment) => void;
+  processAppointmentSale: (appointmentId: string, paymentMethod: 'CASH' | 'CARD' | 'TRANSFER', overrideIsFiscal?: boolean) => Sale | null;
 
   // Staff & Service Actions
   addStaff: (staffMember: Omit<Staff, 'id' | 'tenantId'>) => void;
@@ -1971,6 +1972,208 @@ export const useAppStore = create<AppState>()(
         state.setActiveTab('pos');
       }
     }
+  },
+
+  processAppointmentSale: (appointmentId, paymentMethod, overrideIsFiscal) => {
+    const state = get();
+    const app = state.appointments.find(a => a.id === appointmentId && a.tenantId === state.tenant.id);
+    if (!app) {
+      toast.error('Cita no encontrada.');
+      return null;
+    }
+
+    if (!state.activeShift || state.activeShift.status !== 'OPEN') {
+      toast.error('Debes abrir un turno de caja registradora antes de cobrar una cita.');
+      return null;
+    }
+
+    const isFiscal = overrideIsFiscal !== undefined ? overrideIsFiscal : state.tenant.isFiscalEnabled;
+    let docNumber = `TICK-${Math.floor(100000 + Math.random() * 900000)}`;
+    let cai: string | undefined;
+    let caiDeadline: string | undefined;
+    let caiRangeStart: string | undefined;
+    let caiRangeEnd: string | undefined;
+
+    if (isFiscal) {
+      const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+      const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
+      const selectedId = state.selectedFiscalRangeId || state.fiscalRange?.id;
+      const targetRange = ranges.find(r => r.id === selectedId) || ranges[0] || state.fiscalRange;
+
+      if (!targetRange) {
+        toast.error('No hay un rango fiscal activo configurado para este comercio.');
+        return null;
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (targetRange.deadline && targetRange.deadline < todayStr) {
+        toast.error(`El rango fiscal ${targetRange.name || ''} venció el ${targetRange.deadline}. Revisa la configuración de CAI.`);
+        return null;
+      }
+
+      if (targetRange.currentNumber >= targetRange.rangeEnd) {
+        toast.error(`El rango fiscal ${targetRange.name || ''} alcanzó el límite máximo de emisión (${targetRange.rangeEnd}).`);
+        return null;
+      }
+
+      const nextNum = targetRange.currentNumber + 1;
+      const padded = String(nextNum).padStart(8, '0');
+      docNumber = `${targetRange.prefix}${padded}`;
+      cai = targetRange.cai;
+      caiDeadline = targetRange.deadline;
+      caiRangeStart = `${targetRange.prefix}${String(targetRange.rangeStart).padStart(8, '0')}`;
+      caiRangeEnd = `${targetRange.prefix}${String(targetRange.rangeEnd).padStart(8, '0')}`;
+
+      const updatedRange: FiscalRange = {
+        ...targetRange,
+        currentNumber: nextNum,
+        isActive: nextNum <= targetRange.rangeEnd
+      };
+
+      const updatedRanges = (state.fiscalRanges || [state.fiscalRange]).map(r =>
+        r.id === targetRange.id ? updatedRange : r
+      );
+
+      set({
+        fiscalRanges: updatedRanges,
+        fiscalRange: updatedRange
+      });
+
+      saveFiscalRangeToSupabase(updatedRange).catch(err => console.warn('Error al guardar correlativo fiscal:', err));
+    }
+
+    const activeShift = (state.activeShift && state.activeShift.tenantId === state.tenant.id) ? state.activeShift : null;
+    const isTaxIncluded = state.tenant.pricesIncludeTax ?? true;
+
+    // Resolve items in appointment
+    const rawItems = (app.items && app.items.length > 0)
+      ? app.items
+      : [{ serviceId: app.serviceId, staffId: app.staffId, price: undefined }];
+
+    const saleItems: CartLine[] = [];
+    const newCommissions: StaffCommission[] = [...state.commissions];
+    let updatedProducts = [...state.products];
+
+    for (const item of rawItems) {
+      const service = state.services.find(s => s.id === item.serviceId);
+      const unitPrice = item.price !== undefined ? item.price : (service?.price || 0);
+      const calculated = calculateLineTotals(unitPrice, 1, 'GRAVADO_15', 0, undefined, isTaxIncluded);
+      const staffMember = state.staff.find(s => s.id === item.staffId) || state.profiles.find(p => p.id === item.staffId);
+
+      saleItems.push({
+        serviceId: item.serviceId,
+        staffId: item.staffId,
+        name: service?.name || app.serviceName || 'Servicio',
+        sku: item.serviceId || 'SERVICE',
+        quantity: 1,
+        unitPrice,
+        originalUnitPrice: calculated.originalUnitPrice,
+        discountAmount: 0,
+        taxClassification: 'GRAVADO_15',
+        subtotal: calculated.subtotal,
+        taxAmount: calculated.taxAmount,
+        total: calculated.total
+      });
+
+      // Automatically deduct supplies consumed by service if configured
+      if (service?.supplies && service.supplies.length > 0) {
+        for (const supply of service.supplies) {
+          const pIdx = updatedProducts.findIndex(p => p.id === supply.productId);
+          if (pIdx >= 0) {
+            updatedProducts[pIdx] = {
+              ...updatedProducts[pIdx],
+              currentStock: Math.max(0, updatedProducts[pIdx].currentStock - supply.quantity)
+            };
+          }
+        }
+      }
+
+      // Calculate commission for the staff member
+      if (service && item.staffId && staffMember) {
+        const commAmount = service.commissionType === 'PERCENTAGE'
+          ? (calculated.subtotal * (service.commissionValue || 0)) / 100
+          : (service.commissionValue || 0);
+
+        newCommissions.push({
+          id: `comm-${Date.now()}-${Math.random()}`,
+          tenantId: state.tenant.id,
+          staffId: item.staffId,
+          staffName: staffMember.fullName,
+          saleId: '',
+          serviceId: item.serviceId,
+          serviceName: service.name,
+          saleAmount: calculated.subtotal,
+          commissionAmount: commAmount,
+          status: 'PENDING',
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
+    const totals = calculateCartTotals(saleItems);
+
+    const newSale: Sale = {
+      id: generateUUID(),
+      tenantId: state.tenant.id,
+      cashShiftId: activeShift?.id,
+      documentNumber: docNumber,
+      isFiscal,
+      cai,
+      caiDeadline,
+      caiRangeStart,
+      caiRangeEnd,
+      fiscalRangeId: activeShift?.fiscalRangeId,
+      cajaName: activeShift?.cajaName || 'Caja 1 - Principal',
+      customerName: app.customerName || 'Cliente Salón',
+      subtotal: totals.subtotal,
+      discountAmount: 0,
+      exemptAmount: totals.exemptAmount,
+      exoneratedAmount: totals.exoneratedAmount,
+      taxable15: totals.taxable15,
+      tax15: totals.tax15,
+      taxable18: 0,
+      tax18: 0,
+      total: totals.total,
+      paymentMethod,
+      createdAt: new Date().toISOString(),
+      items: saleItems
+    };
+
+    // Assign saleId to newly created commissions
+    const finalizedCommissions = newCommissions.map(c => c.saleId === '' ? { ...c, saleId: newSale.id } : c);
+
+    // Mark appointment as COMPLETED and paid
+    const updatedAppointments = state.appointments.map(a => {
+      if (a.id !== app.id) return a;
+      return {
+        ...a,
+        status: 'COMPLETED' as const,
+        isPaid: true,
+        saleId: newSale.id,
+        paymentMethod
+      };
+    });
+
+    set(s => ({
+      sales: [newSale, ...s.sales],
+      products: updatedProducts,
+      appointments: updatedAppointments,
+      commissions: finalizedCommissions
+    }));
+
+    if (isSupabaseConfigured() && isValidUUID(newSale.tenantId)) {
+      saveSaleToSupabase(newSale).catch(err => {
+        console.warn('Supabase save appointment sale info:', err);
+        get().enqueueOfflineItem({
+          id: newSale.id,
+          tenantId: newSale.tenantId,
+          type: 'SALE',
+          payload: newSale
+        });
+      });
+    }
+
+    return newSale;
   },
 
   addStaff: (staffData) => set((state) => ({

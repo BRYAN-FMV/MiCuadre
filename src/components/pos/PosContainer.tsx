@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAppStore, HeldOrder, hasUserPermission } from '../../store/useAppStore';
-import { formatCurrency } from '../../lib/monetary';
+import { formatCurrency, calculateCartTotals } from '../../lib/monetary';
 import { generateEscPosReceipt } from '../../lib/escPos';
 import { generateUUID } from '../../lib/security';
 import { toast } from 'sonner';
@@ -87,9 +87,15 @@ export const PosContainer: React.FC = () => {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Global Keyboard Shortcuts (F2, F4, F12, Esc)
+  // Global Keyboard Shortcuts (F2, F4, F12, Esc, Enter)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (lastCompletedSale && (e.key === 'Escape' || e.key === 'Enter')) {
+        e.preventDefault();
+        setLastCompletedSale(null);
+        return;
+      }
+
       if (e.key === 'F2') {
         e.preventDefault();
         searchInputRef.current?.focus();
@@ -112,7 +118,7 @@ export const PosContainer: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cartLines]);
+  }, [cartLines, lastCompletedSale]);
 
   // Catalog Mode & Walk-in Services State
   const [catalogMode, setCatalogMode] = useState<'PRODUCTS' | 'SERVICES'>('PRODUCTS');
@@ -250,11 +256,12 @@ export const PosContainer: React.FC = () => {
     }
   };
 
-  const cartSubtotal = cartLines.reduce((acc: number, l: CartLine) => acc + l.subtotal, 0);
-  const cartDiscountTotal = cartLines.reduce((acc: number, l: CartLine) => acc + (l.discountAmount || 0), 0);
-  const cartTax15 = cartLines.filter((l: CartLine) => l.taxClassification === 'GRAVADO_15').reduce((acc: number, l: CartLine) => acc + l.taxAmount, 0);
-  const cartTax18 = cartLines.filter((l: CartLine) => l.taxClassification === 'GRAVADO_18').reduce((acc: number, l: CartLine) => acc + l.taxAmount, 0);
-  const cartGrandTotal = cartLines.reduce((acc: number, l: CartLine) => acc + l.total, 0);
+  const cartTotals = useMemo(() => calculateCartTotals(cartLines), [cartLines]);
+  const cartSubtotal = cartTotals.subtotal;
+  const cartDiscountTotal = cartTotals.discountAmount;
+  const cartTax15 = cartTotals.tax15;
+  const cartTax18 = cartTotals.tax18;
+  const cartGrandTotal = cartTotals.total;
 
   const handleApplySeniorDiscount = () => {
     if (!hasUserPermission(currentUser, 'canApplyDiscounts')) {
@@ -1430,12 +1437,20 @@ export const PosContainer: React.FC = () => {
                   placeholder="0.00"
                   value={cashTendered}
                   onChange={(e) => setCashTendered(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (tenderedAmount >= netPayableTotal) {
+                        handleConfirmPayment();
+                      }
+                    }
+                  }}
                   style={{ fontSize: '1.3rem', fontWeight: 800, textAlign: 'center' }}
                   autoFocus
                 />
 
                 {/* Quick Cash Tender Buttons */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.35rem', marginTop: '0.4rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.35rem', marginTop: '0.4rem' }}>
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -1444,7 +1459,7 @@ export const PosContainer: React.FC = () => {
                   >
                     Exacto
                   </button>
-                  {[50, 100, 200, 500].map(amt => (
+                  {[50, 100, 200, 500, 1000].map(amt => (
                     <button
                       key={amt}
                       type="button"
@@ -1703,7 +1718,7 @@ export const PosContainer: React.FC = () => {
               </div>
 
               <button className="btn btn-secondary" onClick={() => setLastCompletedSale(null)} style={{ width: '100%', fontSize: '0.8rem', padding: '0.4rem' }}>
-                Cerrar Ventana
+                Cerrar Ventana (Enter / Esc)
               </button>
             </div>
           </div>

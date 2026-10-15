@@ -369,6 +369,9 @@ export interface Appointment {
   status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   notes?: string;
   items?: AppointmentItem[];
+  isPaid?: boolean;
+  saleId?: string;
+  paymentMethod?: 'CASH' | 'CARD' | 'TRANSFER';
 }
 
 export interface StaffCommission {

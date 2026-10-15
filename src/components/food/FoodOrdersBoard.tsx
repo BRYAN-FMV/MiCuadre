@@ -713,31 +713,111 @@ export const FoodOrdersBoard: React.FC = () => {
                 {/* Primary Card Actions: Direct Checkout vs Paid Indicator */}
                 <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.25rem' }}>
                   {!isCompleted && !isCancelled ? (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentModalOrder(order)}
-                      style={{
-                        flex: 2,
-                        minHeight: '44px',
-                        padding: '0.55rem',
-                        fontSize: '0.85rem',
-                        fontWeight: 800,
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: '#059669',
-                        color: '#ffffff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem',
-                        boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
-                      }}
-                      title="Cobro directo sin pasar por el carrito de ventas"
-                    >
-                      <DollarSign size={16} />
-                      <span>COBRAR {formatCurrency(order.total, tenant.currencySymbol)}</span>
-                    </button>
+                    <>
+                      {order.status === 'ORDERED' && (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusChange(order, 'PREPARING')}
+                          style={{
+                            minHeight: '44px',
+                            padding: '0.55rem 0.75rem',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            border: '1px solid #fed7aa',
+                            background: '#fff7ed',
+                            color: '#ea580c',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Pasar comanda a En Cocina con 1 toque"
+                        >
+                          <Utensils size={15} />
+                          <span>A Cocina</span>
+                        </button>
+                      )}
+
+                      {order.status === 'PREPARING' && (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusChange(order, 'SERVED')}
+                          style={{
+                            minHeight: '44px',
+                            padding: '0.55rem 0.75rem',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            border: '1px solid #bfdbfe',
+                            background: '#eff6ff',
+                            color: '#2563eb',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Marcar comanda como Servida / Lista"
+                        >
+                          <CheckCircle2 size={15} />
+                          <span>Servir / Listo</span>
+                        </button>
+                      )}
+
+                      {order.status === 'SERVED' && order.deliveryType === 'DELIVERY' && (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusChange(order, 'IN_TRANSIT')}
+                          style={{
+                            minHeight: '44px',
+                            padding: '0.55rem 0.75rem',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            border: '1px solid #bbf7d0',
+                            background: '#f0fdf4',
+                            color: '#16a34a',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Marcar pedido En Camino con repartidor"
+                        >
+                          <Bike size={15} />
+                          <span>En Camino</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setPaymentModalOrder(order)}
+                        style={{
+                          flex: 2,
+                          minHeight: '44px',
+                          padding: '0.55rem',
+                          fontSize: '0.85rem',
+                          fontWeight: 800,
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#059669',
+                          color: '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.35rem',
+                          boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
+                        }}
+                        title="Cobro directo sin pasar por el carrito de ventas"
+                      >
+                        <DollarSign size={16} />
+                        <span>COBRAR {formatCurrency(order.total, tenant.currencySymbol)}</span>
+                      </button>
+                    </>
                   ) : isCompleted ? (
                     <div
                       style={{

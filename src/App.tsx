@@ -240,12 +240,19 @@ export const App: React.FC = () => {
         syncAllCloudData(tenant.id);
       });
 
-      // 3. Periodic cloud polling every 8 seconds for multi-device backup sync
+      // 3. Periodic cloud polling every 60 seconds as fallback sync (pauses when document is hidden)
       const syncInterval = setInterval(() => {
-        if (navigator.onLine) {
+        if (navigator.onLine && !document.hidden) {
           syncAllCloudData(tenant.id);
         }
-      }, 8000);
+      }, 60000);
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+          syncAllCloudData(tenant.id);
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
 
       // 4. Instant Realtime Subscription for Product Stock & Multi-Device Sales
       try {
@@ -308,6 +315,7 @@ export const App: React.FC = () => {
       return () => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
         window.removeEventListener('online', handleOnline);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
         clearInterval(syncInterval);
         if (realtimeChannel) {
           supabase.removeChannel(realtimeChannel);

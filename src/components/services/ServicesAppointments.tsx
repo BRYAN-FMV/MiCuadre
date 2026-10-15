@@ -8,6 +8,7 @@ import {
   MessageSquare, Package
 } from 'lucide-react';
 import { Appointment, Service, Product } from '../../types';
+import { QuickAppointmentPaymentModal } from './QuickAppointmentPaymentModal';
 
 const MONTH_NAMES_ES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -56,11 +57,12 @@ export const ServicesAppointments: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'appointments' | 'services' | 'commissions'>('appointments');
 
   // Appointments View State: 'calendar' (Month Grid) or 'cards' (Daily List)
-  const [appViewMode, setAppViewMode] = useState<'calendar' | 'cards'>('calendar');
+  const [appViewMode, setAppViewMode] = useState<'calendar' | 'cards'>('cards');
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [staffFilterId, setStaffFilterId] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | Appointment['status']>('ALL');
   const [appSearchTerm, setAppSearchTerm] = useState('');
+  const [paymentModalAppointment, setPaymentModalAppointment] = useState<Appointment | null>(null);
 
   // New Appointment Form State
   const [isAppModalOpen, setIsAppModalOpen] = useState(false);
@@ -472,16 +474,24 @@ export const ServicesAppointments: React.FC = () => {
     setAppNotes('');
   };
 
-  // Status Change Handler with POS Redirection for COMPLETED
+  // Compute appointment total monetary value
+  const getAppointmentTotal = (app: Appointment) => {
+    if (app.items && app.items.length > 0) {
+      return app.items.reduce((sum, it) => sum + (it.price || 0), 0);
+    }
+    const s = tenantServices.find(serv => serv.id === app.serviceId);
+    return s?.price || 0;
+  };
+
+  // Status Change Handler with in-place Quick Payment for COMPLETED
   const handleStatusChange = (app: Appointment, newStatus: Appointment['status']) => {
-    if (app.status === 'COMPLETED') {
-      toast.warning('Esta cita ya fue cobrada y completada en Ventas. No se puede modificar.');
+    if (app.status === 'COMPLETED' || app.isPaid) {
+      toast.warning('Esta cita ya fue cobrada y completada. No se puede modificar.');
       return;
     }
 
     if (newStatus === 'COMPLETED') {
-      toast.info(`Redirigiendo a Ventas para cobrar la cita de ${app.customerName} y registrar el ingreso en reportes.`);
-      sendAppointmentToPos(app);
+      setPaymentModalAppointment(app);
       return;
     }
 
@@ -491,7 +501,7 @@ export const ServicesAppointments: React.FC = () => {
 
   // Appointment editing submit (Blocked if COMPLETED)
   const handleOpenEditAppointment = (app: Appointment) => {
-    if (app.status === 'COMPLETED') {
+    if (app.status === 'COMPLETED' || app.isPaid) {
       toast.warning('Esta cita ya fue completada y cobrada. No es posible editarla.');
       return;
     }
@@ -515,15 +525,14 @@ export const ServicesAppointments: React.FC = () => {
     e.preventDefault();
     if (!editingAppointment) return;
 
-    if (editingAppointment.status === 'COMPLETED') {
+    if (editingAppointment.status === 'COMPLETED' || editingAppointment.isPaid) {
       toast.error('Las citas completadas no se pueden modificar');
       setEditingAppointment(null);
       return;
     }
 
     if (editStatus === 'COMPLETED') {
-      toast.info(`Redirigiendo a Ventas para procesar el cobro en caja de ${editingAppointment.customerName}.`);
-      sendAppointmentToPos(editingAppointment);
+      setPaymentModalAppointment(editingAppointment);
       setEditingAppointment(null);
       return;
     }
@@ -1142,7 +1151,7 @@ export const ServicesAppointments: React.FC = () => {
                   }
 
                   const urgency = getAppointmentUrgency(app.scheduledAt, app.status);
-                  const isCompleted = app.status === 'COMPLETED';
+                  const isCompleted = app.status === 'COMPLETED' || app.isPaid;
 
                   return (
                     <div
@@ -1189,7 +1198,7 @@ export const ServicesAppointments: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Quick Status Selector (Triggers POS if set to COMPLETED) */}
+                      {/* Quick Status Selector */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Estado:</label>
                         <select
@@ -1201,7 +1210,7 @@ export const ServicesAppointments: React.FC = () => {
                         >
                           <option value="SCHEDULED">Programada</option>
                           <option value="IN_PROGRESS">En Proceso</option>
-                          <option value="COMPLETED">Completada (Cobrar en Ventas)</option>
+                          <option value="COMPLETED">Completada (Cobrar)</option>
                           <option value="CANCELLED">Cancelada</option>
                         </select>
                       </div>
@@ -1209,17 +1218,47 @@ export const ServicesAppointments: React.FC = () => {
                       {/* Actions */}
                       <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.2rem', alignItems: 'center' }}>
                         {!isCompleted ? (
-                          <button
-                            className="btn btn-primary"
-                            onClick={() => sendAppointmentToPos(app)}
-                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.45rem' }}
-                            title="Enviar a caja para cobrar e incluir en reportes financieros"
-                          >
-                            <ShoppingCart size={14} /> Cobrar en Ventas
-                          </button>
+                          <>
+                            {app.status === 'SCHEDULED' && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => handleStatusChange(app, 'IN_PROGRESS')}
+                                style={{ fontSize: '0.78rem', padding: '0.45rem 0.6rem', fontWeight: 700, color: '#9333ea', borderColor: '#d8b4fe', whiteSpace: 'nowrap' }}
+                                title="Pasar cita a En Proceso"
+                              >
+                                Iniciar Servicio
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setPaymentModalAppointment(app)}
+                              style={{
+                                flex: 1,
+                                fontSize: '0.82rem',
+                                padding: '0.45rem 0.75rem',
+                                fontWeight: 800,
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: '#059669',
+                                color: '#ffffff',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.35rem',
+                                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
+                              }}
+                              title="Cobro directo sin pasar por el carrito de ventas"
+                            >
+                              <DollarSign size={15} />
+                              <span>COBRAR {formatCurrency(getAppointmentTotal(app), tenant.currencySymbol)}</span>
+                            </button>
+                          </>
                         ) : (
                           <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.4rem 0.6rem', borderRadius: '6px', color: '#16a34a', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', justifyContent: 'center' }}>
-                            <CheckCircle size={14} /> Cobrado en Ventas
+                            <CheckCircle size={14} /> Cobrado con Éxito
                           </div>
                         )}
 
@@ -2225,6 +2264,13 @@ export const ServicesAppointments: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* MODAL: Quick Appointment Payment */}
+      <QuickAppointmentPaymentModal
+        appointment={paymentModalAppointment}
+        isOpen={!!paymentModalAppointment}
+        onClose={() => setPaymentModalAppointment(null)}
+      />
 
     </div>
   );

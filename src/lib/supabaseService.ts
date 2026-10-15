@@ -928,7 +928,11 @@ export async function closeCashShiftSupabase(shiftId: string, declaredCash: numb
 /**
  * Fetch sales list for tenant from Supabase
  */
-export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] | null> {
+export async function fetchSalesFromSupabase(
+  tenantId: string,
+  preloadedRanges?: FiscalRange[] | null,
+  preloadedProducts?: Product[] | null
+): Promise<Sale[] | null> {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
   try {
@@ -937,9 +941,10 @@ export async function fetchSalesFromSupabase(tenantId: string): Promise<Sale[] |
         .from('sales')
         .select('*, sale_items(*)')
         .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false }),
-      fetchFiscalRangesFromSupabase(tenantId),
-      fetchProductsFromSupabase(tenantId)
+        .order('created_at', { ascending: false })
+        .limit(150),
+      preloadedRanges !== undefined ? Promise.resolve(preloadedRanges) : fetchFiscalRangesFromSupabase(tenantId),
+      preloadedProducts !== undefined ? Promise.resolve(preloadedProducts) : fetchProductsFromSupabase(tenantId)
     ]);
 
     const data = salesRes.data;
@@ -1082,7 +1087,11 @@ export async function saveCashShiftToSupabase(shift: CashShift) {
 /**
  * Fetch all Cash Shifts for Tenant from Supabase
  */
-export async function fetchShiftsFromSupabase(tenantId: string): Promise<CashShift[] | null> {
+export async function fetchShiftsFromSupabase(
+  tenantId: string,
+  preloadedProfiles?: UserProfile[] | null,
+  preloadedRanges?: FiscalRange[] | null
+): Promise<CashShift[] | null> {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
   try {
@@ -1091,9 +1100,10 @@ export async function fetchShiftsFromSupabase(tenantId: string): Promise<CashShi
         .from('cash_shifts')
         .select('*')
         .eq('tenant_id', tenantId)
-        .order('opened_at', { ascending: false }),
-      fetchProfilesFromSupabase(tenantId),
-      fetchFiscalRangesFromSupabase(tenantId)
+        .order('opened_at', { ascending: false })
+        .limit(50),
+      preloadedProfiles !== undefined ? Promise.resolve(preloadedProfiles) : fetchProfilesFromSupabase(tenantId),
+      preloadedRanges !== undefined ? Promise.resolve(preloadedRanges) : fetchFiscalRangesFromSupabase(tenantId)
     ]);
 
     const data = shiftsRes.data;
@@ -1185,7 +1195,8 @@ export async function fetchCashMovementsFromSupabase(tenantId: string): Promise<
       .from('cash_movements')
       .select('*')
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(150);
 
     if (error || !data) return null;
 
@@ -1245,7 +1256,8 @@ export async function fetchExpensesFromSupabase(tenantId: string): Promise<Expen
       .from('expenses')
       .select('*')
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(150);
 
     if (error || !data) return null;
 
@@ -1531,18 +1543,23 @@ export async function syncAllCloudData(tenantId: string) {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId) || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
 
   try {
-    const [liveProducts, liveSuppliers, liveProfiles, liveSales, liveRanges, liveShifts, liveMovements, liveExpenses, liveMenuItems, liveDrivers, liveFoodOrders] = await Promise.all([
+    // 1. Fetch foundational catalog & reference data in parallel
+    const [liveProducts, liveSuppliers, liveProfiles, liveRanges, liveMovements, liveExpenses, liveMenuItems, liveDrivers, liveFoodOrders] = await Promise.all([
       fetchProductsFromSupabase(tenantId),
       fetchSuppliersFromSupabase(tenantId),
       fetchProfilesFromSupabase(tenantId),
-      fetchSalesFromSupabase(tenantId),
       fetchFiscalRangesFromSupabase(tenantId),
-      fetchShiftsFromSupabase(tenantId),
       fetchCashMovementsFromSupabase(tenantId),
       fetchExpensesFromSupabase(tenantId),
       fetchMenuItemsFromSupabase(tenantId),
       fetchDeliveryDriversFromSupabase(tenantId),
       fetchFoodOrdersFromSupabase(tenantId)
+    ]);
+
+    // 2. Fetch sales and shifts reusing already downloaded products, ranges, and profiles
+    const [liveSales, liveShifts] = await Promise.all([
+      fetchSalesFromSupabase(tenantId, liveRanges, liveProducts),
+      fetchShiftsFromSupabase(tenantId, liveProfiles, liveRanges)
     ]);
 
     useAppStore.setState(state => {
