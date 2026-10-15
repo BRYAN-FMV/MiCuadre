@@ -893,7 +893,7 @@ export const ServicesAppointments: React.FC = () => {
               </div>
 
               {/* Customer Search Bar */}
-              <div style={{ position: 'relative', width: '220px' }}>
+              <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 'min(100%, 160px)', maxWidth: '280px' }}>
                 <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input
                   type="text"
@@ -901,13 +901,13 @@ export const ServicesAppointments: React.FC = () => {
                   placeholder="Buscar Cliente o Teléfono..."
                   value={appSearchTerm}
                   onChange={(e) => setAppSearchTerm(e.target.value)}
-                  style={{ paddingLeft: '2rem', fontSize: '0.8rem', padding: '0.35rem 0.5rem 0.35rem 2rem' }}
+                  style={{ paddingLeft: '2rem', fontSize: '0.8rem', padding: '0.35rem 0.5rem 0.35rem 2rem', width: '100%' }}
                 />
               </div>
             </div>
 
             {/* Right: Month Controls & New Appointment Button */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
               {appViewMode === 'calendar' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <button className="btn btn-secondary" onClick={handlePrevMonth} style={{ padding: '0.35rem 0.5rem' }} title="Mes anterior">
@@ -934,16 +934,17 @@ export const ServicesAppointments: React.FC = () => {
           {/* VIEW MODE 1: Interactive Month Calendar */}
           {appViewMode === 'calendar' && (
             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-              
-              {/* Weekday Header */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#475569' }}>
-                {WEEKDAY_NAMES_ES.map(dayName => (
-                  <div key={dayName} style={{ padding: '0.6rem 0.25rem' }}>{dayName}</div>
-                ))}
-              </div>
+              <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div style={{ minWidth: '580px' }}>
+                  {/* Weekday Header */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#475569' }}>
+                    {WEEKDAY_NAMES_ES.map(dayName => (
+                      <div key={dayName} style={{ padding: '0.6rem 0.25rem' }}>{dayName}</div>
+                    ))}
+                  </div>
 
-              {/* Month Grid Cells */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(110px, auto)', gap: '1px', background: '#e2e8f0' }}>
+                  {/* Month Grid Cells */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(110px, auto)', gap: '1px', background: '#e2e8f0' }}>
                 {daysGrid.map((dayItem, idx) => {
                   // Filter and sort day's appointments: Active first, Completed at bottom
                   const dayApps = sortedAppointments
@@ -1082,13 +1083,15 @@ export const ServicesAppointments: React.FC = () => {
                     </div>
                   );
                 })}
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           {/* VIEW MODE 2: Cards Agenda Grid (Sorted: Active first, Completed at bottom) */}
           {appViewMode === 'cards' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1rem' }}>
               {sortedAppointments.length === 0 ? (
                 <div style={{ gridColumn: '1 / -1', padding: '2.5rem', textAlign: 'center', background: '#ffffff', borderRadius: '12px', border: '1px dashed #cbd5e1', color: '#64748b' }}>
                   No hay citas que coincidan con los filtros. Haz clic en <strong>"Nueva Cita"</strong> para agendar una.
@@ -1216,7 +1219,7 @@ export const ServicesAppointments: React.FC = () => {
                       </div>
 
                       {/* Actions */}
-                      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.2rem', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.2rem', alignItems: 'center' }}>
                         {!isCompleted ? (
                           <>
                             {app.status === 'SCHEDULED' && (
@@ -1224,7 +1227,7 @@ export const ServicesAppointments: React.FC = () => {
                                 type="button"
                                 className="btn btn-secondary"
                                 onClick={() => handleStatusChange(app, 'IN_PROGRESS')}
-                                style={{ fontSize: '0.78rem', padding: '0.45rem 0.6rem', fontWeight: 700, color: '#9333ea', borderColor: '#d8b4fe', whiteSpace: 'nowrap' }}
+                                style={{ fontSize: '0.78rem', minHeight: '40px', padding: '0.45rem 0.65rem', fontWeight: 700, color: '#9333ea', borderColor: '#d8b4fe', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                 title="Pasar cita a En Proceso"
                               >
                                 Iniciar Servicio
@@ -1235,7 +1238,9 @@ export const ServicesAppointments: React.FC = () => {
                               type="button"
                               onClick={() => setPaymentModalAppointment(app)}
                               style={{
-                                flex: 1,
+                                flex: '1 1 130px',
+                                minHeight: '40px',
+                                minWidth: '120px',
                                 fontSize: '0.82rem',
                                 padding: '0.45rem 0.75rem',
                                 fontWeight: 800,

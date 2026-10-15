@@ -242,12 +242,14 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
       }}
     >
       <div
+        className="modal-content"
         style={{
           background: '#ffffff',
           borderRadius: '16px',
           maxWidth: '1060px',
           width: '100%',
-          height: '92vh',
+          maxHeight: 'calc(100dvh - 2rem)',
+          height: 'min(92vh, 880px)',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)',
@@ -306,7 +308,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
         </div>
 
         {/* Modal Content: 2 Columns */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div className="modal-split-grid">
           
           {/* Left Column: Destination & Dish Catalog */}
           <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid #e2e8f0', minHeight: 0, overflowY: 'auto' }}>
@@ -316,7 +318,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
               <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>
                 Tipo de Pedido:
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 100px), 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 <button
                   type="button"
                   onClick={() => setDeliveryType('DINE_IN')}
@@ -419,7 +421,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
               )}
 
               {deliveryType === 'TAKE_OUT' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '0.75rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem' }}>
                       Nombre del Cliente:
@@ -451,7 +453,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
 
               {deliveryType === 'DELIVERY' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '0.75rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem' }}>
                         Cliente:
@@ -588,7 +590,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
               </div>
 
               {/* Dishes Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem', overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 140px), 1fr))', gap: '0.75rem', overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
                 {filteredMenuItems.map(dish => (
                   <div
                     key={dish.id}
@@ -859,12 +861,12 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                   <span>Guardar Comanda & Imprimir Cocina</span>
                 </button>
 
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <button
                     type="button"
                     onClick={() => handleSaveOrder(false, false)}
                     style={{
-                      flex: 1,
+                      flex: '1 1 120px',
                       minHeight: '42px',
                       padding: '0.5rem',
                       fontSize: '0.82rem',
@@ -883,7 +885,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                     type="button"
                     onClick={() => handleSaveOrder(false, true)}
                     style={{
-                      flex: 1.2,
+                      flex: '1.2 1 140px',
                       minHeight: '42px',
                       padding: '0.5rem',
                       fontSize: '0.82rem',

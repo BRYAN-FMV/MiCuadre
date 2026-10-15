@@ -324,7 +324,7 @@ export const FoodOrdersBoard: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
         
         {/* Search */}
-        <div style={{ position: 'relative', minWidth: '280px', flex: 1, maxWidth: '400px' }}>
+        <div style={{ position: 'relative', minWidth: 'min(100%, 220px)', flex: 1, maxWidth: '400px' }}>
           <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
           <input
             type="text"
@@ -429,7 +429,7 @@ export const FoodOrdersBoard: React.FC = () => {
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
           <button
             type="button"
             onClick={() => setIsDriversModalOpen(true)}
@@ -479,7 +479,7 @@ export const FoodOrdersBoard: React.FC = () => {
       </div>
 
       {/* 3. Orders Grid Cards (Direct In-Card Checkout Pattern) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 290px), 1fr))', gap: '1rem' }}>
         {sortedOrders.length === 0 ? (
           <div
             style={{
@@ -711,7 +711,7 @@ export const FoodOrdersBoard: React.FC = () => {
                 </div>
 
                 {/* Primary Card Actions: Direct Checkout vs Paid Indicator */}
-                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.25rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
                   {!isCompleted && !isCancelled ? (
                     <>
                       {order.status === 'ORDERED' && (
@@ -720,6 +720,8 @@ export const FoodOrdersBoard: React.FC = () => {
                           onClick={() => handleStatusChange(order, 'PREPARING')}
                           style={{
                             minHeight: '44px',
+                            minWidth: '105px',
+                            flex: '1 1 105px',
                             padding: '0.55rem 0.75rem',
                             fontSize: '0.82rem',
                             fontWeight: 700,
@@ -730,6 +732,7 @@ export const FoodOrdersBoard: React.FC = () => {
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
+                            justifyContent: 'center',
                             gap: '0.3rem',
                             whiteSpace: 'nowrap'
                           }}
@@ -746,6 +749,8 @@ export const FoodOrdersBoard: React.FC = () => {
                           onClick={() => handleStatusChange(order, 'SERVED')}
                           style={{
                             minHeight: '44px',
+                            minWidth: '115px',
+                            flex: '1 1 115px',
                             padding: '0.55rem 0.75rem',
                             fontSize: '0.82rem',
                             fontWeight: 700,
@@ -756,6 +761,7 @@ export const FoodOrdersBoard: React.FC = () => {
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
+                            justifyContent: 'center',
                             gap: '0.3rem',
                             whiteSpace: 'nowrap'
                           }}
@@ -772,6 +778,8 @@ export const FoodOrdersBoard: React.FC = () => {
                           onClick={() => handleStatusChange(order, 'IN_TRANSIT')}
                           style={{
                             minHeight: '44px',
+                            minWidth: '110px',
+                            flex: '1 1 110px',
                             padding: '0.55rem 0.75rem',
                             fontSize: '0.82rem',
                             fontWeight: 700,
@@ -782,6 +790,7 @@ export const FoodOrdersBoard: React.FC = () => {
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
+                            justifyContent: 'center',
                             gap: '0.3rem',
                             whiteSpace: 'nowrap'
                           }}
@@ -796,8 +805,9 @@ export const FoodOrdersBoard: React.FC = () => {
                         type="button"
                         onClick={() => setPaymentModalOrder(order)}
                         style={{
-                          flex: 2,
+                          flex: '2 1 130px',
                           minHeight: '44px',
+                          minWidth: '130px',
                           padding: '0.55rem',
                           fontSize: '0.85rem',
                           fontWeight: 800,

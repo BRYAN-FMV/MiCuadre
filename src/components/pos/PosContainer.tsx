@@ -463,8 +463,8 @@ export const PosContainer: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', overflow: 'hidden' }}>
 
         {/* Search Header Bar */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem 1rem', display: 'flex', gap: '0.75rem', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem 1rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 'min(100%, 200px)' }}>
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input
               id="pos-search-input"
@@ -479,7 +479,7 @@ export const PosContainer: React.FC = () => {
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
             {heldOrders.length > 0 && (
               <button
                 className="btn btn-secondary"
@@ -641,7 +641,7 @@ export const PosContainer: React.FC = () => {
             )}
 
             {/* Product Cards Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
+            <div className="pos-products-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 150px), 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
               {filteredProducts.map((product: Product) => {
                 const hasTiers = product.tiers && product.tiers.length > 0;
                 const isOutOfStock = product.currentStock <= 0;
@@ -737,7 +737,7 @@ export const PosContainer: React.FC = () => {
           </>
         ) : (
           /* Service Cards Grid for Walk-in clients */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
+          <div className="pos-products-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 150px), 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
             {filteredServices.length === 0 ? (
               <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
                 <Scissors size={40} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
@@ -1367,7 +1367,7 @@ export const PosContainer: React.FC = () => {
 
             <div className="form-group">
               <label className="form-label">Método de Pago</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.35rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 68px), 1fr))', gap: '0.35rem' }}>
                 {(['CASH', 'CARD', 'TRANSFER', 'MIXED', 'CREDIT'] as const).map(method => (
                   <button
                     key={method}
@@ -1450,7 +1450,7 @@ export const PosContainer: React.FC = () => {
                 />
 
                 {/* Quick Cash Tender Buttons */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.35rem', marginTop: '0.4rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 54px), 1fr))', gap: '0.35rem', marginTop: '0.4rem' }}>
                   <button
                     type="button"
                     className="btn btn-secondary"

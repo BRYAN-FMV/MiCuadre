@@ -567,15 +567,56 @@ h1, h2, h3, h4, h5, h6 {
 
   .pos-layout-grid {
     grid-template-columns: 1fr !important;
-    height: calc(100vh - 54px) !important;
-    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow-y: visible !important;
     padding: 0.65rem !important;
-    gap: 0.85rem !important;
+    gap: 1rem !important;
   }
 
   .modal-content {
     padding: 1.15rem !important;
-    max-width: 95vw !important;
+    max-width: min(95vw, 550px) !important;
+    max-height: calc(100dvh - 2rem) !important;
+  }
+}
+
+/* Modal split columns on desktop, stacked on mobile */
+.modal-split-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .modal-split-grid {
+    grid-template-columns: 1fr !important;
+    overflow-y: auto !important;
+  }
+}
+
+.pos-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: 0.75rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+@media (max-width: 639px) {
+  .pos-products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 135px), 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+
+  .pos-layout-grid {
+    padding-bottom: 5.5rem !important;
+  }
+
+  .view-container {
+    padding-bottom: 5.5rem !important;
   }
 }
 

@@ -135,13 +135,15 @@ export const QuickOrderPaymentModal: React.FC<QuickOrderPaymentModalProps> = ({
       }}
     >
       <div
+        className="modal-content"
         style={{
           background: '#ffffff',
           borderRadius: '16px',
-          maxWidth: '520px',
+          maxWidth: 'min(520px, calc(100vw - 1.5rem))',
+          maxHeight: 'min(92vh, 750px)',
           width: '100%',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          overflow: 'hidden',
+          overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column'
         }}
@@ -238,7 +240,7 @@ export const QuickOrderPaymentModal: React.FC<QuickOrderPaymentModalProps> = ({
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.5rem' }}>
               Forma de Pago
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 90px), 1fr))', gap: '0.5rem' }}>
               <button
                 type="button"
                 onClick={() => setPaymentMethod('CASH')}
