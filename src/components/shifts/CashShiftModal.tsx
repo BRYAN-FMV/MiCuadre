@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { formatCurrency } from '../../lib/monetary';
 import { toast } from 'sonner';
+import { printZReport } from '../../lib/thermalPrint';
 import { Lock, Unlock, CheckCircle, Printer, Info, LogOut, ArrowUpRight, ArrowDownLeft, DollarSign } from 'lucide-react';
 import { Sale } from '../../types';
 
@@ -536,7 +537,18 @@ export const CashShiftModal: React.FC = () => {
                 <LogOut size={16} />
                 <span>Finalizar & Salir</span>
               </button>
-              <button className="btn btn-primary" onClick={() => { window.print(); handleFinishZReportAndLogout(); }} style={{ flex: 1 }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  printZReport({
+                    tenant,
+                    cajaName: activeShift?.cajaName,
+                    zReport: zReportData
+                  });
+                  handleFinishZReportAndLogout();
+                }}
+                style={{ flex: 1 }}
+              >
                 <Printer size={16} />
                 <span>Imprimir & Salir</span>
               </button>

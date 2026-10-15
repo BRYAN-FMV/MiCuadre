@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Appointment, Sale } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { formatCurrency } from '../../lib/monetary';
-import { generateEscPosReceipt } from '../../lib/escPos';
+import { printSaleReceipt } from '../../lib/thermalPrint';
 import { X, DollarSign, CreditCard, Send, CheckCircle2, Printer, Scissors, Clock, User, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -89,15 +89,7 @@ export const QuickAppointmentPaymentModal: React.FC<QuickAppointmentPaymentModal
 
   const handlePrintSaleReceipt = (sale: Sale) => {
     try {
-      const escPosBuffer = generateEscPosReceipt(sale, tenant, 'ORIGINAL');
-      const blob = new Blob([escPosBuffer], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const printWindow = window.open(url, '_blank');
-      if (printWindow) {
-        printWindow.focus();
-      } else {
-        window.print();
-      }
+      printSaleReceipt(sale, tenant, 'ORIGINAL');
     } catch (err) {
       console.warn('Error al imprimir recibo térmico de servicio:', err);
     }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { FoodOrder, FoodOrderItem, FoodOrderDeliveryType, MenuItem, MenuItemExtra } from '../../types';
 import { formatCurrency } from '../../lib/monetary';
-import { generateKitchenEscPosTicket } from '../../lib/escPos';
+import { printKitchenTicket } from '../../lib/thermalPrint';
 import {
   X,
   Plus,
@@ -155,7 +155,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
     notes?: string;
   }) => {
     try {
-      const ticketBytes = generateKitchenEscPosTicket({
+      printKitchenTicket({
         orderNumber: orderData.orderNumber,
         tableNumber: orderData.tableNumber,
         deliveryType: orderData.deliveryType,
@@ -168,13 +168,6 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
           extras: (it.selectedExtras || []).map(e => ({ name: e.name, price: e.price }))
         }))
       });
-
-      const blob = new Blob([ticketBytes], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const printWin = window.open(url, '_blank');
-      if (printWin) {
-        printWin.focus();
-      }
     } catch (err) {
       console.warn('Error al imprimir ticket de cocina:', err);
     }

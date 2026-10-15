@@ -7,6 +7,7 @@ import {
   Wallet, FileText, ArrowUpRight, ArrowDownLeft, X, Edit2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { printPaymentReceipt } from '../../lib/thermalPrint';
 
 export const AccountsView: React.FC = () => {
   const tenant = useAppStore(state => state.tenant);
@@ -886,7 +887,21 @@ export const AccountsView: React.FC = () => {
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => window.print()}
+                onClick={() => {
+                  printPaymentReceipt({
+                    tenant,
+                    payment: {
+                      id: selectedPaymentForReceipt.payment.id,
+                      customerName: selectedPaymentForReceipt.payment.customerName || selectedPaymentForReceipt.customer?.name || 'Cliente',
+                      amount: selectedPaymentForReceipt.payment.amount,
+                      paymentMethod: selectedPaymentForReceipt.payment.paymentMethod === 'CASH' ? 'Efectivo' : selectedPaymentForReceipt.payment.paymentMethod === 'CARD' ? 'Tarjeta' : 'Transferencia',
+                      createdAt: selectedPaymentForReceipt.payment.createdAt,
+                      createdBy: selectedPaymentForReceipt.payment.createdBy
+                    },
+                    prevBalance: selectedPaymentForReceipt.prevBalance,
+                    newBalance: selectedPaymentForReceipt.newBalance
+                  });
+                }}
                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.82rem' }}
               >
                 <Printer size={16} />

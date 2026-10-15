@@ -8,7 +8,7 @@ import {
   RotateCcw, Ban, Wallet
 } from 'lucide-react';
 import { Sale, Product, CartLine, Expense } from '../../types';
-import { generateEscPosReceipt } from '../../lib/escPos';
+import { printSaleReceipt, printZReport } from '../../lib/thermalPrint';
 import { formatCurrency } from '../../lib/monetary';
 import {
   fetchSalesFromSupabase,
@@ -461,15 +461,10 @@ export const ReportsView: React.FC = () => {
 
   // Thermal Print Handler
   const handlePrintReceipt = (sale: Sale, copyType: 'ORIGINAL' | 'COPIA') => {
-    const escPosBuffer = generateEscPosReceipt(sale, tenant, copyType);
-
-    const blob = new Blob([escPosBuffer], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) {
-      win.focus();
-    } else {
-      window.print();
+    try {
+      printSaleReceipt(sale, tenant, copyType);
+    } catch (err) {
+      console.warn('Error al imprimir recibo:', err);
     }
   };
 
@@ -2134,7 +2129,24 @@ export const ReportsView: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
                 <button
                   className="btn btn-primary"
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    printZReport({
+                      tenant,
+                      cajaName: selectedShiftDetail.cajaName,
+                      zReport: {
+                        openingAmount: selectedShiftDetail.openingAmount || 0,
+                        totalCashSales: selectedShiftDetail.cashSales || 0,
+                        totalCardSales: selectedShiftDetail.cardSales || 0,
+                        totalTransferSales: selectedShiftDetail.transferSales || 0,
+                        totalCreditSales: selectedShiftDetail.creditSales || 0,
+                        totalIngresos: selectedShiftDetail.cashInflow || 0,
+                        totalEgresos: selectedShiftDetail.cashOutflow || 0,
+                        closingSystem: selectedShiftDetail.expectedCash || 0,
+                        closingDeclared: selectedShiftDetail.actualCash || 0,
+                        difference: selectedShiftDetail.difference || 0
+                      }
+                    });
+                  }}
                   style={{ padding: '0.6rem 1rem', fontSize: '0.82rem' }}
                 >
                   <Printer size={15} />

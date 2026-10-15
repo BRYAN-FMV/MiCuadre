@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAppStore, HeldOrder, hasUserPermission } from '../../store/useAppStore';
 import { formatCurrency, calculateCartTotals } from '../../lib/monetary';
-import { generateEscPosReceipt } from '../../lib/escPos';
+import { printSaleReceipt } from '../../lib/thermalPrint';
 import { generateUUID } from '../../lib/security';
 import { toast } from 'sonner';
 import {
@@ -449,8 +449,7 @@ export const PosContainer: React.FC = () => {
   const handlePrintEscPos = (copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL') => {
     if (!lastCompletedSale) return;
     try {
-      generateEscPosReceipt(lastCompletedSale, tenant, copyType);
-      window.print();
+      printSaleReceipt(lastCompletedSale, tenant, copyType);
     } catch (err) {
       toast.error('Error al imprimir ticket');
     }

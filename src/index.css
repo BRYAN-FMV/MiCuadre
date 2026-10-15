@@ -830,11 +830,17 @@ select.input-control, input.input-control, select, input {
   #printable-ticket,
   #printable-ticket *,
   .printable-receipt,
-  .printable-receipt * {
+  .printable-receipt *,
+  #thermal-receipt-print,
+  #thermal-receipt-print *,
+  .printable-z-report,
+  .printable-z-report * {
     visibility: visible !important;
   }
   #printable-ticket,
-  .printable-receipt {
+  .printable-receipt,
+  #thermal-receipt-print,
+  .printable-z-report {
     position: absolute !important;
     left: 4mm !important;
     top: 0 !important;

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { FoodOrder, FoodOrderStatus, Sale } from '../../types';
 import { formatCurrency } from '../../lib/monetary';
-import { generateKitchenEscPosTicket, generateEscPosReceipt } from '../../lib/escPos';
+import { printKitchenTicket, printSaleReceipt } from '../../lib/thermalPrint';
 import { QuickOrderPaymentModal } from './QuickOrderPaymentModal';
 import { NewFoodOrderModal } from './NewFoodOrderModal';
 import { DriverSettlementModal } from './DriverSettlementModal';
@@ -177,7 +177,7 @@ export const FoodOrdersBoard: React.FC = () => {
 
   const handlePrintKitchenTicket = (order: FoodOrder) => {
     try {
-      const bytes = generateKitchenEscPosTicket({
+      printKitchenTicket({
         orderNumber: order.orderNumber,
         tableNumber: order.tableNumber,
         deliveryType: order.deliveryType,
@@ -189,12 +189,8 @@ export const FoodOrdersBoard: React.FC = () => {
           extras: (it.selectedExtras || []).map(e => ({ name: e.name, price: e.price }))
         }))
       });
-      const blob = new Blob([bytes], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const printWin = window.open(url, '_blank');
-      if (printWin) printWin.focus();
     } catch (err) {
-      console.warn('Error al imprimir ticket:', err);
+      console.warn('Error al imprimir ticket de cocina:', err);
     }
   };
 
@@ -209,11 +205,7 @@ export const FoodOrdersBoard: React.FC = () => {
       return;
     }
     try {
-      const bytes = generateEscPosReceipt(sale, tenant, 'ORIGINAL');
-      const blob = new Blob([bytes], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const printWin = window.open(url, '_blank');
-      if (printWin) printWin.focus();
+      printSaleReceipt(sale, tenant, 'ORIGINAL');
     } catch (err) {
       console.warn('Error al reimprimir recibo:', err);
     }
