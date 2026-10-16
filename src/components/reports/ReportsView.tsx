@@ -25,6 +25,7 @@ export const ReportsView: React.FC = () => {
   const sales = useAppStore(state => state.sales);
   const products = useAppStore(state => state.products);
   const allMenuItems = useAppStore(state => state.menuItems) || [];
+  const foodOrders = useAppStore(state => state.foodOrders) || [];
   const expenses = useAppStore(state => state.expenses);
   const tenant = useAppStore(state => state.tenant);
   const shiftHistory = useAppStore(state => state.shiftHistory);
@@ -43,6 +44,98 @@ export const ReportsView: React.FC = () => {
 
   const [mainSubTab, setMainSubTab] = useState<'sales' | 'leaderboard' | 'inventory_capital' | 'loyalty' | 'shifts'>('sales');
   const [rankingTypeFilter, setRankingTypeFilter] = useState<'ALL' | 'PRODUCTS' | 'FOOD'>('ALL');
+
+  // Helper to resolve rich item names for any sale (including food orders where Supabase lacks product_name)
+  const getSaleDisplayItems = (sale: Sale): CartLine[] => {
+    // 1. If sale already has rich names (not generic 'Artículo POS'), use them!
+    const hasRealNames = sale.items && sale.items.length > 0 && sale.items.some(it => it.name && it.name !== 'Artículo POS');
+    if (hasRealNames && sale.items) {
+      return sale.items;
+    }
+
+    // 2. Check if linked to a food order in store
+    let linkedOrder = foodOrders.find(fo => fo.saleId === sale.id);
+    if (!linkedOrder && foodOrders.length > 0) {
+      linkedOrder = foodOrders.find(fo =>
+        Math.abs(fo.total - sale.total) < 0.01 &&
+        (
+          (fo.customerName && sale.customerName && fo.customerName.toLowerCase() === sale.customerName.toLowerCase()) ||
+          (fo.tableNumber && sale.customerName && sale.customerName.toLowerCase().includes(fo.tableNumber.toLowerCase())) ||
+          (Math.abs(new Date(fo.createdAt).getTime() - new Date(sale.createdAt).getTime()) < 1000 * 60 * 45)
+        )
+      );
+    }
+
+    if (linkedOrder && linkedOrder.items && linkedOrder.items.length > 0) {
+      const items: CartLine[] = linkedOrder.items.map(it => {
+        const notesStr = [
+          ...(it.selectedExtras || []).map((e: any) => `+ ${e.name} (L. ${e.price})`),
+          it.notes ? `Nota: ${it.notes}` : ''
+        ].filter(Boolean).join(' | ');
+
+        const unitP = Number(it.unitPrice || 0);
+        const qty = Number(it.quantity || 1);
+        const subT = Number(it.subtotal || unitP * qty);
+
+        return {
+          productId: it.productId,
+          menuItemId: it.menuItemId,
+          name: it.name,
+          sku: it.menuItemId || it.productId || 'FOOD',
+          quantity: qty,
+          unitPrice: unitP,
+          originalUnitPrice: unitP,
+          discountAmount: 0,
+          taxClassification: 'GRAVADO_15',
+          subtotal: subT,
+          taxAmount: 0,
+          total: subT,
+          notes: notesStr || undefined
+        };
+      });
+
+      if (linkedOrder.deliveryFee && linkedOrder.deliveryFee > 0) {
+        items.push({
+          name: 'Servicio a Domicilio',
+          sku: 'DELIVERY',
+          quantity: 1,
+          unitPrice: linkedOrder.deliveryFee,
+          originalUnitPrice: linkedOrder.deliveryFee,
+          discountAmount: 0,
+          taxClassification: 'EXENTO',
+          subtotal: linkedOrder.deliveryFee,
+          taxAmount: 0,
+          total: linkedOrder.deliveryFee
+        });
+      }
+
+      return items;
+    }
+
+    // 3. Fallback: match by unit price with menu items or products if name is 'Artículo POS'
+    if (sale.items && sale.items.length > 0) {
+      return sale.items.map(it => {
+        if (it.name && it.name !== 'Artículo POS') return it;
+        if (it.productId) {
+          const prod = products.find(p => p.id === it.productId);
+          if (prod) return { ...it, name: prod.name, sku: it.sku || prod.sku };
+          const menuMatch = menuItems.find(m => m.id === it.productId);
+          if (menuMatch) return { ...it, name: menuMatch.name, sku: menuMatch.category || 'FOOD' };
+        }
+        if (it.sku) {
+          const menuBySku = menuItems.find(m => m.id === it.sku);
+          if (menuBySku) return { ...it, name: menuBySku.name, sku: menuBySku.category || 'FOOD' };
+        }
+        const matchesPrice = menuItems.filter(m => Math.abs(m.price - it.unitPrice) < 0.01);
+        if (matchesPrice.length > 0) {
+          return { ...it, name: matchesPrice[0].name, sku: matchesPrice[0].category || 'FOOD' };
+        }
+        return it;
+      });
+    }
+
+    return sale.items || [];
+  };
 
   const tenantShifts = [
     ...(activeShift && activeShift.tenantId === tenant.id && activeShift.status === 'CLOSED' ? [activeShift] : []),
@@ -111,8 +204,9 @@ export const ReportsView: React.FC = () => {
     setSaleToRefund(sale);
     setRefundReason('');
     setRefundMethod('CASH');
+    const displayItems = getSaleDisplayItems(sale);
     setRefundItemsState(
-      (sale.items || []).map(it => ({
+      displayItems.map(it => ({
         productId: it.productId,
         productName: it.name,
         quantity: it.quantity,
@@ -172,9 +266,24 @@ export const ReportsView: React.FC = () => {
       fetchSalesFromSupabase(tenant.id).then(liveSales => {
         if (liveSales && liveSales.length > 0) {
           useAppStore.setState(state => {
+            const localSalesMap = new Map((state.sales || []).map(s => [s.id, s]));
+            const mergedLiveSales = liveSales.map(ls => {
+              const local = localSalesMap.get(ls.id);
+              if (local && local.items && local.items.length > 0) {
+                const hasLocalRealNames = local.items.some(i => i.name && i.name !== 'Artículo POS');
+                const liveHasOnlyGeneric = !ls.items || ls.items.every(i => !i.name || i.name === 'Artículo POS');
+                if (hasLocalRealNames && liveHasOnlyGeneric) {
+                  return {
+                    ...ls,
+                    items: local.items
+                  };
+                }
+              }
+              return ls;
+            });
             const liveIds = new Set(liveSales.map(ls => ls.id));
             const localOnly = (state.sales || []).filter(s => !liveIds.has(s.id));
-            return { sales: [...liveSales, ...localOnly] };
+            return { sales: [...mergedLiveSales, ...localOnly] };
           });
         }
       });
@@ -229,7 +338,8 @@ export const ReportsView: React.FC = () => {
         const matchDoc = s.documentNumber.toLowerCase().includes(query);
         const matchName = s.customerName.toLowerCase().includes(query);
         const matchRtn = s.customerRtn ? s.customerRtn.toLowerCase().includes(query) : false;
-        const matchItems = s.items?.some(i => i.name.toLowerCase().includes(query) || i.sku.toLowerCase().includes(query)) || false;
+        const displayItems = getSaleDisplayItems(s);
+        const matchItems = displayItems.some(i => i.name.toLowerCase().includes(query) || (i.sku && i.sku.toLowerCase().includes(query)));
         matchesSearch = matchDoc || matchName || matchRtn || matchItems;
       }
 
@@ -282,7 +392,8 @@ export const ReportsView: React.FC = () => {
   let totalDiscounts = 0;
   validSales.forEach(s => {
     totalDiscounts += (s.discountAmount || 0) + (s.loyaltyDiscountAmount || 0);
-    s.items?.forEach(line => {
+    const saleItems = getSaleDisplayItems(s);
+    saleItems.forEach(line => {
       if (line.productId) {
         const prod = products.find(p => p.id === line.productId);
         if (prod) {
@@ -323,7 +434,8 @@ export const ReportsView: React.FC = () => {
   const soldItemsMap: Record<string, SoldItemRecord> = {};
 
   validSales.forEach(s => {
-    s.items?.forEach(line => {
+    const saleItems = getSaleDisplayItems(s);
+    saleItems.forEach(line => {
       // Ignore delivery fees in products ranking
       if (line.sku === 'DELIVERY' || line.name === 'Servicio a Domicilio') {
         return;
@@ -452,7 +564,7 @@ export const ReportsView: React.FC = () => {
   }> = {};
 
   validSales.forEach(s => {
-    s.items?.forEach(item => {
+    getSaleDisplayItems(s).forEach(item => {
       let staffId = item.staffId || '';
       let staffName = item.staffName || '';
 
@@ -543,7 +655,11 @@ export const ReportsView: React.FC = () => {
   // Thermal Print Handler
   const handlePrintReceipt = (sale: Sale, copyType: 'ORIGINAL' | 'COPIA') => {
     try {
-      printSaleReceipt(sale, tenant, copyType);
+      const enrichedSale: Sale = {
+        ...sale,
+        items: getSaleDisplayItems(sale)
+      };
+      printSaleReceipt(enrichedSale, tenant, copyType);
     } catch (err) {
       console.warn('Error al imprimir recibo:', err);
     }
@@ -561,7 +677,20 @@ export const ReportsView: React.FC = () => {
 
       useAppStore.setState(s => {
         const salesMap = new Map((s.sales || []).map(item => [item.id, item]));
-        if (liveSales) liveSales.forEach(ls => salesMap.set(ls.id, ls));
+        if (liveSales) {
+          liveSales.forEach(ls => {
+            const existing = salesMap.get(ls.id);
+            if (existing && existing.items && existing.items.length > 0) {
+              const hasLocalRealNames = existing.items.some(i => i.name && i.name !== 'Artículo POS');
+              const liveHasOnlyGeneric = !ls.items || ls.items.every(i => !i.name || i.name === 'Artículo POS');
+              if (hasLocalRealNames && liveHasOnlyGeneric) {
+                salesMap.set(ls.id, { ...ls, items: existing.items });
+                return;
+              }
+            }
+            salesMap.set(ls.id, ls);
+          });
+        }
 
         const shiftsMap = new Map((s.shiftHistory || []).map(item => [item.id, item]));
         if (liveShifts) liveShifts.forEach(ls => shiftsMap.set(ls.id, ls));
@@ -1156,7 +1285,8 @@ export const ReportsView: React.FC = () => {
                     </tr>
                   ) : (
                     filteredSales.map((s: Sale) => {
-                      const itemCount = s.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
+                      const displayItems = getSaleDisplayItems(s);
+                      const itemCount = displayItems.reduce((acc, item) => acc + item.quantity, 0);
                       const totalTaxSale = (s.tax15 || 0) + (s.tax18 || 0);
                       const isFiscalDoc = Boolean(s.isFiscal || s.cai);
                       const isInactiveSale = s.status === 'VOIDED' || s.status === 'REFUNDED';
@@ -1908,11 +2038,16 @@ export const ReportsView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedSaleDetail.items?.map((item: CartLine, idx: number) => (
+                    {getSaleDisplayItems(selectedSaleDetail).map((item: CartLine, idx: number) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '0.5rem', fontWeight: 600, color: '#0f172a' }}>
                           {item.name}
-                          <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>SKU: {item.sku}</div>
+                          {item.notes && (
+                            <div style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 500, marginTop: '2px' }}>
+                              {item.notes}
+                            </div>
+                          )}
+                          {item.sku && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>SKU: {item.sku}</div>}
                         </td>
                         <td style={{ padding: '0.5rem', textAlign: 'center', fontWeight: 700 }}>{item.quantity}</td>
                         <td style={{ padding: '0.5rem', textAlign: 'right' }}>{tenant.currencySymbol} {item.unitPrice.toFixed(2)}</td>
@@ -2046,7 +2181,7 @@ export const ReportsView: React.FC = () => {
               <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', color: '#475569' }}>
                 <p style={{ margin: 0, fontWeight: 600, color: '#0f172a' }}>Efectos operativos de la anulacion:</p>
                 <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0, lineHeight: 1.5 }}>
-                  <li>El stock vendido ({saleToVoid.items?.reduce((a, b) => a + b.quantity, 0) || 0} unidades) se reintegrara al inventario vendible.</li>
+                  <li>El stock vendido ({getSaleDisplayItems(saleToVoid).reduce((a, b) => a + b.quantity, 0)} unidades) se reintegrara al inventario vendible.</li>
                   <li>Si se cobro en efectivo y hay turno activo, se generara una SALIDA de caja de {formatCurrency(saleToVoid.total, tenant.currencySymbol)} para que el Arqueo Z cuadre con la gaveta fisica.</li>
                 </ul>
               </div>

@@ -212,7 +212,53 @@ export const FoodOrdersBoard: React.FC = () => {
       return;
     }
     try {
-      printSaleReceipt(sale, tenant, 'ORIGINAL');
+      let enrichedItems = sale.items || [];
+      const hasGenericNames = !sale.items || sale.items.length === 0 || sale.items.every(it => !it.name || it.name === 'Artículo POS');
+      if (hasGenericNames && order.items && order.items.length > 0) {
+        enrichedItems = order.items.map(it => {
+          const notesStr = [
+            ...(it.selectedExtras || []).map((e: any) => `+ ${e.name} (L. ${e.price})`),
+            it.notes ? `Nota: ${it.notes}` : ''
+          ].filter(Boolean).join(' | ');
+
+          const unitP = Number(it.unitPrice || 0);
+          const qty = Number(it.quantity || 1);
+          const subT = Number(it.subtotal || unitP * qty);
+
+          return {
+            productId: it.productId,
+            menuItemId: it.menuItemId,
+            name: it.name,
+            sku: it.menuItemId || it.productId || 'FOOD',
+            quantity: qty,
+            unitPrice: unitP,
+            originalUnitPrice: unitP,
+            discountAmount: 0,
+            taxClassification: 'GRAVADO_15',
+            subtotal: subT,
+            taxAmount: 0,
+            total: subT,
+            notes: notesStr || undefined
+          };
+        });
+
+        if (order.deliveryFee && order.deliveryFee > 0) {
+          enrichedItems.push({
+            name: 'Servicio a Domicilio',
+            sku: 'DELIVERY',
+            quantity: 1,
+            unitPrice: order.deliveryFee,
+            originalUnitPrice: order.deliveryFee,
+            discountAmount: 0,
+            taxClassification: 'EXENTO',
+            subtotal: order.deliveryFee,
+            taxAmount: 0,
+            total: order.deliveryFee
+          });
+        }
+      }
+
+      printSaleReceipt({ ...sale, items: enrichedItems }, tenant, 'ORIGINAL');
     } catch (err) {
       console.warn('Error al reimprimir recibo:', err);
     }

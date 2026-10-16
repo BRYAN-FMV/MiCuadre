@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Product, Sale, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, UserPermissions, MenuItem, DeliveryDriver, FoodOrder } from '../types';
+import { Product, Sale, CartLine, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, UserPermissions, MenuItem, DeliveryDriver, FoodOrder } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
 import { useAppStore } from '../store/useAppStore';
@@ -936,7 +936,7 @@ export async function fetchSalesFromSupabase(
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
   try {
-    const [salesRes, ranges, products] = await Promise.all([
+    const [salesRes, ranges, products, foodOrdersRes, menuItemsRes] = await Promise.all([
       supabase
         .from('sales')
         .select('*, sale_items(*)')
@@ -944,7 +944,17 @@ export async function fetchSalesFromSupabase(
         .order('created_at', { ascending: false })
         .limit(150),
       preloadedRanges !== undefined ? Promise.resolve(preloadedRanges) : fetchFiscalRangesFromSupabase(tenantId),
-      preloadedProducts !== undefined ? Promise.resolve(preloadedProducts) : fetchProductsFromSupabase(tenantId)
+      preloadedProducts !== undefined ? Promise.resolve(preloadedProducts) : fetchProductsFromSupabase(tenantId),
+      supabase
+        .from('food_orders')
+        .select('id, sale_id, items, delivery_fee, total, customer_name, table_number, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(150),
+      supabase
+        .from('menu_items')
+        .select('id, name, price')
+        .eq('tenant_id', tenantId)
     ]);
 
     const data = salesRes.data;
@@ -953,35 +963,76 @@ export async function fetchSalesFromSupabase(
     const caiRangeMap = new Map((ranges || []).map(r => [r.cai, r.name]));
     const productMap = new Map((products || []).map(p => [p.id, p.name]));
     const productSkuMap = new Map((products || []).map(p => [p.id, p.sku]));
+    const menuItemMap = new Map(((menuItemsRes.data as any[]) || []).map(m => [m.id, m.name]));
     const defaultCajaName = (ranges && ranges.length > 0 && ranges[0].name) ? ranges[0].name : 'Caja 1 - Principal';
 
-    return data.map((s: any) => ({
-      id: s.id,
-      tenantId: s.tenant_id,
-      cashShiftId: s.cash_shift_id,
-      documentNumber: s.document_number,
-      isFiscal: s.is_fiscal,
-      cai: s.cai,
-      caiDeadline: s.cai_deadline,
-      caiRangeStart: s.cai_range_start,
-      caiRangeEnd: s.cai_range_end,
-      fiscalRangeId: s.fiscal_range_id,
-      cajaName: s.caja_name || (s.cai && caiRangeMap.get(s.cai)) || defaultCajaName,
-      customerId: s.customer_id,
-      customerName: s.customer_name || 'Consumidor Final',
-      customerRtn: s.customer_rtn,
-      subtotal: Number(s.subtotal),
-      discountAmount: Number(s.discount_amount),
-      exemptAmount: Number(s.exempt_amount),
-      exoneratedAmount: Number(s.exonerated_amount),
-      taxable15: Number(s.taxable_15),
-      tax15: Number(s.tax_15),
-      taxable18: Number(s.taxable_18),
-      tax18: Number(s.tax_18),
-      total: Number(s.total),
-      paymentMethod: s.payment_method,
-      createdAt: s.created_at,
-      items: (() => {
+    // Map sales to their corresponding food order to restore dish names
+    const foodOrderMap = new Map<string, any>();
+    const foodOrdersList = (foodOrdersRes.data as any[]) || [];
+    foodOrdersList.forEach(fo => {
+      if (fo.sale_id) {
+        foodOrderMap.set(fo.sale_id, fo);
+      }
+    });
+
+    return data.map((s: any) => {
+      let linkedOrder = foodOrderMap.get(s.id);
+      if (!linkedOrder && foodOrdersList.length > 0) {
+        linkedOrder = foodOrdersList.find((fo: any) =>
+          Math.abs(Number(fo.total || 0) - Number(s.total || 0)) < 0.01 &&
+          (
+            (fo.customer_name && s.customer_name && fo.customer_name.toLowerCase() === s.customer_name.toLowerCase()) ||
+            (fo.table_number && s.customer_name && s.customer_name.toLowerCase().includes(fo.table_number.toLowerCase())) ||
+            (Math.abs(new Date(fo.created_at).getTime() - new Date(s.created_at).getTime()) < 1000 * 60 * 45)
+          )
+        );
+      }
+      let items: CartLine[] = [];
+
+      if (linkedOrder && Array.isArray(linkedOrder.items) && linkedOrder.items.length > 0) {
+        items = linkedOrder.items.map((it: any) => {
+          const notesStr = [
+            ...(it.selectedExtras || []).map((e: any) => `+ ${e.name} (L. ${e.price})`),
+            it.notes ? `Nota: ${it.notes}` : ''
+          ].filter(Boolean).join(' | ');
+
+          const unitP = Number(it.unitPrice || it.unit_price || 0);
+          const qty = Number(it.quantity || 1);
+          const subT = Number(it.subtotal || unitP * qty);
+
+          return {
+            productId: it.productId || it.product_id,
+            menuItemId: it.menuItemId || it.menu_item_id,
+            name: it.name || menuItemMap.get(it.menuItemId || it.menu_item_id) || 'Plato de Menú',
+            sku: it.menuItemId || it.productId || 'FOOD',
+            quantity: qty,
+            unitPrice: unitP,
+            originalUnitPrice: unitP,
+            discountAmount: 0,
+            taxClassification: 'GRAVADO_15',
+            subtotal: subT,
+            taxAmount: 0,
+            total: subT,
+            notes: notesStr || undefined
+          };
+        });
+
+        const deliveryFee = Number(linkedOrder.deliveryFee || linkedOrder.delivery_fee || 0);
+        if (deliveryFee > 0) {
+          items.push({
+            name: 'Servicio a Domicilio',
+            sku: 'DELIVERY',
+            quantity: 1,
+            unitPrice: deliveryFee,
+            originalUnitPrice: deliveryFee,
+            discountAmount: 0,
+            taxClassification: 'EXENTO',
+            subtotal: deliveryFee,
+            taxAmount: 0,
+            total: deliveryFee
+          });
+        }
+      } else {
         const rawItems = s.sale_items || [];
         const uniqueItemsMap = new Map<string, any>();
         rawItems.forEach((i: any) => {
@@ -990,24 +1041,67 @@ export async function fetchSalesFromSupabase(
             uniqueItemsMap.set(itemKey, i);
           }
         });
-        return Array.from(uniqueItemsMap.values()).map((i: any) => ({
-          id: i.id,
-          productId: i.product_id,
-          serviceId: i.service_id,
-          staffId: i.staff_id,
-          name: i.product_name || (i.product_id && productMap.get(i.product_id)) || 'Artículo POS',
-          sku: i.sku || (i.product_id && productSkuMap.get(i.product_id)) || '',
-          quantity: Number(i.quantity || 1),
-          unitPrice: Number(i.unit_price || 0),
-          originalUnitPrice: Number(i.unit_price || 0),
-          discountAmount: Number(i.discount_amount || 0),
-          subtotal: Number(i.subtotal || 0),
-          taxClassification: i.tax_classification || 'EXENTO',
-          taxAmount: Number(i.tax_amount || 0),
-          total: Number(i.subtotal || 0) + Number(i.tax_amount || 0)
-        }));
-      })()
-    }));
+
+        items = Array.from(uniqueItemsMap.values()).map((i: any) => {
+          let resolvedName = i.product_name || (i.product_id && productMap.get(i.product_id));
+          if (!resolvedName && i.product_id && menuItemMap.has(i.product_id)) {
+            resolvedName = menuItemMap.get(i.product_id);
+          }
+          if (!resolvedName && menuItemsRes.data && (menuItemsRes.data as any[]).length > 0) {
+            const matchesPrice = (menuItemsRes.data as any[]).filter(m => Math.abs(Number(m.price) - Number(i.unit_price || 0)) < 0.01);
+            if (matchesPrice.length > 0) {
+              resolvedName = matchesPrice[0].name;
+            }
+          }
+
+          return {
+            id: i.id,
+            productId: i.product_id,
+            serviceId: i.service_id,
+            staffId: i.staff_id,
+            name: resolvedName || 'Artículo POS',
+            sku: i.sku || (i.product_id && productSkuMap.get(i.product_id)) || (resolvedName && resolvedName !== 'Artículo POS' ? 'FOOD' : ''),
+            quantity: Number(i.quantity || 1),
+            unitPrice: Number(i.unit_price || 0),
+            originalUnitPrice: Number(i.unit_price || 0),
+            discountAmount: Number(i.discount_amount || 0),
+            subtotal: Number(i.subtotal || 0),
+            taxClassification: i.tax_classification || 'EXENTO',
+            taxAmount: Number(i.tax_amount || 0),
+            total: Number(i.subtotal || 0) + Number(i.tax_amount || 0)
+          };
+        });
+      }
+
+      return {
+        id: s.id,
+        tenantId: s.tenant_id,
+        cashShiftId: s.cash_shift_id,
+        documentNumber: s.document_number,
+        isFiscal: s.is_fiscal,
+        cai: s.cai,
+        caiDeadline: s.cai_deadline,
+        caiRangeStart: s.cai_range_start,
+        caiRangeEnd: s.cai_range_end,
+        fiscalRangeId: s.fiscal_range_id,
+        cajaName: s.caja_name || (s.cai && caiRangeMap.get(s.cai)) || defaultCajaName,
+        customerId: s.customer_id,
+        customerName: s.customer_name || 'Consumidor Final',
+        customerRtn: s.customer_rtn,
+        subtotal: Number(s.subtotal),
+        discountAmount: Number(s.discount_amount),
+        exemptAmount: Number(s.exempt_amount),
+        exoneratedAmount: Number(s.exonerated_amount),
+        taxable15: Number(s.taxable_15),
+        tax15: Number(s.tax_15),
+        taxable18: Number(s.taxable_18),
+        tax18: Number(s.tax_18),
+        total: Number(s.total),
+        paymentMethod: s.payment_method,
+        createdAt: s.created_at,
+        items
+      };
+    });
   } catch (err) {
     console.warn('Error fetching sales from Supabase:', err);
     return null;
@@ -1613,11 +1707,27 @@ export async function syncAllCloudData(tenantId: string) {
       // 4. Sales
       let sales = state.sales;
       if (liveSales !== null) {
+        const localSalesMap = new Map((state.sales || []).map(s => [s.id, s]));
+        const mergedLiveSales = liveSales.map(ls => {
+          const local = localSalesMap.get(ls.id);
+          if (local && local.items && local.items.length > 0) {
+            const hasLocalRealNames = local.items.some(i => i.name && i.name !== 'Artículo POS');
+            const liveHasOnlyGeneric = !ls.items || ls.items.every(i => !i.name || i.name === 'Artículo POS');
+            if (hasLocalRealNames && liveHasOnlyGeneric) {
+              return {
+                ...ls,
+                items: local.items
+              };
+            }
+          }
+          return ls;
+        });
+
         const liveIds = new Set(liveSales.map(s => s.id));
         const liveDocs = new Set(liveSales.map(s => s.documentNumber));
         const localOnly = (state.sales || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id) && (!s.documentNumber || !liveDocs.has(s.documentNumber)));
         const otherTenantSales = (state.sales || []).filter(s => s.tenantId && s.tenantId !== tenantId);
-        sales = [...liveSales, ...localOnly, ...otherTenantSales];
+        sales = [...mergedLiveSales, ...localOnly, ...otherTenantSales];
       }
 
       // 5. Fiscal Ranges (Cajas)
@@ -1694,14 +1804,22 @@ export async function syncAllCloudData(tenantId: string) {
       if (liveFoodOrders !== null) {
         const mergedLiveOrders = liveFoodOrders.map(liveOrder => {
           const localOrder = (state.foodOrders || []).find(o => o.id === liveOrder.id);
-          if (localOrder && localOrder.isPaid && !liveOrder.isPaid) {
+          const hasLinkedSaleInStore = Boolean(
+            (liveOrder.saleId && (state.sales || []).some(s => s.id === liveOrder.saleId)) ||
+            (localOrder?.saleId && (state.sales || []).some(s => s.id === localOrder.saleId))
+          );
+          const isPaidLocally = Boolean(localOrder?.isPaid || hasLinkedSaleInStore);
+
+          if (isPaidLocally && !liveOrder.isPaid) {
             return {
               ...liveOrder,
               isPaid: true,
-              status: (localOrder.status === 'COMPLETED' || localOrder.status === 'DELIVERED') ? localOrder.status : liveOrder.status,
-              saleId: localOrder.saleId || liveOrder.saleId,
-              paymentMethod: localOrder.paymentMethod || liveOrder.paymentMethod,
-              driverSettled: localOrder.driverSettled || liveOrder.driverSettled
+              status: (localOrder?.status === 'COMPLETED' || localOrder?.status === 'DELIVERED') 
+                ? localOrder.status 
+                : (liveOrder.deliveryType === 'DELIVERY' ? 'DELIVERED' : 'COMPLETED'),
+              saleId: localOrder?.saleId || liveOrder.saleId,
+              paymentMethod: localOrder?.paymentMethod || liveOrder.paymentMethod || 'CASH',
+              driverSettled: localOrder?.driverSettled || liveOrder.driverSettled
             };
           }
           return liveOrder;
