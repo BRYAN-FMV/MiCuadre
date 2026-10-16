@@ -25,7 +25,8 @@ import {
   MessageCircle,
   Eye,
   Filter,
-  Pencil
+  Pencil,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -51,6 +52,7 @@ export const FoodOrdersBoard: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<FoodOrder | null>(null);
   const [paymentModalOrder, setPaymentModalOrder] = useState<FoodOrder | null>(null);
   const [isDriversModalOpen, setIsDriversModalOpen] = useState(false);
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState<FoodOrder | null>(null);
 
   // Time & Urgency Helper
   const getElapsedMinutes = (isoDate: string) => {
@@ -596,9 +598,9 @@ export const FoodOrdersBoard: React.FC = () => {
               <div
                 key={order.id}
                 style={{
-                  height: '430px',
-                  minHeight: '430px',
-                  maxHeight: '430px',
+                  height: '280px',
+                  minHeight: '280px',
+                  maxHeight: '280px',
                   boxSizing: 'border-box',
                   background: isCancelled ? '#fff1f2' : isCompleted ? '#f8fafc' : '#ffffff',
                   border: isCancelled
@@ -611,10 +613,10 @@ export const FoodOrdersBoard: React.FC = () => {
                     ? '2px solid #f59e0b'
                     : '1px solid #e2e8f0',
                   borderRadius: '12px',
-                  padding: '0.85rem 0.95rem',
+                  padding: '0.65rem 0.8rem',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '0.5rem',
+                  gap: '0.35rem',
                   boxShadow: isCompleted ? 'none' : '0 2px 5px rgba(0,0,0,0.03)',
                   opacity: isCancelled ? 0.7 : isCompleted ? 0.85 : 1,
                   overflow: 'hidden'
@@ -622,22 +624,22 @@ export const FoodOrdersBoard: React.FC = () => {
               >
                 {/* Urgency Highlight Banner if active */}
                 {urgency && (
-                  <div style={urgency.style}>
-                    <Clock size={12} />
+                  <div style={{ ...urgency.style, padding: '0.12rem 0.45rem', fontSize: '0.68rem', borderRadius: '5px' }}>
+                    <Clock size={11} />
                     <span>{urgency.label}</span>
                   </div>
                 )}
 
                 {/* Top Line: Number & Destination Badge */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                     <span
                       style={{
                         background: '#0f172a',
                         color: '#ffffff',
-                        fontSize: '0.78rem',
+                        fontSize: '0.74rem',
                         fontWeight: 900,
-                        padding: '0.15rem 0.5rem',
+                        padding: '0.12rem 0.45rem',
                         borderRadius: '5px'
                       }}
                     >
@@ -649,28 +651,28 @@ export const FoodOrdersBoard: React.FC = () => {
                       style={{
                         background: order.deliveryType === 'DINE_IN' ? '#ffedd5' : order.deliveryType === 'TAKE_OUT' ? '#e0f2fe' : '#dcfce7',
                         color: order.deliveryType === 'DINE_IN' ? '#c2410c' : order.deliveryType === 'TAKE_OUT' ? '#0369a1' : '#15803d',
-                        fontSize: '0.72rem',
+                        fontSize: '0.68rem',
                         fontWeight: 800,
-                        padding: '0.15rem 0.45rem',
+                        padding: '0.12rem 0.4rem',
                         borderRadius: '5px',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '0.25rem'
+                        gap: '0.2rem'
                       }}
                     >
                       {order.deliveryType === 'DINE_IN' ? (
                         <>
-                          <Utensils size={12} />
+                          <Utensils size={11} />
                           <span>{order.tableNumber || 'Mesa'}</span>
                         </>
                       ) : order.deliveryType === 'TAKE_OUT' ? (
                         <>
-                          <ShoppingBag size={12} />
+                          <ShoppingBag size={11} />
                           <span>Para Llevar</span>
                         </>
                       ) : (
                         <>
-                          <Bike size={12} />
+                          <Bike size={11} />
                           <span>Domicilio</span>
                         </>
                       )}
@@ -683,135 +685,102 @@ export const FoodOrdersBoard: React.FC = () => {
                 </div>
 
                 {/* Customer Details & Phone */}
-                <div>
-                  <h4
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '18px' }}>
+                  <span
                     style={{
-                      margin: 0,
-                      fontSize: '0.95rem',
+                      fontSize: '0.82rem',
                       fontWeight: 800,
                       color: '#0f172a',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis'
+                      textOverflow: 'ellipsis',
+                      maxWidth: (order.customerPhone || order.deliveryPhone) ? '62%' : '100%'
                     }}
                     title={order.customerName || (order.tableNumber ? `${order.tableNumber}` : 'Cliente')}
                   >
                     {order.customerName || (order.tableNumber ? `${order.tableNumber}` : 'Cliente')}
-                  </h4>
+                  </span>
                   {(order.customerPhone || order.deliveryPhone) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem', fontSize: '0.75rem', color: '#64748b' }}>
-                      <Phone size={11} />
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                      <Phone size={10} />
                       <span>{order.customerPhone || order.deliveryPhone}</span>
-                    </div>
-                  )}
-                  {order.deliveryAddress && (
-                    <div
-                      style={{
-                        fontSize: '0.72rem',
-                        color: '#64748b',
-                        marginTop: '0.1rem',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}
-                      title={order.deliveryAddress}
-                    >
-                      <strong>Dir:</strong> {order.deliveryAddress}
-                    </div>
-                  )}
-                  {order.driverName && (
-                    <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 700, marginTop: '0.1rem' }}>
-                      Repartidor: {order.driverName}
-                    </div>
+                    </span>
                   )}
                 </div>
 
-                {/* Food Items Breakdown */}
+                {/* Food Items Breakdown (Compact: max 2 items + 'ver más...') */}
                 <div
                   style={{
                     background: isCompleted ? '#ffffff' : '#f8fafc',
                     borderRadius: '8px',
-                    padding: '0.5rem 0.65rem',
+                    padding: '0.35rem 0.55rem',
                     border: '1px solid #e2e8f0',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '0.3rem',
-                    fontSize: '0.78rem',
+                    gap: '0.2rem',
+                    fontSize: '0.73rem',
                     flex: 1,
                     minHeight: 0,
-                    overflowY: 'auto',
-                    scrollbarWidth: 'thin',
+                    overflow: 'hidden',
                     boxSizing: 'border-box'
                   }}
                 >
-                  {order.items.map((it, idx) => (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                        <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                          <span style={{ color: '#ea580c', fontWeight: 800 }}>{it.quantity}x</span> {it.name}
-                        </span>
-                        <span style={{ color: '#475569', fontWeight: 700, fontSize: '0.76rem' }}>
-                          {formatCurrency(it.subtotal, tenant.currencySymbol)}
-                        </span>
-                      </div>
-
-                      {/* Extras */}
-                      {it.selectedExtras && it.selectedExtras.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.1rem' }}>
-                          {it.selectedExtras.map((ex, eIdx) => (
-                            <span
-                              key={eIdx}
-                              style={{
-                                background: '#f1f5f9',
-                                color: '#475569',
-                                fontSize: '0.65rem',
-                                padding: '0.05rem 0.3rem',
-                                borderRadius: '4px',
-                                fontWeight: 600
-                              }}
-                            >
-                              + {ex.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Notes */}
-                      {it.notes && (
-                        <span style={{ fontSize: '0.7rem', fontStyle: 'italic', color: '#64748b', marginTop: '0.05rem' }}>
-                          Nota: {it.notes}
-                        </span>
-                      )}
+                  {order.items.slice(0, 2).map((it, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%' }}>
+                        <span style={{ color: '#ea580c', fontWeight: 800 }}>{it.quantity}x</span> {it.name}
+                      </span>
+                      <span style={{ color: '#475569', fontWeight: 700, fontSize: '0.71rem', flexShrink: 0, marginLeft: '0.35rem' }}>
+                        {formatCurrency(it.subtotal, tenant.currencySymbol)}
+                      </span>
                     </div>
                   ))}
 
-                  {Boolean(order.deliveryFee && order.deliveryFee > 0) && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.25rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.74rem', color: '#64748b' }}>
-                      <span>Envío a domicilio:</span>
-                      <span>{formatCurrency(order.deliveryFee || 0, tenant.currencySymbol)}</span>
-                    </div>
+                  {order.items.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrderDetail(order)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '0.1rem 0 0 0',
+                        color: '#ea580c',
+                        fontWeight: 800,
+                        fontSize: '0.69rem',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        marginTop: 'auto'
+                      }}
+                      title="Ver lista completa de platillos y notas"
+                    >
+                      <Eye size={11} />
+                      <span>+ {order.items.length - 2} platos más (ver más...)</span>
+                    </button>
                   )}
                 </div>
 
                 {/* Bottom Section: Total & Actions (Anchored at bottom with fixed height) */}
-                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingTop: '0.2rem' }}>
+                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem', paddingTop: '0.15rem' }}>
                   {/* Total & Status Selector */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '30px' }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Total:</span>
-                      <span style={{ fontSize: '1.1rem', fontWeight: 900, color: isCompleted ? '#15803d' : '#ea580c' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                      <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>Total:</span>
+                      <span style={{ fontSize: '0.98rem', fontWeight: 900, color: isCompleted ? '#15803d' : '#ea580c' }}>
                         {formatCurrency(order.total, tenant.currencySymbol)}
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <label style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Estado:</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <label style={{ fontSize: '0.66rem', color: '#64748b', fontWeight: 600 }}>Estado:</label>
                       <select
                         className="input-control"
                         value={order.status}
                         disabled={isCompleted || isCancelled}
                         onChange={(e) => handleStatusChange(order, e.target.value as FoodOrderStatus)}
-                        style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', height: '28px' }}
+                        style={{ fontSize: '0.68rem', padding: '0.1rem 0.25rem', height: '24px' }}
                       >
                         <option value="ORDERED">Ordenada</option>
                         <option value="PREPARING">En Cocina</option>
@@ -823,23 +792,23 @@ export const FoodOrdersBoard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Primary Card Actions: Direct Checkout vs Paid Indicator (Unified 73px height across all states) */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  {/* Primary Card Actions: Direct Checkout vs Paid Indicator (Unified 62px height across all states) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                     {!isCompleted && !isCancelled ? (
                       <>
-                        {/* Row 1: Primary Action (36px) */}
-                        <div style={{ display: 'flex', gap: '0.35rem', height: '36px' }}>
+                        {/* Row 1: Primary Action (32px) */}
+                        <div style={{ display: 'flex', gap: '0.3rem', height: '32px' }}>
                           {order.status === 'ORDERED' && (
                             <button
                               type="button"
                               onClick={() => handleStatusChange(order, 'PREPARING')}
                               style={{
                                 flex: 1,
-                                height: '36px',
-                                padding: '0.4rem 0.5rem',
-                                fontSize: '0.78rem',
+                                height: '32px',
+                                padding: '0.3rem 0.45rem',
+                                fontSize: '0.74rem',
                                 fontWeight: 700,
-                                borderRadius: '7px',
+                                borderRadius: '6px',
                                 border: '1px solid #fed7aa',
                                 background: '#fff7ed',
                                 color: '#ea580c',
@@ -847,12 +816,12 @@ export const FoodOrdersBoard: React.FC = () => {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                gap: '0.25rem',
+                                gap: '0.2rem',
                                 whiteSpace: 'nowrap'
                               }}
                               title="Pasar comanda a En Cocina con 1 toque"
                             >
-                              <Utensils size={14} />
+                              <Utensils size={13} />
                               <span>A Cocina</span>
                             </button>
                           )}
@@ -863,11 +832,11 @@ export const FoodOrdersBoard: React.FC = () => {
                               onClick={() => handleStatusChange(order, 'SERVED')}
                               style={{
                                 flex: 1,
-                                height: '36px',
-                                padding: '0.4rem 0.5rem',
-                                fontSize: '0.78rem',
+                                height: '32px',
+                                padding: '0.3rem 0.45rem',
+                                fontSize: '0.74rem',
                                 fontWeight: 700,
-                                borderRadius: '7px',
+                                borderRadius: '6px',
                                 border: '1px solid #bfdbfe',
                                 background: '#eff6ff',
                                 color: '#2563eb',
@@ -875,12 +844,12 @@ export const FoodOrdersBoard: React.FC = () => {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                gap: '0.25rem',
+                                gap: '0.2rem',
                                 whiteSpace: 'nowrap'
                               }}
                               title="Marcar comanda como Servida / Lista"
                             >
-                              <CheckCircle2 size={14} />
+                              <CheckCircle2 size={13} />
                               <span>Servir / Listo</span>
                             </button>
                           )}
@@ -891,11 +860,11 @@ export const FoodOrdersBoard: React.FC = () => {
                               onClick={() => handleStatusChange(order, 'IN_TRANSIT')}
                               style={{
                                 flex: 1,
-                                height: '36px',
-                                padding: '0.4rem 0.5rem',
-                                fontSize: '0.78rem',
+                                height: '32px',
+                                padding: '0.3rem 0.45rem',
+                                fontSize: '0.74rem',
                                 fontWeight: 700,
-                                borderRadius: '7px',
+                                borderRadius: '6px',
                                 border: '1px solid #bbf7d0',
                                 background: '#f0fdf4',
                                 color: '#16a34a',
@@ -903,12 +872,12 @@ export const FoodOrdersBoard: React.FC = () => {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                gap: '0.25rem',
+                                gap: '0.2rem',
                                 whiteSpace: 'nowrap'
                               }}
                               title="Marcar pedido En Camino con repartidor"
                             >
-                              <Bike size={14} />
+                              <Bike size={13} />
                               <span>En Camino</span>
                             </button>
                           )}
@@ -918,11 +887,11 @@ export const FoodOrdersBoard: React.FC = () => {
                             onClick={() => setPaymentModalOrder(order)}
                             style={{
                               flex: order.status === 'ORDERED' || order.status === 'PREPARING' || (order.status === 'SERVED' && order.deliveryType === 'DELIVERY') ? 1.5 : 1,
-                              height: '36px',
-                              padding: '0.4rem 0.6rem',
-                              fontSize: '0.82rem',
+                              height: '32px',
+                              padding: '0.3rem 0.5rem',
+                              fontSize: '0.78rem',
                               fontWeight: 800,
-                              borderRadius: '7px',
+                              borderRadius: '6px',
                               border: 'none',
                               background: '#059669',
                               color: '#ffffff',
@@ -930,18 +899,39 @@ export const FoodOrdersBoard: React.FC = () => {
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              gap: '0.3rem',
+                              gap: '0.25rem',
                               boxShadow: '0 1px 4px rgba(5, 150, 105, 0.25)'
                             }}
                             title="Cobro directo sin pasar por el carrito de ventas"
                           >
-                            <DollarSign size={15} />
+                            <DollarSign size={14} />
                             <span>COBRAR {formatCurrency(order.total, tenant.currencySymbol)}</span>
                           </button>
                         </div>
 
-                        {/* Secondary Utility Icon Row */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', height: '32px' }}>
+                        {/* Row 2: Secondary Utility Icon Row (26px) */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.3rem', height: '26px' }}>
+                          {/* View Detail */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderDetail(order)}
+                            style={{
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '5px',
+                              border: '1px solid #cbd5e1',
+                              background: '#ffffff',
+                              color: '#475569',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            title="Ver detalle completo de comanda"
+                          >
+                            <Eye size={13} />
+                          </button>
+
                           {/* Edit */}
                           <button
                             type="button"
@@ -950,9 +940,9 @@ export const FoodOrdersBoard: React.FC = () => {
                               setIsNewOrderModalOpen(true);
                             }}
                             style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '6px',
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '5px',
                               border: '1px solid #cbd5e1',
                               background: '#ffffff',
                               color: '#0f172a',
@@ -963,7 +953,7 @@ export const FoodOrdersBoard: React.FC = () => {
                             }}
                             title="Editar comanda"
                           >
-                            <Pencil size={14} />
+                            <Pencil size={13} />
                           </button>
 
                           {/* Kitchen Ticket */}
@@ -971,9 +961,9 @@ export const FoodOrdersBoard: React.FC = () => {
                             type="button"
                             onClick={() => handlePrintKitchenTicket(order)}
                             style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '6px',
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '5px',
                               border: '1px solid #cbd5e1',
                               background: '#ffffff',
                               color: '#475569',
@@ -984,7 +974,7 @@ export const FoodOrdersBoard: React.FC = () => {
                             }}
                             title="Imprimir Ticket de Cocina"
                           >
-                            <Printer size={14} />
+                            <Printer size={13} />
                           </button>
 
                           {/* WhatsApp Notification */}
@@ -993,9 +983,9 @@ export const FoodOrdersBoard: React.FC = () => {
                               type="button"
                               onClick={() => handleSendWhatsAppNotification(order)}
                               style={{
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '6px',
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '5px',
                                 border: '1px solid #bbf7d0',
                                 background: '#f0fdf4',
                                 color: '#16a34a',
@@ -1006,7 +996,7 @@ export const FoodOrdersBoard: React.FC = () => {
                               }}
                               title="Enviar mensaje por WhatsApp al cliente"
                             >
-                              <MessageCircle size={14} />
+                              <MessageCircle size={13} />
                             </button>
                           )}
 
@@ -1020,9 +1010,9 @@ export const FoodOrdersBoard: React.FC = () => {
                               }
                             }}
                             style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '6px',
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '5px',
                               border: '1px solid #fecdd3',
                               background: '#fff1f2',
                               color: '#ef4444',
@@ -1033,55 +1023,78 @@ export const FoodOrdersBoard: React.FC = () => {
                             }}
                             title="Cancelar comanda"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </>
                     ) : isCompleted ? (
                       <>
-                        {/* Row 1: Completed Badge (36px) */}
+                        {/* Row 1: Completed Badge (32px) */}
                         <div
                           style={{
-                            height: '36px',
+                            height: '32px',
                             background: '#f0fdf4',
                             border: '1px solid #bbf7d0',
                             color: '#16a34a',
                             fontWeight: 800,
-                            fontSize: '0.78rem',
-                            borderRadius: '7px',
+                            fontSize: '0.74rem',
+                            borderRadius: '6px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '0.35rem'
+                            gap: '0.3rem'
                           }}
                         >
-                          <CheckCircle2 size={15} />
+                          <CheckCircle2 size={14} />
                           <span>Cobrado con Éxito</span>
                         </div>
 
-                        {/* Row 2: Secondary Utility Buttons (32px) */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', height: '32px' }}>
+                        {/* Row 2: Secondary Utility Buttons (26px) */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.3rem', height: '26px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderDetail(order)}
+                            style={{
+                              height: '26px',
+                              padding: '0 0.5rem',
+                              borderRadius: '5px',
+                              border: '1px solid #cbd5e1',
+                              background: '#ffffff',
+                              color: '#475569',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                              cursor: 'pointer'
+                            }}
+                            title="Ver detalle completo de comanda"
+                          >
+                            <Eye size={12} />
+                            <span>Detalle</span>
+                          </button>
+
                           {order.saleId && (
                             <button
                               type="button"
                               onClick={() => handleReprintSaleReceipt(order)}
                               style={{
-                                height: '32px',
-                                padding: '0 0.6rem',
-                                borderRadius: '6px',
+                                height: '26px',
+                                padding: '0 0.5rem',
+                                borderRadius: '5px',
                                 border: '1px solid #cbd5e1',
                                 background: '#ffffff',
                                 color: '#475569',
-                                fontSize: '0.75rem',
+                                fontSize: '0.7rem',
                                 fontWeight: 700,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.25rem',
+                                gap: '0.2rem',
                                 cursor: 'pointer'
                               }}
                               title="Reimprimir comprobante de venta"
                             >
-                              <Printer size={13} />
+                              <Printer size={12} />
                               <span>Ticket</span>
                             </button>
                           )}
@@ -1090,22 +1103,22 @@ export const FoodOrdersBoard: React.FC = () => {
                             type="button"
                             onClick={() => handlePrintKitchenTicket(order)}
                             style={{
-                              height: '32px',
-                              padding: '0 0.6rem',
-                              borderRadius: '6px',
+                              height: '26px',
+                              padding: '0 0.5rem',
+                              borderRadius: '5px',
                               border: '1px solid #cbd5e1',
                               background: '#ffffff',
                               color: '#475569',
-                              fontSize: '0.75rem',
+                              fontSize: '0.7rem',
                               fontWeight: 700,
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '0.25rem',
+                              gap: '0.2rem',
                               cursor: 'pointer'
                             }}
                             title="Reimprimir Ticket de Cocina"
                           >
-                            <Utensils size={13} />
+                            <Utensils size={12} />
                             <span>Cocina</span>
                           </button>
 
@@ -1114,9 +1127,9 @@ export const FoodOrdersBoard: React.FC = () => {
                               type="button"
                               onClick={() => handleSendWhatsAppNotification(order)}
                               style={{
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '6px',
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '5px',
                                 border: '1px solid #bbf7d0',
                                 background: '#f0fdf4',
                                 color: '#16a34a',
@@ -1127,35 +1140,57 @@ export const FoodOrdersBoard: React.FC = () => {
                               }}
                               title="Enviar comprobante por WhatsApp al cliente"
                             >
-                              <MessageCircle size={14} />
+                              <MessageCircle size={13} />
                             </button>
                           )}
                         </div>
                       </>
                     ) : (
                       <>
-                        {/* Row 1: Cancelled Badge (36px) */}
+                        {/* Row 1: Cancelled Badge (32px) */}
                         <div
                           style={{
-                            height: '36px',
+                            height: '32px',
                             background: '#fef2f2',
                             border: '1px solid #fecdd3',
                             color: '#991b1b',
                             fontWeight: 800,
-                            fontSize: '0.78rem',
-                            borderRadius: '7px',
+                            fontSize: '0.74rem',
+                            borderRadius: '6px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '0.35rem'
+                            gap: '0.3rem'
                           }}
                         >
                           <span>Orden Cancelada</span>
                         </div>
 
-                        {/* Row 2: Empty Spacer (32px) */}
-                        <div style={{ height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic' }}>Comanda anulada</span>
+                        {/* Row 2: Secondary / Spacer (26px) */}
+                        <div style={{ height: '26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderDetail(order)}
+                            style={{
+                              height: '26px',
+                              padding: '0 0.5rem',
+                              borderRadius: '5px',
+                              border: '1px solid #cbd5e1',
+                              background: '#ffffff',
+                              color: '#475569',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                              cursor: 'pointer'
+                            }}
+                            title="Ver detalle completo"
+                          >
+                            <Eye size={12} />
+                            <span>Detalle</span>
+                          </button>
+                          <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontStyle: 'italic' }}>Comanda anulada</span>
                         </div>
                       </>
                     )}
@@ -1195,6 +1230,358 @@ export const FoodOrdersBoard: React.FC = () => {
         isOpen={isDriversModalOpen}
         onClose={() => setIsDriversModalOpen(false)}
       />
+
+      {/* Full Order Detail Modal ("Ver más...") */}
+      {selectedOrderDetail && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem'
+          }}
+          onClick={() => setSelectedOrderDetail(null)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '1.1rem 1.25rem',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#f8fafc',
+                borderTopLeftRadius: '16px',
+                borderTopRightRadius: '16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span
+                  style={{
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    fontWeight: 900,
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '6px'
+                  }}
+                >
+                  {selectedOrderDetail.orderNumber}
+                </span>
+                <span
+                  style={{
+                    background:
+                      selectedOrderDetail.deliveryType === 'DINE_IN'
+                        ? '#ffedd5'
+                        : selectedOrderDetail.deliveryType === 'TAKE_OUT'
+                        ? '#e0f2fe'
+                        : '#dcfce7',
+                    color:
+                      selectedOrderDetail.deliveryType === 'DINE_IN'
+                        ? '#c2410c'
+                        : selectedOrderDetail.deliveryType === 'TAKE_OUT'
+                        ? '#0369a1'
+                        : '#15803d',
+                    fontSize: '0.76rem',
+                    fontWeight: 800,
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '6px'
+                  }}
+                >
+                  {selectedOrderDetail.deliveryType === 'DINE_IN'
+                    ? selectedOrderDetail.tableNumber || 'Mesa'
+                    : selectedOrderDetail.deliveryType === 'TAKE_OUT'
+                    ? 'Para Llevar'
+                    : 'A Domicilio'}
+                </span>
+                <div>{getStatusBadge(selectedOrderDetail.status)}</div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedOrderDetail(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px'
+                }}
+                title="Cerrar detalle"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Customer & Delivery Information */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '0.75rem 0.9rem',
+                  fontSize: '0.82rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.35rem'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
+                    {selectedOrderDetail.customerName || (selectedOrderDetail.tableNumber ? `${selectedOrderDetail.tableNumber}` : 'Cliente')}
+                  </span>
+                  {(selectedOrderDetail.customerPhone || selectedOrderDetail.deliveryPhone) && (
+                    <button
+                      type="button"
+                      onClick={() => handleSendWhatsAppNotification(selectedOrderDetail)}
+                      style={{
+                        background: '#f0fdf4',
+                        color: '#16a34a',
+                        border: '1px solid #bbf7d0',
+                        borderRadius: '6px',
+                        padding: '0.2rem 0.5rem',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem'
+                      }}
+                      title="Enviar mensaje de WhatsApp"
+                    >
+                      <MessageCircle size={13} />
+                      <span>{selectedOrderDetail.customerPhone || selectedOrderDetail.deliveryPhone}</span>
+                    </button>
+                  )}
+                </div>
+
+                {selectedOrderDetail.deliveryAddress && (
+                  <div style={{ color: '#475569' }}>
+                    <strong>Dirección de entrega:</strong> {selectedOrderDetail.deliveryAddress}
+                  </div>
+                )}
+
+                {selectedOrderDetail.driverName && (
+                  <div style={{ color: '#16a34a', fontWeight: 700 }}>
+                    Repartidor asignado: {selectedOrderDetail.driverName} ({selectedOrderDetail.driverType || 'PROPIO'})
+                  </div>
+                )}
+              </div>
+
+              {/* Complete Items List */}
+              <div>
+                <h5 style={{ margin: '0 0 0.5rem 0', fontSize: '0.82rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                  Platillos ({selectedOrderDetail.items.length})
+                </h5>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {selectedOrderDetail.items.map((it, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '0.6rem 0.75rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.2rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.85rem' }}>
+                          <span style={{ color: '#ea580c', fontWeight: 900 }}>{it.quantity}x</span> {it.name}
+                        </span>
+                        <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.85rem' }}>
+                          {formatCurrency(it.subtotal, tenant.currencySymbol)}
+                        </span>
+                      </div>
+
+                      {/* Extras */}
+                      {it.selectedExtras && it.selectedExtras.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.15rem' }}>
+                          {it.selectedExtras.map((ex, eIdx) => (
+                            <span
+                              key={eIdx}
+                              style={{
+                                background: '#f1f5f9',
+                                color: '#475569',
+                                fontSize: '0.7rem',
+                                padding: '0.1rem 0.35rem',
+                                borderRadius: '4px',
+                                fontWeight: 600
+                              }}
+                            >
+                              + {ex.name} ({formatCurrency(ex.price, tenant.currencySymbol)})
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Notes */}
+                      {it.notes && (
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', marginTop: '0.1rem' }}>
+                          Nota: {it.notes}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Financial Breakdown */}
+              <div
+                style={{
+                  borderTop: '1px solid #e2e8f0',
+                  paddingTop: '0.75rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.35rem',
+                  fontSize: '0.82rem'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                  <span>Subtotal:</span>
+                  <span>{formatCurrency(selectedOrderDetail.subtotal, tenant.currencySymbol)}</span>
+                </div>
+
+                {Boolean(selectedOrderDetail.deliveryFee && selectedOrderDetail.deliveryFee > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                    <span>Envío a domicilio:</span>
+                    <span>{formatCurrency(selectedOrderDetail.deliveryFee || 0, tenant.currencySymbol)}</span>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontWeight: 900,
+                    fontSize: '1.2rem',
+                    color: '#0f172a',
+                    paddingTop: '0.25rem',
+                    borderTop: '1px dashed #cbd5e1'
+                  }}
+                >
+                  <span>Total:</span>
+                  <span style={{ color: isOrderPaidEffective(selectedOrderDetail) ? '#15803d' : '#ea580c' }}>
+                    {formatCurrency(selectedOrderDetail.total, tenant.currencySymbol)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div
+              style={{
+                padding: '0.9rem 1.25rem',
+                borderTop: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                borderBottomLeftRadius: '16px',
+                borderBottomRightRadius: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => handlePrintKitchenTicket(selectedOrderDetail)}
+                  style={{
+                    padding: '0.45rem 0.75rem',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#475569',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                  title="Imprimir ticket para cocina"
+                >
+                  <Printer size={14} />
+                  <span>Imprimir Cocina</span>
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {!isOrderPaidEffective(selectedOrderDetail) && selectedOrderDetail.status !== 'CANCELLED' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentModalOrder(selectedOrderDetail);
+                      setSelectedOrderDetail(null);
+                    }}
+                    style={{
+                      padding: '0.45rem 1rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#059669',
+                      color: '#ffffff',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)'
+                    }}
+                  >
+                    <DollarSign size={15} />
+                    <span>COBRAR {formatCurrency(selectedOrderDetail.total, tenant.currencySymbol)}</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderDetail(null)}
+                  style={{
+                    padding: '0.45rem 0.9rem',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1641,11 +1641,19 @@ export async function syncAllCloudData(tenantId: string) {
     ]);
 
     // Batch 3: Food & Restaurant Module (Menu Items, Drivers, Food Orders)
-    const [liveMenuItems, liveDrivers, liveFoodOrders] = await Promise.all([
-      fetchMenuItemsFromSupabase(tenantId).catch(() => null),
-      fetchDeliveryDriversFromSupabase(tenantId).catch(() => null),
-      fetchFoodOrdersFromSupabase(tenantId).catch(() => null)
-    ]);
+    // Only query if food module is enabled, avoiding wasteful egress and Supabase billing for retail stores
+    const isFoodEnabled = Boolean(
+      getStoredTenantFoodEnabled(tenantId) ||
+      useAppStore.getState().tenant?.isFoodEnabled ||
+      useAppStore.getState().tenant?.businessType === 'FOOD'
+    );
+    const [liveMenuItems, liveDrivers, liveFoodOrders] = isFoodEnabled
+      ? await Promise.all([
+          fetchMenuItemsFromSupabase(tenantId).catch(() => null),
+          fetchDeliveryDriversFromSupabase(tenantId).catch(() => null),
+          fetchFoodOrdersFromSupabase(tenantId).catch(() => null)
+        ])
+      : [null, null, null];
 
     // Batch 4: Sales and Shifts reusing already downloaded products, ranges, and profiles
     const [liveSales, liveShifts] = await Promise.all([
@@ -2161,4 +2169,50 @@ export async function saveFoodOrderToSupabase(order: FoodOrder): Promise<boolean
     return false;
   }
 }
+
+/**
+ * Synchronize Food Module Data on-demand when entering the Food / Menu view.
+ * Prevents redundant database queries and reduces egress/Supabase billing.
+ */
+let isSyncingFoodData = false;
+export async function syncFoodModuleData(tenantId: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId) || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return false;
+  }
+  if (isSyncingFoodData) return false;
+  isSyncingFoodData = true;
+
+  try {
+    const [liveMenuItems, liveDrivers, liveFoodOrders] = await Promise.all([
+      fetchMenuItemsFromSupabase(tenantId).catch(() => null),
+      fetchDeliveryDriversFromSupabase(tenantId).catch(() => null),
+      fetchFoodOrdersFromSupabase(tenantId).catch(() => null)
+    ]);
+
+    useAppStore.setState(state => {
+      let menuItems = state.menuItems;
+      if (liveMenuItems !== null) {
+        menuItems = liveMenuItems;
+      }
+      let deliveryDrivers = state.deliveryDrivers;
+      if (liveDrivers !== null) {
+        deliveryDrivers = liveDrivers;
+      }
+      let foodOrders = state.foodOrders;
+      if (liveFoodOrders !== null) {
+        const liveIds = new Set(liveFoodOrders.map(o => o.id));
+        const localOnly = (state.foodOrders || []).filter(o => o.tenantId === tenantId && !liveIds.has(o.id));
+        foodOrders = [...liveFoodOrders, ...localOnly];
+      }
+      return { menuItems, deliveryDrivers, foodOrders };
+    });
+    return true;
+  } catch (err) {
+    console.warn('Error syncing food module data:', err);
+    return false;
+  } finally {
+    isSyncingFoodData = false;
+  }
+}
+
 

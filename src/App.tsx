@@ -28,6 +28,7 @@ import {
   fetchSalesFromSupabase,
   fetchFiscalRangesFromSupabase,
   fetchShiftsFromSupabase,
+  fetchFoodOrdersFromSupabase,
   pushLocalDataToCloud,
   syncAllCloudData,
   processOfflineQueue,
@@ -234,30 +235,17 @@ export const App: React.FC = () => {
     let productDebounceTimer: any = null;
     let salesDebounceTimer: any = null;
     let shiftsDebounceTimer: any = null;
+    let foodOrdersDebounceTimer: any = null;
 
     if (isSupabaseConfigured() && isAuthenticated && !showLanding && !isAdminRoute && tenant?.id && isValidUUID(tenant.id)) {
-      // 1. Initial cloud state hydration
+      // 1. Initial cloud state hydration (essential on login/boot)
       syncAllCloudData(tenant.id);
 
       // 2. Process offline queue and push initial seed if needed
       processOfflineQueue();
       pushLocalDataToCloud(tenant.id);
 
-      // 3. Periodic cloud polling every 60 seconds as fallback sync (pauses when document is hidden)
-      const syncInterval = setInterval(() => {
-        if (navigator.onLine && !document.hidden) {
-          syncAllCloudData(tenant.id);
-        }
-      }, 60000);
-
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible' && navigator.onLine) {
-          syncAllCloudData(tenant.id);
-        }
-      };
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-
-      // 4. Instant Realtime Subscription with debouncing to prevent network saturation
+      // 3. Instant Realtime Subscription with debouncing (eliminates redundant polling & egress)
       try {
         realtimeChannel = supabase
           .channel(`micuadre-realtime-${tenant.id}`)
@@ -319,6 +307,28 @@ export const App: React.FC = () => {
               }, 1200);
             }
           )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'food_orders', filter: `tenant_id=eq.${tenant.id}` },
+            () => {
+              clearTimeout(foodOrdersDebounceTimer);
+              foodOrdersDebounceTimer = setTimeout(() => {
+                fetchFoodOrdersFromSupabase(tenant.id).then(liveOrders => {
+                  if (liveOrders) {
+                    useAppStore.setState(s => {
+                      const liveMap = new Map(liveOrders.map(lo => [lo.id, lo]));
+                      const merged = s.foodOrders.map(o => liveMap.get(o.id) || o);
+                      const existingIds = new Set(s.foodOrders.map(o => o.id));
+                      for (const lo of liveOrders) {
+                        if (!existingIds.has(lo.id)) merged.push(lo);
+                      }
+                      return { foodOrders: merged };
+                    });
+                  }
+                }).catch(() => null);
+              }, 1200);
+            }
+          )
           .subscribe();
       } catch (rtErr) {
         console.warn('Realtime subscription error:', rtErr);
@@ -327,11 +337,10 @@ export const App: React.FC = () => {
       return () => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
         window.removeEventListener('online', handleOnline);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        clearInterval(syncInterval);
         clearTimeout(productDebounceTimer);
         clearTimeout(salesDebounceTimer);
         clearTimeout(shiftsDebounceTimer);
+        clearTimeout(foodOrdersDebounceTimer);
         if (realtimeChannel) {
           supabase.removeChannel(realtimeChannel);
         }

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { MenuItem, MenuItemExtra } from '../../types';
 import { UtensilsCrossed, Plus, Search, Check, X, Edit2, Trash2, ToggleLeft, ToggleRight, Coffee, Sparkles, ClipboardList } from 'lucide-react';
 import { FoodOrdersBoard } from './FoodOrdersBoard';
 import { formatCurrency } from '../../lib/monetary';
+import { syncFoodModuleData } from '../../lib/supabaseService';
 import { toast } from 'sonner';
 
 export const MenuView: React.FC = () => {
@@ -17,6 +18,13 @@ export const MenuView: React.FC = () => {
   const updateMenuItem = useAppStore(state => state.updateMenuItem);
   const toggleMenuItemAvailability = useAppStore(state => state.toggleMenuItemAvailability);
   const deleteMenuItem = useAppStore(state => state.deleteMenuItem);
+
+  // Lazy on-demand sync for food module only when entering the screen
+  useEffect(() => {
+    if (tenant?.id && !isDemo) {
+      syncFoodModuleData(tenant.id);
+    }
+  }, [tenant?.id, isDemo]);
 
   const allFoodOrders = useAppStore(state => state.foodOrders) || [];
   const activeOrdersCount = allFoodOrders.filter(
