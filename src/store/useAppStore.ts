@@ -45,7 +45,7 @@ export interface HeldOrder {
 export interface OfflineQueueItem {
   id: string; // idempotencyKey / UUID
   tenantId: string;
-  type: 'SALE' | 'SHIFT' | 'MOVEMENT' | 'EXPENSE';
+  type: 'SALE' | 'SHIFT' | 'MOVEMENT' | 'EXPENSE' | 'FOOD_ORDER';
   payload: any;
   createdAt: string;
   retryCount?: number;
@@ -2595,7 +2595,15 @@ export const useAppStore = create<AppState>()(
     };
     set((s) => ({ foodOrders: [newOrder, ...s.foodOrders] }));
     if (isSupabaseConfigured() && isValidUUID(tenantId)) {
-      saveFoodOrderToSupabase(newOrder).catch(err => console.warn('Supabase save food order info:', err));
+      saveFoodOrderToSupabase(newOrder).catch(err => {
+        console.warn('Supabase save food order info:', err);
+        get().enqueueOfflineItem({
+          id: newOrder.id,
+          tenantId: newOrder.tenantId,
+          type: 'FOOD_ORDER',
+          payload: newOrder
+        });
+      });
     }
     return newOrder;
   },
@@ -2604,7 +2612,15 @@ export const useAppStore = create<AppState>()(
     const updated = s.foodOrders.map(o => o.id === id ? { ...o, ...updates } : o);
     const target = updated.find(o => o.id === id);
     if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
-      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase update food order info:', err));
+      saveFoodOrderToSupabase(target).catch(err => {
+        console.warn('Supabase update food order info:', err);
+        get().enqueueOfflineItem({
+          id: target.id,
+          tenantId: target.tenantId,
+          type: 'FOOD_ORDER',
+          payload: target
+        });
+      });
     }
     return { foodOrders: updated };
   }),
@@ -2619,7 +2635,15 @@ export const useAppStore = create<AppState>()(
     });
     const target = updated.find(o => o.id === id);
     if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
-      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase add items food order info:', err));
+      saveFoodOrderToSupabase(target).catch(err => {
+        console.warn('Supabase add items food order info:', err);
+        get().enqueueOfflineItem({
+          id: target.id,
+          tenantId: target.tenantId,
+          type: 'FOOD_ORDER',
+          payload: target
+        });
+      });
     }
     return { foodOrders: updated };
   }),
@@ -2628,7 +2652,15 @@ export const useAppStore = create<AppState>()(
     const updated = s.foodOrders.map(o => o.id === id ? { ...o, status: 'DELIVERED' as const, isPaid: true, saleId } : o);
     const target = updated.find(o => o.id === id);
     if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
-      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase complete food order info:', err));
+      saveFoodOrderToSupabase(target).catch(err => {
+        console.warn('Supabase complete food order info:', err);
+        get().enqueueOfflineItem({
+          id: target.id,
+          tenantId: target.tenantId,
+          type: 'FOOD_ORDER',
+          payload: target
+        });
+      });
     }
     return { foodOrders: updated };
   }),
@@ -2637,7 +2669,15 @@ export const useAppStore = create<AppState>()(
     const updated = s.foodOrders.map(o => o.id === id ? { ...o, status: 'CANCELLED' as const } : o);
     const target = updated.find(o => o.id === id);
     if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
-      saveFoodOrderToSupabase(target).catch(err => console.warn('Supabase cancel food order info:', err));
+      saveFoodOrderToSupabase(target).catch(err => {
+        console.warn('Supabase cancel food order info:', err);
+        get().enqueueOfflineItem({
+          id: target.id,
+          tenantId: target.tenantId,
+          type: 'FOOD_ORDER',
+          payload: target
+        });
+      });
     }
     return { foodOrders: updated };
   }),
@@ -2796,7 +2836,7 @@ export const useAppStore = create<AppState>()(
       items: saleItems
     };
 
-    // Deduct stock for any inventory products
+    // Deduct stock locally for any inventory products (Supabase inventory sync handled atomically by saveSaleToSupabase)
     const updatedProducts = [...state.products];
     for (const item of order.items) {
       if (item.productId) {
@@ -2806,9 +2846,6 @@ export const useAppStore = create<AppState>()(
             ...updatedProducts[prodIndex],
             currentStock: updatedProducts[prodIndex].currentStock - item.quantity
           };
-          if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
-            saveProductToSupabase(updatedProducts[prodIndex]).catch(e => console.warn('Supabase update product on food order:', e));
-          }
         }
       }
     }
@@ -2844,7 +2881,15 @@ export const useAppStore = create<AppState>()(
       });
       const targetOrder = updatedOrders.find(o => o.id === order.id);
       if (targetOrder) {
-        saveFoodOrderToSupabase(targetOrder).catch(err => console.warn('Supabase save food order on checkout:', err));
+        saveFoodOrderToSupabase(targetOrder).catch(err => {
+          console.warn('Supabase save food order on checkout:', err);
+          get().enqueueOfflineItem({
+            id: targetOrder.id,
+            tenantId: targetOrder.tenantId,
+            type: 'FOOD_ORDER',
+            payload: targetOrder
+          });
+        });
       }
     }
 

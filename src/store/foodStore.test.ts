@@ -493,6 +493,36 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     expect(shiftSummary.closingSystem).toBe(670);
     expect(shiftSummary.difference).toBe(0);
   });
+
+  it('should support enqueueing and removing FOOD_ORDER in offlineQueue', () => {
+    const store = useAppStore.getState();
+    const testOrder = {
+      id: 'order-off-1',
+      tenantId: store.tenant.id,
+      orderNumber: '#099',
+      deliveryType: 'TAKE_OUT' as const,
+      status: 'ORDERED' as const,
+      items: [{ name: 'Baleada Sencilla', quantity: 2, unitPrice: 25, subtotal: 50 }],
+      subtotal: 50,
+      total: 50,
+      isPaid: false
+    };
+
+    store.enqueueOfflineItem({
+      id: testOrder.id,
+      tenantId: testOrder.tenantId,
+      type: 'FOOD_ORDER',
+      payload: testOrder
+    });
+
+    const queue = useAppStore.getState().offlineQueue;
+    expect(queue.length).toBe(1);
+    expect(queue[0].type).toBe('FOOD_ORDER');
+    expect(queue[0].id).toBe(testOrder.id);
+
+    store.removeOfflineItem(testOrder.id);
+    expect(useAppStore.getState().offlineQueue.length).toBe(0);
+  });
 });
 
 

@@ -231,14 +231,17 @@ export const App: React.FC = () => {
     window.addEventListener('online', handleOnline);
 
     let realtimeChannel: any = null;
+    let productDebounceTimer: any = null;
+    let salesDebounceTimer: any = null;
+    let shiftsDebounceTimer: any = null;
 
     if (isSupabaseConfigured() && isAuthenticated && !showLanding && !isAdminRoute && tenant?.id && isValidUUID(tenant.id)) {
-      // 1. Process offline queue and push any local records to cloud
+      // 1. Initial cloud state hydration
+      syncAllCloudData(tenant.id);
+
+      // 2. Process offline queue and push initial seed if needed
       processOfflineQueue();
-      pushLocalDataToCloud(tenant.id).then(() => {
-        // 2. Initial cloud state hydration
-        syncAllCloudData(tenant.id);
-      });
+      pushLocalDataToCloud(tenant.id);
 
       // 3. Periodic cloud polling every 60 seconds as fallback sync (pauses when document is hidden)
       const syncInterval = setInterval(() => {
@@ -254,7 +257,7 @@ export const App: React.FC = () => {
       };
       document.addEventListener('visibilitychange', handleVisibilityChange);
 
-      // 4. Instant Realtime Subscription for Product Stock & Multi-Device Sales
+      // 4. Instant Realtime Subscription with debouncing to prevent network saturation
       try {
         realtimeChannel = supabase
           .channel(`micuadre-realtime-${tenant.id}`)
@@ -262,49 +265,58 @@ export const App: React.FC = () => {
             'postgres_changes',
             { event: '*', schema: 'public', table: 'products', filter: `tenant_id=eq.${tenant.id}` },
             () => {
-              fetchProductsFromSupabase(tenant.id).then(liveProds => {
-                if (liveProds) {
-                  useAppStore.setState(s => {
-                    const liveMap = new Map(liveProds.map(lp => [lp.id, lp]));
-                    const merged = s.products.map(p => liveMap.get(p.id) || p);
-                    const existingIds = new Set(s.products.map(p => p.id));
-                    for (const lp of liveProds) {
-                      if (!existingIds.has(lp.id)) merged.push(lp);
-                    }
-                    return { products: merged };
-                  });
-                }
-              });
+              clearTimeout(productDebounceTimer);
+              productDebounceTimer = setTimeout(() => {
+                fetchProductsFromSupabase(tenant.id).then(liveProds => {
+                  if (liveProds) {
+                    useAppStore.setState(s => {
+                      const liveMap = new Map(liveProds.map(lp => [lp.id, lp]));
+                      const merged = s.products.map(p => liveMap.get(p.id) || p);
+                      const existingIds = new Set(s.products.map(p => p.id));
+                      for (const lp of liveProds) {
+                        if (!existingIds.has(lp.id)) merged.push(lp);
+                      }
+                      return { products: merged };
+                    });
+                  }
+                }).catch(() => null);
+              }, 1200);
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'sales', filter: `tenant_id=eq.${tenant.id}` },
             () => {
-              fetchSalesFromSupabase(tenant.id).then(liveSales => {
-                if (liveSales) {
-                  useAppStore.setState(s => {
-                    const liveIds = new Set(liveSales.map(ls => ls.id));
-                    const localOnly = (s.sales || []).filter(item => !liveIds.has(item.id));
-                    return { sales: [...liveSales, ...localOnly] };
-                  });
-                }
-              });
+              clearTimeout(salesDebounceTimer);
+              salesDebounceTimer = setTimeout(() => {
+                fetchSalesFromSupabase(tenant.id).then(liveSales => {
+                  if (liveSales) {
+                    useAppStore.setState(s => {
+                      const liveIds = new Set(liveSales.map(ls => ls.id));
+                      const localOnly = (s.sales || []).filter(item => !liveIds.has(item.id));
+                      return { sales: [...liveSales, ...localOnly] };
+                    });
+                  }
+                }).catch(() => null);
+              }, 1200);
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'cash_shifts', filter: `tenant_id=eq.${tenant.id}` },
             () => {
-              fetchShiftsFromSupabase(tenant.id).then(liveShifts => {
-                if (liveShifts) {
-                  useAppStore.setState(s => {
-                    const liveIds = new Set(liveShifts.map(ls => ls.id));
-                    const localOnly = (s.shiftHistory || []).filter(item => !liveIds.has(item.id));
-                    return { shiftHistory: [...liveShifts, ...localOnly] };
-                  });
-                }
-              });
+              clearTimeout(shiftsDebounceTimer);
+              shiftsDebounceTimer = setTimeout(() => {
+                fetchShiftsFromSupabase(tenant.id).then(liveShifts => {
+                  if (liveShifts) {
+                    useAppStore.setState(s => {
+                      const liveIds = new Set(liveShifts.map(ls => ls.id));
+                      const localOnly = (s.shiftHistory || []).filter(item => !liveIds.has(item.id));
+                      return { shiftHistory: [...liveShifts, ...localOnly] };
+                    });
+                  }
+                }).catch(() => null);
+              }, 1200);
             }
           )
           .subscribe();
@@ -317,6 +329,9 @@ export const App: React.FC = () => {
         window.removeEventListener('online', handleOnline);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         clearInterval(syncInterval);
+        clearTimeout(productDebounceTimer);
+        clearTimeout(salesDebounceTimer);
+        clearTimeout(shiftsDebounceTimer);
         if (realtimeChannel) {
           supabase.removeChannel(realtimeChannel);
         }

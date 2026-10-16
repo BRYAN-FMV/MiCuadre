@@ -1449,51 +1449,21 @@ export async function deleteFiscalRangeSupabase(id: string) {
 }
 
 /**
- * Pushes any un-synced local sales, shifts, cash movements, and expenses to Supabase
+ * Pushes any un-synced initial local products and fiscal ranges to Supabase.
+ * Executed only once per tenant to seed cloud database from scratch without redundant loops.
  */
 export async function pushLocalDataToCloud(tenantId: string) {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return;
 
+  const pushFlagKey = `micuadre_initial_push_done_${tenantId}`;
+  if (typeof localStorage !== 'undefined' && localStorage.getItem(pushFlagKey) === 'true') {
+    return;
+  }
+
   try {
     const state = useAppStore.getState();
 
-    // 1. Push local sales (re-assigning non-UUID local IDs if needed)
-    const localSales = (state.sales || []).map(s => {
-      const isThisTenant = s.tenantId ? s.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
-      if (!isThisTenant) return s;
-      return {
-        ...s,
-        id: isValidUUID(s.id) ? s.id : generateUUID(),
-        tenantId
-      };
-    });
-
-    useAppStore.setState({ sales: localSales });
-
-    const tenantSales = localSales.filter(s => s.tenantId === tenantId);
-    for (const sale of tenantSales) {
-      await saveSaleToSupabase(sale);
-    }
-
-    // 2. Push local shifts
-    const localShifts = (state.shiftHistory || []).map(s => {
-      const isThisTenant = s.tenantId ? s.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
-      if (!isThisTenant) return s;
-      return {
-        ...s,
-        id: isValidUUID(s.id) ? s.id : generateUUID(),
-        tenantId
-      };
-    });
-
-    useAppStore.setState({ shiftHistory: localShifts });
-
-    const tenantShifts = localShifts.filter(s => s.tenantId === tenantId);
-    for (const shift of tenantShifts) {
-      await saveCashShiftToSupabase(shift);
-    }
-
-    // 3. Push local fiscal ranges
+    // 1. Push local fiscal ranges if needed
     const localRanges = (state.fiscalRanges || []).map(r => {
       const isThisTenant = r.tenantId ? r.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
       if (!isThisTenant) return r;
@@ -1511,7 +1481,7 @@ export async function pushLocalDataToCloud(tenantId: string) {
       await saveFiscalRangeToSupabase(range);
     }
 
-    // 4. Push local products
+    // 2. Push local products if creating tenant from scratch
     const localProds = (state.products || []).map(p => {
       if (tenantId !== DEMO_TENANT_ID && isDemoProduct(p)) {
         return p;
@@ -1531,35 +1501,62 @@ export async function pushLocalDataToCloud(tenantId: string) {
     for (const prod of tenantProds) {
       await saveProductToSupabase(prod);
     }
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(pushFlagKey, 'true');
+    }
   } catch (err) {
     console.warn('Error en pushLocalDataToCloud:', err);
   }
 }
 
 /**
- * Downloads and synchronizes full business state across devices
+ * Downloads and synchronizes full business state across devices.
+ * Uses batching, concurrency mutex, and request throttling to avoid HTTP/2 connection resets (ERR_CONNECTION_CLOSED).
  */
+let isSyncingCloudData = false;
+let lastSyncTimestamp = 0;
+const MIN_SYNC_INTERVAL_MS = 6000;
+
 export async function syncAllCloudData(tenantId: string) {
   if (!isSupabaseConfigured() || !isValidUUID(tenantId) || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
 
+  if (isSyncingCloudData) {
+    return;
+  }
+  const now = Date.now();
+  if (now - lastSyncTimestamp < MIN_SYNC_INTERVAL_MS) {
+    return;
+  }
+
+  isSyncingCloudData = true;
+
   try {
-    // 1. Fetch foundational catalog & reference data in parallel
-    const [liveProducts, liveSuppliers, liveProfiles, liveRanges, liveMovements, liveExpenses, liveMenuItems, liveDrivers, liveFoodOrders] = await Promise.all([
-      fetchProductsFromSupabase(tenantId),
-      fetchSuppliersFromSupabase(tenantId),
-      fetchProfilesFromSupabase(tenantId),
-      fetchFiscalRangesFromSupabase(tenantId),
-      fetchCashMovementsFromSupabase(tenantId),
-      fetchExpensesFromSupabase(tenantId),
-      fetchMenuItemsFromSupabase(tenantId),
-      fetchDeliveryDriversFromSupabase(tenantId),
-      fetchFoodOrdersFromSupabase(tenantId)
+    // Batch 1: Essential Catalogs (Products, Fiscal Ranges, Profiles)
+    const [liveProducts, liveRanges, liveProfiles] = await Promise.all([
+      fetchProductsFromSupabase(tenantId).catch(() => null),
+      fetchFiscalRangesFromSupabase(tenantId).catch(() => null),
+      fetchProfilesFromSupabase(tenantId).catch(() => null)
     ]);
 
-    // 2. Fetch sales and shifts reusing already downloaded products, ranges, and profiles
+    // Batch 2: Commercial & Operational Data (Suppliers, Cash Movements, Expenses)
+    const [liveSuppliers, liveMovements, liveExpenses] = await Promise.all([
+      fetchSuppliersFromSupabase(tenantId).catch(() => null),
+      fetchCashMovementsFromSupabase(tenantId).catch(() => null),
+      fetchExpensesFromSupabase(tenantId).catch(() => null)
+    ]);
+
+    // Batch 3: Food & Restaurant Module (Menu Items, Drivers, Food Orders)
+    const [liveMenuItems, liveDrivers, liveFoodOrders] = await Promise.all([
+      fetchMenuItemsFromSupabase(tenantId).catch(() => null),
+      fetchDeliveryDriversFromSupabase(tenantId).catch(() => null),
+      fetchFoodOrdersFromSupabase(tenantId).catch(() => null)
+    ]);
+
+    // Batch 4: Sales and Shifts reusing already downloaded products, ranges, and profiles
     const [liveSales, liveShifts] = await Promise.all([
-      fetchSalesFromSupabase(tenantId, liveRanges, liveProducts),
-      fetchShiftsFromSupabase(tenantId, liveProfiles, liveRanges)
+      fetchSalesFromSupabase(tenantId, liveRanges, liveProducts).catch(() => null),
+      fetchShiftsFromSupabase(tenantId, liveProfiles, liveRanges).catch(() => null)
     ]);
 
     useAppStore.setState(state => {
@@ -1720,44 +1717,58 @@ export async function syncAllCloudData(tenantId: string) {
     });
   } catch (err) {
     console.warn('Error en syncAllCloudData:', err);
+  } finally {
+    isSyncingCloudData = false;
+    lastSyncTimestamp = Date.now();
   }
 }
 
 /**
  * Processes any items currently queued in offlineQueue and pushes them to Supabase
  */
+let isProcessingOfflineQueue = false;
+
 export async function processOfflineQueue() {
   if (!isSupabaseConfigured() || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+  if (isProcessingOfflineQueue) return;
 
   const state = useAppStore.getState();
   const queue = state.offlineQueue || [];
   if (queue.length === 0) return;
 
+  isProcessingOfflineQueue = true;
   console.log(`Procesando cola offline (${queue.length} elementos)...`);
 
-  for (const item of queue) {
-    try {
-      let success = false;
-      if (item.type === 'SALE') {
-        const res = await saveSaleToSupabase(item.payload);
-        if (res) success = true;
-      } else if (item.type === 'SHIFT') {
-        const res = await saveCashShiftToSupabase(item.payload);
-        if (res) success = true;
-      } else if (item.type === 'MOVEMENT') {
-        const res = await saveCashMovementToSupabase(item.payload);
-        if (res) success = true;
-      } else if (item.type === 'EXPENSE') {
-        const res = await saveExpenseToSupabase(item.payload);
-        if (res) success = true;
-      }
+  try {
+    for (const item of queue) {
+      try {
+        let success = false;
+        if (item.type === 'SALE') {
+          const res = await saveSaleToSupabase(item.payload);
+          if (res) success = true;
+        } else if (item.type === 'SHIFT') {
+          const res = await saveCashShiftToSupabase(item.payload);
+          if (res) success = true;
+        } else if (item.type === 'MOVEMENT') {
+          const res = await saveCashMovementToSupabase(item.payload);
+          if (res) success = true;
+        } else if (item.type === 'EXPENSE') {
+          const res = await saveExpenseToSupabase(item.payload);
+          if (res) success = true;
+        } else if (item.type === 'FOOD_ORDER') {
+          const res = await saveFoodOrderToSupabase(item.payload);
+          if (res) success = true;
+        }
 
-      if (success) {
-        state.removeOfflineItem(item.id);
+        if (success) {
+          state.removeOfflineItem(item.id);
+        }
+      } catch (err) {
+        console.warn(`Error procesando elemento offline ${item.id}:`, err);
       }
-    } catch (err) {
-      console.warn(`Error procesando elemento offline ${item.id}:`, err);
     }
+  } finally {
+    isProcessingOfflineQueue = false;
   }
 }
 
@@ -1911,7 +1922,9 @@ export async function fetchFoodOrdersFromSupabase(tenantId: string): Promise<Foo
     const { data, error } = await supabase
       .from('food_orders')
       .select('*')
-      .eq('tenant_id', tenantId);
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(150);
 
     if (error || !data) return null;
 
