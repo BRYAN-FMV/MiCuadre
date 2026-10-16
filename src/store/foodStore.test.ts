@@ -611,6 +611,56 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     expect(secondSettlement.ordersCount).toBe(0);
     expect(secondSettlement.totalCash).toBe(0);
   });
+
+  it('should exclude card and transfer delivery orders from totalCash upon driver settlement', () => {
+    const store = useAppStore.getState();
+    const driver = store.addDeliveryDriver({
+      fullName: 'Repartidor Digital',
+      driverType: 'INTERNAL',
+      isActive: true
+    });
+
+    const cashOrder = store.createFoodOrder({
+      tableNumber: 'DOM-001',
+      customerName: 'Cliente Efectivo',
+      status: 'PREPARING',
+      deliveryType: 'DELIVERY',
+      driverId: driver.id,
+      paymentMethod: 'CASH',
+      items: [{ menuItemId: 'item-1', name: 'Pollo Frito', quantity: 1, unitPrice: 100, subtotal: 100 }],
+      subtotal: 100.0,
+      deliveryFee: 20.0,
+      total: 120.0
+    });
+
+    const transferOrder = store.createFoodOrder({
+      tableNumber: 'DOM-002',
+      customerName: 'Cliente Transferencia',
+      status: 'PREPARING',
+      deliveryType: 'DELIVERY',
+      driverId: driver.id,
+      paymentMethod: 'TRANSFER',
+      items: [{ menuItemId: 'item-2', name: 'Hamburguesa', quantity: 1, unitPrice: 150, subtotal: 150 }],
+      subtotal: 150.0,
+      deliveryFee: 20.0,
+      total: 170.0
+    });
+
+    const result = store.settleDriverOrders(driver.id);
+    expect(result.ordersCount).toBe(2);
+    // Only the cash order enters totalCash: 100 + 20 = 120
+    expect(result.totalCash).toBe(120.0);
+
+    const updatedCashOrder = useAppStore.getState().foodOrders.find(o => o.id === cashOrder.id);
+    const updatedTransferOrder = useAppStore.getState().foodOrders.find(o => o.id === transferOrder.id);
+    expect(updatedCashOrder?.driverSettled).toBe(true);
+    expect(updatedTransferOrder?.driverSettled).toBe(true);
+
+    const transferSale = useAppStore.getState().sales.find(s => s.id === updatedTransferOrder?.saleId);
+    expect(transferSale?.paymentMethod).toBe('TRANSFER');
+    expect(transferSale?.cashAmount).toBe(0);
+    expect(transferSale?.transferAmount).toBe(170.0);
+  });
 });
 
 

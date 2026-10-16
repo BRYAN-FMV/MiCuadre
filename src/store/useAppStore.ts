@@ -3098,6 +3098,9 @@ export const useAppStore = create<AppState>()(
           ? (o.subtotal + (o.deliveryFee || 0))
           : o.subtotal;
 
+        const salePaymentMethod = o.paymentMethod || 'CASH';
+        const isCashMethod = salePaymentMethod === 'CASH';
+
         const newSale: Sale = {
           id: saleId,
           tenantId: state.tenant.id,
@@ -3115,10 +3118,10 @@ export const useAppStore = create<AppState>()(
           taxable18: 0,
           tax18: 0,
           total: saleTotal,
-          paymentMethod: 'CASH',
-          cashAmount: saleTotal,
-          cardAmount: 0,
-          transferAmount: 0,
+          paymentMethod: salePaymentMethod,
+          cashAmount: isCashMethod ? saleTotal : 0,
+          cardAmount: salePaymentMethod === 'CARD' ? saleTotal : 0,
+          transferAmount: salePaymentMethod === 'TRANSFER' ? saleTotal : 0,
           createdAt: nowIso,
           items: saleItems
         };

@@ -68,9 +68,13 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
   const isInternal = activeDriver?.driverType === 'INTERNAL';
 
   // Calculate settlement amounts
-  const totalFood = unsettledOrders.reduce((acc, o) => acc + o.subtotal, 0);
-  const totalDeliveryFees = unsettledOrders.reduce((acc, o) => acc + (o.deliveryFee || 0), 0);
+  const cashOrders = unsettledOrders.filter(o => o.paymentMethod !== 'CARD' && o.paymentMethod !== 'TRANSFER');
+  const digitalOrders = unsettledOrders.filter(o => o.paymentMethod === 'CARD' || o.paymentMethod === 'TRANSFER');
+
+  const totalFood = cashOrders.reduce((acc, o) => acc + o.subtotal, 0);
+  const totalDeliveryFees = cashOrders.reduce((acc, o) => acc + (o.deliveryFee || 0), 0);
   const totalCashToCollect = isInternal ? totalFood + totalDeliveryFees : totalFood;
+  const totalDigital = digitalOrders.reduce((acc, o) => acc + (isInternal ? (o.subtotal + (o.deliveryFee || 0)) : o.subtotal), 0);
 
   const handleCreateDriver = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,7 +107,8 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
 
     const result = settleDriverOrders(activeDriver.id, activeShift?.id);
     const cajaName = activeShift?.cajaName || 'Caja Registradora';
-    toast.success(`Liquidación exitosa: ${result.ordersCount} pedidos liquidados por ${formatCurrency(result.totalCash, tenant.currencySymbol)}. Efectivo ingresado a ${cajaName}.`);
+    const digitalNote = digitalOrders.length > 0 ? ` (${digitalOrders.length} cobro(s) digitales por ${formatCurrency(totalDigital, tenant.currencySymbol)} no ingresan a gaveta)` : '';
+    toast.success(`Liquidación exitosa: ${result.ordersCount} pedidos liquidados. Efectivo ingresado a ${cajaName}: ${formatCurrency(result.totalCash, tenant.currencySymbol)}.${digitalNote}`);
   };
 
   return (
@@ -340,7 +345,8 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
                     </div>
                   ) : (
                     unsettledOrders.map(order => {
-                      const orderCollect = isInternal ? order.subtotal + (order.deliveryFee || 0) : order.subtotal;
+                      const isDigital = order.paymentMethod === 'CARD' || order.paymentMethod === 'TRANSFER';
+                      const orderCollect = isDigital ? 0 : (isInternal ? order.subtotal + (order.deliveryFee || 0) : order.subtotal);
 
                       return (
                         <div
@@ -351,7 +357,8 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
                             padding: '0.65rem 0.85rem',
                             borderBottom: '1px solid #f1f5f9',
                             alignItems: 'center',
-                            fontSize: '0.8rem'
+                            fontSize: '0.8rem',
+                            background: isDigital ? '#fcfcfd' : undefined
                           }}
                         >
                           <span style={{ fontWeight: 800, color: '#0f172a' }}>
@@ -366,8 +373,20 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
                                 {order.deliveryAddress}
                               </div>
                             )}
-                            <div style={{ fontSize: '0.68rem', marginTop: '2px', color: order.isPaid ? '#16a34a' : '#ea580c', fontWeight: 600 }}>
-                              {order.isPaid ? 'Cobrado previamente' : 'Pendiente -> Ingresa a caja al liquidar'}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '3px', flexWrap: 'wrap' }}>
+                              <span style={{
+                                fontSize: '0.66rem',
+                                fontWeight: 700,
+                                padding: '0.1rem 0.4rem',
+                                borderRadius: '4px',
+                                background: order.paymentMethod === 'CARD' ? '#dbeafe' : order.paymentMethod === 'TRANSFER' ? '#f3e8ff' : '#dcfce7',
+                                color: order.paymentMethod === 'CARD' ? '#1e40af' : order.paymentMethod === 'TRANSFER' ? '#6b21a8' : '#15803d'
+                              }}>
+                                {order.paymentMethod === 'CARD' ? 'Tarjeta' : order.paymentMethod === 'TRANSFER' ? 'Transferencia' : 'Efectivo'}
+                              </span>
+                              <span style={{ fontSize: '0.68rem', color: isDigital ? '#64748b' : order.isPaid ? '#16a34a' : '#ea580c', fontWeight: 600 }}>
+                                {isDigital ? 'Cobro Digital (Sin efectivo en mano)' : order.isPaid ? 'Cobrado previamente' : 'Pendiente -> Ingresa a caja'}
+                              </span>
                             </div>
                           </div>
                           <span style={{ textAlign: 'right', color: '#475569' }}>
@@ -376,9 +395,17 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
                           <span style={{ textAlign: 'right', color: isInternal ? '#166534' : '#94a3b8', fontWeight: isInternal ? 600 : 400 }}>
                             {formatCurrency(order.deliveryFee || 0, tenant.currencySymbol)}
                           </span>
-                          <span style={{ textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
-                            {formatCurrency(orderCollect, tenant.currencySymbol)}
-                          </span>
+                          <div style={{ textAlign: 'right' }}>
+                            {isDigital ? (
+                              <span style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>
+                                {tenant.currencySymbol} 0.00
+                              </span>
+                            ) : (
+                              <span style={{ fontWeight: 800, color: '#0f172a' }}>
+                                {formatCurrency(orderCollect, tenant.currencySymbol)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
                     })
@@ -387,25 +414,37 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
               </div>
 
               {/* Settlement Summary Box */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', gap: '1.5rem' }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Pedidos Pendientes:</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
-                      {unsettledOrders.length}
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Pedidos Totales:</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                      {unsettledOrders.length}{' '}
+                      <span style={{ fontSize: '0.72rem', fontWeight: 500, color: '#64748b' }}>
+                        ({cashOrders.length} efectivo{digitalOrders.length > 0 ? `, ${digitalOrders.length} digital` : ''})
+                      </span>
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Total Comida:</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#334155' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Comida Efectivo:</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#334155' }}>
                       {formatCurrency(totalFood, tenant.currencySymbol)}
                     </div>
                   </div>
                   {isInternal && (
                     <div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Total Envíos:</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#166534' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Envíos Efectivo:</div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#166534' }}>
                         +{formatCurrency(totalDeliveryFees, tenant.currencySymbol)}
+                      </div>
+                    </div>
+                  )}
+                  {totalDigital > 0 && (
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Digitales (Tarjeta/Banco):</div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#6366f1' }}>
+                        {formatCurrency(totalDigital, tenant.currencySymbol)}{' '}
+                        <span style={{ fontSize: '0.68rem', fontWeight: 500, color: '#64748b' }}>(Informativo)</span>
                       </div>
                     </div>
                   )}
