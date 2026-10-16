@@ -1692,10 +1692,24 @@ export async function syncAllCloudData(tenantId: string) {
       // 11. Food Orders
       let foodOrders = state.foodOrders;
       if (liveFoodOrders !== null) {
-        const liveIds = new Set(liveFoodOrders.map(o => o.id));
+        const mergedLiveOrders = liveFoodOrders.map(liveOrder => {
+          const localOrder = (state.foodOrders || []).find(o => o.id === liveOrder.id);
+          if (localOrder && localOrder.isPaid && !liveOrder.isPaid) {
+            return {
+              ...liveOrder,
+              isPaid: true,
+              status: (localOrder.status === 'COMPLETED' || localOrder.status === 'DELIVERED') ? localOrder.status : liveOrder.status,
+              saleId: localOrder.saleId || liveOrder.saleId,
+              paymentMethod: localOrder.paymentMethod || liveOrder.paymentMethod,
+              driverSettled: localOrder.driverSettled || liveOrder.driverSettled
+            };
+          }
+          return liveOrder;
+        });
+        const liveIds = new Set(mergedLiveOrders.map(o => o.id));
         const localOnly = (state.foodOrders || []).filter(o => o.tenantId === tenantId && !liveIds.has(o.id));
         const otherTenantOrders = (state.foodOrders || []).filter(o => o.tenantId && o.tenantId !== tenantId);
-        foodOrders = [...liveFoodOrders, ...localOnly, ...otherTenantOrders];
+        foodOrders = [...mergedLiveOrders, ...localOnly, ...otherTenantOrders];
       }
 
       return {
@@ -1966,7 +1980,7 @@ export async function saveFoodOrderToSupabase(order: FoodOrder): Promise<boolean
       ? order.driverId
       : (isValidUUID(order.deliveryDriverId) ? order.deliveryDriverId : null);
 
-    const { error } = await supabase.from('food_orders').upsert({
+    let { error } = await supabase.from('food_orders').upsert({
       id: isValidUUID(order.id) ? order.id : generateUUID(),
       tenant_id: order.tenantId,
       order_number: order.orderNumber,
@@ -1989,6 +2003,36 @@ export async function saveFoodOrderToSupabase(order: FoodOrder): Promise<boolean
       is_paid: order.isPaid ?? false,
       sale_id: isValidUUID(order.saleId) ? order.saleId : null
     }, { onConflict: 'id' });
+
+    // Fallback if foreign key on sale_id fails (e.g. sale insert in-flight or offline)
+    if (error && order.saleId) {
+      const fallback = await supabase.from('food_orders').upsert({
+        id: isValidUUID(order.id) ? order.id : generateUUID(),
+        tenant_id: order.tenantId,
+        order_number: order.orderNumber,
+        delivery_type: order.deliveryType,
+        status: order.status,
+        table_number: order.tableNumber || null,
+        customer_name: order.customerName || null,
+        customer_phone: order.customerPhone || null,
+        delivery_phone: order.deliveryPhone || null,
+        delivery_address: order.deliveryAddress || null,
+        delivery_fee: order.deliveryFee || 0,
+        driver_id: resolvedDriverId,
+        driver_name: order.driverName || null,
+        driver_type: order.driverType || null,
+        driver_settled: order.driverSettled ?? false,
+        items: order.items || [],
+        subtotal: order.subtotal,
+        total: order.total,
+        payment_method: order.paymentMethod || null,
+        is_paid: order.isPaid ?? false,
+        sale_id: null
+      }, { onConflict: 'id' });
+      if (!fallback.error) {
+        error = null;
+      }
+    }
 
     if (error) {
       console.warn('Supabase save food order info:', error.message);

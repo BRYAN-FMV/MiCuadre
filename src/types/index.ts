@@ -507,6 +507,7 @@ export interface FoodOrder {
   driverName?: string;
   driverType?: DriverType;
   driverSettled?: boolean;
+  notes?: string;
   
   items: FoodOrderItem[];
   subtotal: number;

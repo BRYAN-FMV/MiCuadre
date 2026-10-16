@@ -523,7 +523,96 @@ describe('Restaurant & Food Store Logic (isFoodEnabled)', () => {
     store.removeOfflineItem(testOrder.id);
     expect(useAppStore.getState().offlineQueue.length).toBe(0);
   });
+
+  it('should update and edit an existing active food order', () => {
+    const store = useAppStore.getState();
+
+    const order = store.createFoodOrder({
+      deliveryType: 'DINE_IN',
+      tableNumber: 'Mesa 2',
+      status: 'ORDERED',
+      items: [
+        { name: 'Hamburguesa Clasica', quantity: 1, unitPrice: 120.0, subtotal: 120.0 }
+      ],
+      subtotal: 120.0,
+      total: 120.0
+    });
+
+    expect(order.items.length).toBe(1);
+    expect(order.tableNumber).toBe('Mesa 2');
+
+    // Edit order: add another dish, change table, update notes and customer
+    store.updateFoodOrder(order.id, {
+      tableNumber: 'Mesa 5',
+      customerName: 'Cliente Modificado',
+      items: [
+        { name: 'Hamburguesa Clasica', quantity: 1, unitPrice: 120.0, subtotal: 120.0 },
+        { name: 'Papas Fritas', quantity: 1, unitPrice: 40.0, subtotal: 40.0 }
+      ],
+      subtotal: 160.0,
+      total: 160.0
+    });
+
+    const modified = useAppStore.getState().foodOrders.find(o => o.id === order.id);
+    expect(modified?.tableNumber).toBe('Mesa 5');
+    expect(modified?.customerName).toBe('Cliente Modificado');
+    expect(modified?.items.length).toBe(2);
+    expect(modified?.total).toBe(160.0);
+  });
+
+  it('should settle driver orders creating cash sales for unpaid orders and marking orders settled', () => {
+    const store = useAppStore.getState();
+    store.openCashShift(300);
+    const activeShift = useAppStore.getState().activeShift;
+
+    const driver = store.addDeliveryDriver({
+      fullName: 'Repartidor Express',
+      phone: '8877-6655',
+      driverType: 'INTERNAL',
+      isActive: true
+    });
+
+    // Create an unpaid delivery order
+    const order = store.createFoodOrder({
+      deliveryType: 'DELIVERY',
+      driverId: driver.id,
+      driverName: driver.fullName,
+      driverType: 'INTERNAL',
+      status: 'DELIVERED',
+      customerName: 'Juan Perez',
+      items: [{ name: 'Pollo Frito 2 Piezas', quantity: 1, unitPrice: 110.0, subtotal: 110.0 }],
+      subtotal: 110.0,
+      deliveryFee: 30.0,
+      total: 140.0
+    });
+
+    expect(order.isPaid).toBe(false);
+
+    // Settle driver orders
+    const settlementResult = store.settleDriverOrders(driver.id, activeShift?.id);
+    expect(settlementResult.ordersCount).toBe(1);
+    expect(settlementResult.totalCash).toBe(140.0);
+
+    // Verify order is now paid, delivered and settled
+    const settledOrder = useAppStore.getState().foodOrders.find(o => o.id === order.id);
+    expect(settledOrder?.isPaid).toBe(true);
+    expect(settledOrder?.driverSettled).toBe(true);
+    expect(settledOrder?.saleId).toBeDefined();
+
+    // Verify Sale was generated and assigned to activeShift
+    const generatedSale = useAppStore.getState().sales.find(s => s.id === settledOrder?.saleId);
+    expect(generatedSale).toBeDefined();
+    expect(generatedSale?.cashShiftId).toBe(activeShift?.id);
+    expect(generatedSale?.total).toBe(140.0);
+    expect(generatedSale?.paymentMethod).toBe('CASH');
+
+    // Verify calling settle again produces 0 since order is already settled
+    const secondSettlement = store.settleDriverOrders(driver.id, activeShift?.id);
+    expect(secondSettlement.ordersCount).toBe(0);
+    expect(secondSettlement.totalCash).toBe(0);
+  });
 });
+
 
 
 

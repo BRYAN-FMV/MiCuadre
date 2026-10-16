@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { FoodOrder, FoodOrderItem, FoodOrderDeliveryType, MenuItem, MenuItemExtra } from '../../types';
 import { formatCurrency } from '../../lib/monetary';
@@ -23,6 +23,7 @@ interface NewFoodOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOrderCreatedAndCharge?: (order: FoodOrder) => void;
+  orderToEdit?: FoodOrder | null;
 }
 
 const DEFAULT_TABLES = [
@@ -35,7 +36,8 @@ const DEFAULT_TABLES = [
 export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
   isOpen,
   onClose,
-  onOrderCreatedAndCharge
+  onOrderCreatedAndCharge,
+  orderToEdit
 }) => {
   const tenant = useAppStore(state => state.tenant);
   const allMenuItems = useAppStore(state => state.menuItems) || [];
@@ -47,6 +49,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
     d => (!d.tenantId || d.tenantId === tenant.id) && d.isActive
   );
   const createFoodOrder = useAppStore(state => state.createFoodOrder);
+  const updateFoodOrder = useAppStore(state => state.updateFoodOrder);
 
   // Form State
   const [deliveryType, setDeliveryType] = useState<FoodOrderDeliveryType>('DINE_IN');
@@ -60,6 +63,30 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
   // Items in Comanda
   const [orderItems, setOrderItems] = useState<FoodOrderItem[]>([]);
   const [generalNotes, setGeneralNotes] = useState<string>('');
+
+  useEffect(() => {
+    if (orderToEdit) {
+      setDeliveryType(orderToEdit.deliveryType);
+      setTableNumber(orderToEdit.tableNumber || 'Mesa 1');
+      setCustomerName(orderToEdit.customerName || '');
+      setCustomerPhone(orderToEdit.customerPhone || orderToEdit.deliveryPhone || '');
+      setDeliveryAddress(orderToEdit.deliveryAddress || '');
+      setDeliveryFee(orderToEdit.deliveryFee !== undefined ? String(orderToEdit.deliveryFee) : '30');
+      setSelectedDriverId(orderToEdit.driverId || orderToEdit.deliveryDriverId || '');
+      setOrderItems(orderToEdit.items || []);
+      setGeneralNotes(orderToEdit.notes || '');
+    } else {
+      setDeliveryType('DINE_IN');
+      setTableNumber('Mesa 1');
+      setCustomerName('');
+      setCustomerPhone('');
+      setDeliveryAddress('');
+      setDeliveryFee('30');
+      setSelectedDriverId('');
+      setOrderItems([]);
+      setGeneralNotes('');
+    }
+  }, [isOpen, orderToEdit]);
 
   // Catalog Browser State
   const [catalogSearch, setCatalogSearch] = useState<string>('');
@@ -181,6 +208,48 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
 
     const assignedDriver = deliveryDrivers.find(d => d.id === selectedDriverId);
 
+    if (orderToEdit) {
+      const updatedData: Partial<FoodOrder> = {
+        deliveryType,
+        tableNumber: deliveryType === 'DINE_IN' ? tableNumber : undefined,
+        customerName: customerName.trim() || (deliveryType === 'DINE_IN' ? tableNumber : 'Consumidor Final'),
+        customerPhone: customerPhone.trim() || undefined,
+        deliveryPhone: deliveryType === 'DELIVERY' ? customerPhone.trim() : undefined,
+        deliveryAddress: deliveryType === 'DELIVERY' ? deliveryAddress.trim() : undefined,
+        deliveryFee: deliveryType === 'DELIVERY' ? parsedDeliveryFee : undefined,
+        driverId: assignedDriver?.id,
+        deliveryDriverId: assignedDriver?.id,
+        driverName: assignedDriver?.fullName,
+        driverType: assignedDriver?.driverType,
+        items: orderItems,
+        notes: generalNotes.trim() || undefined,
+        subtotal: foodSubtotal,
+        total: orderTotal
+      };
+
+      updateFoodOrder(orderToEdit.id, updatedData);
+
+      if (printKitchen) {
+        handlePrintKitchenTicket({
+          orderNumber: orderToEdit.orderNumber,
+          tableNumber: updatedData.tableNumber,
+          deliveryType: updatedData.deliveryType || 'DINE_IN',
+          customerName: updatedData.customerName,
+          items: orderItems,
+          notes: generalNotes.trim() || undefined
+        });
+      }
+
+      toast.success(`Comanda ${orderToEdit.orderNumber} modificada con éxito`);
+
+      if (chargeImmediate && onOrderCreatedAndCharge) {
+        onOrderCreatedAndCharge({ ...orderToEdit, ...updatedData });
+      }
+
+      onClose();
+      return;
+    }
+
     const newOrder = createFoodOrder({
       deliveryType,
       status: 'ORDERED',
@@ -277,10 +346,10 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
-                Nueva Comanda / Pedido
+                {orderToEdit ? `Editar Comanda ${orderToEdit.orderNumber}` : 'Nueva Comanda / Pedido'}
               </h3>
               <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>
-                Crea la comanda, agrega platillos con extras y cocina, o cobra directamente
+                {orderToEdit ? 'Modifica los platillos, complementos o datos del comensal' : 'Crea la comanda, agrega platillos con extras y cocina, o cobra directamente'}
               </p>
             </div>
           </div>
@@ -857,7 +926,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                   }}
                 >
                   <Printer size={16} />
-                  <span>Guardar Comanda & Imprimir Cocina</span>
+                  <span>{orderToEdit ? 'Guardar Cambios & Reimprimir Cocina' : 'Guardar Comanda & Imprimir Cocina'}</span>
                 </button>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -877,7 +946,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                       cursor: 'pointer'
                     }}
                   >
-                    Solo Guardar
+                    {orderToEdit ? 'Guardar Cambios' : 'Solo Guardar'}
                   </button>
 
                   <button

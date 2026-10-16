@@ -5,7 +5,7 @@ import {
   Printer, ShoppingBag,
   Search, Filter, Eye, X, Receipt, CheckCircle, Trophy, Award, Users,
   Archive, Star, Layers, PackageX, TrendingDown, RefreshCw, Zap,
-  RotateCcw, Ban, Wallet
+  RotateCcw, Ban, Wallet, Utensils
 } from 'lucide-react';
 import { Sale, Product, CartLine, Expense } from '../../types';
 import { printSaleReceipt, printZReport } from '../../lib/thermalPrint';
@@ -24,6 +24,7 @@ import { DateFilterPeriod, matchesDateFilter } from '../../lib/dateFilter';
 export const ReportsView: React.FC = () => {
   const sales = useAppStore(state => state.sales);
   const products = useAppStore(state => state.products);
+  const allMenuItems = useAppStore(state => state.menuItems) || [];
   const expenses = useAppStore(state => state.expenses);
   const tenant = useAppStore(state => state.tenant);
   const shiftHistory = useAppStore(state => state.shiftHistory);
@@ -35,7 +36,13 @@ export const ReportsView: React.FC = () => {
   const voidSale = useAppStore(state => state.voidSale);
   const refundSale = useAppStore(state => state.refundSale);
 
+  const isDemo = tenant.id === '00000000-0000-0000-0000-000000000001';
+  const menuItems = allMenuItems.filter(
+    m => m.tenantId === tenant.id || (isDemo && (!m.tenantId || m.tenantId === '00000000-0000-0000-0000-000000000001'))
+  );
+
   const [mainSubTab, setMainSubTab] = useState<'sales' | 'leaderboard' | 'inventory_capital' | 'loyalty' | 'shifts'>('sales');
+  const [rankingTypeFilter, setRankingTypeFilter] = useState<'ALL' | 'PRODUCTS' | 'FOOD'>('ALL');
 
   const tenantShifts = [
     ...(activeShift && activeShift.tenantId === tenant.id && activeShift.status === 'CLOSED' ? [activeShift] : []),
@@ -301,28 +308,108 @@ export const ReportsView: React.FC = () => {
     CREDIT: validSales.filter(s => s.paymentMethod === 'CREDIT').reduce((acc, s) => acc + s.total, 0),
   };
 
-  // Top Selling Products Calculation (on validSales)
-  const productSalesMap: Record<string, { product: Product; quantity: number; revenue: number; cogs: number }> = {};
+  // Top Selling Items Calculation (Products + Kitchen Menu Items) on validSales
+  interface SoldItemRecord {
+    id: string;
+    name: string;
+    type: 'PRODUCT' | 'MENU_ITEM';
+    category: string;
+    quantity: number;
+    revenue: number;
+    cogs: number;
+    unitOfMeasure: string;
+  }
+
+  const soldItemsMap: Record<string, SoldItemRecord> = {};
+
   validSales.forEach(s => {
     s.items?.forEach(line => {
-      if (line.productId) {
+      // Ignore delivery fees in products ranking
+      if (line.sku === 'DELIVERY' || line.name === 'Servicio a Domicilio') {
+        return;
+      }
+
+      // Check if it's a food / menu item
+      const isFoodItem = Boolean(
+        line.menuItemId ||
+        line.sku === 'FOOD' ||
+        menuItems.some(m => m.id === line.productId || m.id === line.menuItemId || m.name.toLowerCase() === line.name.toLowerCase())
+      );
+
+      if (isFoodItem) {
+        const matchedMenu = menuItems.find(
+          m => m.id === line.menuItemId || m.id === line.productId || m.name.toLowerCase() === line.name.toLowerCase()
+        );
+        const itemKey = `menu_${matchedMenu?.id || line.menuItemId || line.name}`;
+        if (!soldItemsMap[itemKey]) {
+          soldItemsMap[itemKey] = {
+            id: itemKey,
+            name: matchedMenu?.name || line.name,
+            type: 'MENU_ITEM',
+            category: matchedMenu?.category || 'Menú / Cocina',
+            quantity: 0,
+            revenue: 0,
+            cogs: 0,
+            unitOfMeasure: 'platos'
+          };
+        }
+        soldItemsMap[itemKey].quantity += line.quantity;
+        soldItemsMap[itemKey].revenue += line.total;
+      } else if (line.productId) {
         const prod = products.find(p => p.id === line.productId);
         if (prod) {
-          if (!productSalesMap[line.productId]) {
-            productSalesMap[line.productId] = { product: prod, quantity: 0, revenue: 0, cogs: 0 };
+          const itemKey = `prod_${prod.id}`;
+          if (!soldItemsMap[itemKey]) {
+            soldItemsMap[itemKey] = {
+              id: itemKey,
+              name: prod.name,
+              type: 'PRODUCT',
+              category: prod.category || 'Inventario',
+              quantity: 0,
+              revenue: 0,
+              cogs: 0,
+              unitOfMeasure: prod.unitOfMeasure || 'unid.'
+            };
           }
           const unitsMultiplier = line.unitsPerPackage && line.unitsPerPackage > 1 ? line.unitsPerPackage : 1;
-          productSalesMap[line.productId].quantity += line.quantity * unitsMultiplier;
-          productSalesMap[line.productId].revenue += line.total;
-          productSalesMap[line.productId].cogs += prod.costPrice * line.quantity * unitsMultiplier;
+          soldItemsMap[itemKey].quantity += line.quantity * unitsMultiplier;
+          soldItemsMap[itemKey].revenue += line.total;
+          soldItemsMap[itemKey].cogs += prod.costPrice * line.quantity * unitsMultiplier;
         }
+      } else {
+        // Unlinked general item
+        const itemKey = `misc_${line.name}`;
+        if (!soldItemsMap[itemKey]) {
+          soldItemsMap[itemKey] = {
+            id: itemKey,
+            name: line.name,
+            type: 'PRODUCT',
+            category: 'General',
+            quantity: 0,
+            revenue: 0,
+            cogs: 0,
+            unitOfMeasure: 'unid.'
+          };
+        }
+        soldItemsMap[itemKey].quantity += line.quantity;
+        soldItemsMap[itemKey].revenue += line.total;
       }
     });
   });
 
-  const topProducts = Object.values(productSalesMap)
+  const allSoldItemsList = Object.values(soldItemsMap);
+  const foodSoldItemsList = allSoldItemsList.filter(it => it.type === 'MENU_ITEM');
+  const totalFoodPlatesSold = foodSoldItemsList.reduce((acc, it) => acc + it.quantity, 0);
+  const totalFoodRevenue = foodSoldItemsList.reduce((acc, it) => acc + it.revenue, 0);
+
+  const topSoldItems = allSoldItemsList
+    .filter(it => {
+      if (rankingTypeFilter === 'PRODUCTS') return it.type === 'PRODUCT';
+      if (rankingTypeFilter === 'FOOD') return it.type === 'MENU_ITEM';
+      return true;
+    })
     .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
+    .slice(0, 7);
 
   // Inventory Health Metric Calculations
   const tenantProductsList = products.filter(p => p.tenantId === tenant.id);
@@ -424,7 +511,7 @@ export const ReportsView: React.FC = () => {
   const categoryCapitalList = Object.values(categoryCapitalMap).sort((a, b) => b.costValue - a.costValue);
 
   const deadStockProducts = activeTenantProducts.map(p => {
-    const soldQty = productSalesMap[p.id]?.quantity || 0;
+    const soldQty = soldItemsMap['prod_' + p.id]?.quantity || 0;
     return {
       product: p,
       soldQty,
@@ -687,6 +774,11 @@ export const ReportsView: React.FC = () => {
                     Fiado: {formatCurrency(paymentMethods.CREDIT, tenant.currencySymbol)}
                   </span>
                 )}
+                {tenant.isFoodEnabled && totalFoodPlatesSold > 0 && (
+                  <span style={{ background: '#fff7ed', color: '#c2410c', padding: '0.2rem 0.5rem', borderRadius: '6px', border: '1px solid #fed7aa', fontWeight: 700 }}>
+                    Cocina: {totalFoodPlatesSold} {totalFoodPlatesSold === 1 ? 'plato' : 'platos'} ({formatCurrency(totalFoodRevenue, tenant.currencySymbol)})
+                  </span>
+                )}
               </div>
             </div>
 
@@ -792,38 +884,107 @@ export const ReportsView: React.FC = () => {
 
             {/* Left: Top 5 Products */}
             <div className="glass-panel" style={{ padding: '1.35rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <div>
                   <h3 style={{ fontSize: '1rem', color: '#0f172a', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <ShoppingBag size={18} style={{ color: '#059669' }} />
-                    Lo que Más se Vende (Top 5)
+                    Lo que Más se Vende
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>
-                    Productos que generan más ingresos y ganancia en este período
+                    {tenant.isFoodEnabled
+                      ? 'Artículos con mayores ingresos en el período (inventario y platos del menú)'
+                      : 'Productos que generan más ingresos y ganancia en este período'}
                   </p>
                 </div>
+
+                {tenant.isFoodEnabled && (
+                  <div style={{ display: 'flex', gap: '0.25rem', background: '#f1f5f9', padding: '0.2rem', borderRadius: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setRankingTypeFilter('ALL')}
+                      style={{
+                        padding: '0.25rem 0.55rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '6px',
+                        background: rankingTypeFilter === 'ALL' ? '#ffffff' : 'transparent',
+                        color: rankingTypeFilter === 'ALL' ? '#0f172a' : '#64748b',
+                        boxShadow: rankingTypeFilter === 'ALL' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRankingTypeFilter('PRODUCTS')}
+                      style={{
+                        padding: '0.25rem 0.55rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '6px',
+                        background: rankingTypeFilter === 'PRODUCTS' ? '#ffffff' : 'transparent',
+                        color: rankingTypeFilter === 'PRODUCTS' ? '#0f172a' : '#64748b',
+                        boxShadow: rankingTypeFilter === 'PRODUCTS' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Mercadería
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRankingTypeFilter('FOOD')}
+                      style={{
+                        padding: '0.25rem 0.55rem',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '6px',
+                        background: rankingTypeFilter === 'FOOD' ? '#ffffff' : 'transparent',
+                        color: rankingTypeFilter === 'FOOD' ? '#ea580c' : '#64748b',
+                        boxShadow: rankingTypeFilter === 'FOOD' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Platos ({foodSoldItemsList.length})
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {topProducts.length === 0 ? (
+              {topSoldItems.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
-                  Aún no hay productos vendidos en este período.
+                  Aún no hay artículos vendidos en este período.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  {topProducts.map((item, idx) => {
+                  {topSoldItems.map((item, idx) => {
                     const itemProfit = item.revenue - item.cogs;
                     return (
-                      <div key={item.product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.85rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
                           <span style={{ width: '24px', height: '24px', borderRadius: '6px', background: idx === 0 ? '#059669' : '#e2e8f0', color: idx === 0 ? '#ffffff' : '#475569', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>
                             {idx + 1}
                           </span>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {item.product.name}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {item.name}
+                              </span>
+                              {item.type === 'MENU_ITEM' ? (
+                                <span style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', fontSize: '0.65rem', fontWeight: 800, padding: '0.1rem 0.35rem', borderRadius: '4px', flexShrink: 0 }}>
+                                  Plato
+                                </span>
+                              ) : (
+                                <span style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.35rem', borderRadius: '4px', flexShrink: 0 }}>
+                                  Inventario
+                                </span>
+                              )}
                             </div>
                             <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                              {item.quantity} {item.product.unitOfMeasure || 'unid.'} vendidas
+                              {item.quantity} {item.unitOfMeasure} {item.type === 'MENU_ITEM' ? 'servidos' : 'vendidas'} {item.category ? `• ${item.category}` : ''}
                             </div>
                           </div>
                         </div>
@@ -832,9 +993,15 @@ export const ReportsView: React.FC = () => {
                           <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.86rem' }}>
                             {formatCurrency(item.revenue, tenant.currencySymbol)}
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>
-                            Deja: {formatCurrency(itemProfit, tenant.currencySymbol)}
-                          </div>
+                          {item.type === 'PRODUCT' && item.cogs > 0 ? (
+                            <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>
+                              Deja: {formatCurrency(itemProfit, tenant.currencySymbol)}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                              {item.type === 'MENU_ITEM' ? 'Cocina' : ''}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1330,6 +1497,84 @@ export const ReportsView: React.FC = () => {
                 </table>
               </div>
             </div>
+
+            {/* Food Menu Dishes Overview if Food Enabled */}
+            {tenant.isFoodEnabled && (
+              <div className="glass-panel" style={{ gridColumn: '1 / -1', padding: '1.35rem', background: '#ffffff', border: '1px solid #fed7aa', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1rem', color: '#0f172a', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Utensils size={18} style={{ color: '#ea580c' }} />
+                      Menú de Cocina y Platos Servidos ({menuItems.length} platos)
+                    </h3>
+                    <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>
+                      Conteo de platos servidos en el período seleccionado y recaudación por plato
+                    </p>
+                  </div>
+
+                  <span className="badge" style={{ background: '#fff7ed', color: '#c2410c', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                    Total Servidos: {totalFoodPlatesSold} {totalFoodPlatesSold === 1 ? 'plato' : 'platos'} ({formatCurrency(totalFoodRevenue, tenant.currencySymbol)})
+                  </span>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table" style={{ width: '100%', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ background: '#fff7ed', color: '#9a3412', textAlign: 'left' }}>
+                        <th style={{ padding: '0.65rem' }}>Plato / Menú</th>
+                        <th style={{ padding: '0.65rem' }}>Categoría</th>
+                        <th style={{ padding: '0.65rem' }}>Precio Base</th>
+                        <th style={{ padding: '0.65rem' }}>Estado Menú</th>
+                        <th style={{ padding: '0.65rem', textAlign: 'center' }}>Platos Servidos</th>
+                        <th style={{ padding: '0.65rem', textAlign: 'right' }}>Recaudado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {menuItems.map(item => {
+                        const itemKey = `menu_${item.id}`;
+                        const soldRecord = soldItemsMap[itemKey] || Object.values(soldItemsMap).find(
+                          s => s.type === 'MENU_ITEM' && s.name.toLowerCase() === item.name.toLowerCase()
+                        );
+                        const soldCount = soldRecord?.quantity || 0;
+                        const soldTotal = soldRecord?.revenue || 0;
+
+                        return (
+                          <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '0.65rem', fontWeight: 700, color: '#0f172a' }}>
+                              {item.name}
+                            </td>
+                            <td style={{ padding: '0.65rem', color: '#64748b' }}>
+                              {item.category || 'General'}
+                            </td>
+                            <td style={{ padding: '0.65rem', fontWeight: 600, color: '#334155' }}>
+                              {formatCurrency(item.price, tenant.currencySymbol)}
+                            </td>
+                            <td style={{ padding: '0.65rem' }}>
+                              <span style={{
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '9999px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                background: item.isAvailable ? '#f0fdf4' : '#fef2f2',
+                                color: item.isAvailable ? '#16a34a' : '#ef4444'
+                              }}>
+                                {item.isAvailable ? 'Disponible' : 'Agotado'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.65rem', textAlign: 'center', fontWeight: 800, color: soldCount > 0 ? '#ea580c' : '#94a3b8' }}>
+                              {soldCount}
+                            </td>
+                            <td style={{ padding: '0.65rem', textAlign: 'right', fontWeight: 800, color: soldTotal > 0 ? '#0f172a' : '#94a3b8' }}>
+                              {formatCurrency(soldTotal, tenant.currencySymbol)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

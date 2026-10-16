@@ -2870,27 +2870,26 @@ export const useAppStore = create<AppState>()(
     }));
 
     if (isSupabaseConfigured() && isValidUUID(newSale.tenantId)) {
-      saveSaleToSupabase(newSale).catch(err => {
-        console.warn('Supabase save food order sale info:', err);
-        get().enqueueOfflineItem({
-          id: newSale.id,
-          tenantId: newSale.tenantId,
-          type: 'SALE',
-          payload: newSale
-        });
-      });
-      const targetOrder = updatedOrders.find(o => o.id === order.id);
-      if (targetOrder) {
-        saveFoodOrderToSupabase(targetOrder).catch(err => {
-          console.warn('Supabase save food order on checkout:', err);
+      saveSaleToSupabase(newSale)
+        .then(() => {
+          const targetOrder = get().foodOrders.find(o => o.id === order.id);
+          if (targetOrder) {
+            return saveFoodOrderToSupabase(targetOrder);
+          }
+        })
+        .catch(err => {
+          console.warn('Supabase save food order sale sequence info:', err);
           get().enqueueOfflineItem({
-            id: targetOrder.id,
-            tenantId: targetOrder.tenantId,
-            type: 'FOOD_ORDER',
-            payload: targetOrder
+            id: newSale.id,
+            tenantId: newSale.tenantId,
+            type: 'SALE',
+            payload: newSale
           });
+          const targetOrder = get().foodOrders.find(o => o.id === order.id);
+          if (targetOrder) {
+            saveFoodOrderToSupabase(targetOrder).catch(() => {});
+          }
         });
-      }
     }
 
     return newSale;
@@ -2948,39 +2947,123 @@ export const useAppStore = create<AppState>()(
       }
     });
 
-    const settledIds = new Set(unsettledOrders.map(o => o.id));
-    const updatedOrders = (state.foodOrders || []).map(o => 
-      settledIds.has(o.id) ? { ...o, driverSettled: true } : o
-    );
-
     const targetShiftId = cashShiftId || state.activeShift?.id;
-    let updatedMovements = state.cashMovements || [];
-    if (targetShiftId && totalCash > 0) {
-      const movement: CashMovement = {
-        id: generateUUID(),
-        tenantId: state.tenant.id,
-        cashShiftId: targetShiftId,
-        fiscalRangeId: state.selectedFiscalRangeId,
-        type: 'ENTRADA',
-        amount: totalCash,
-        concept: `Liquidación Repartidor: ${driver?.fullName || 'Repartidor'} (${unsettledOrders.length} entregas)`,
-        registeredBy: state.currentUser?.fullName || 'Sistema',
-        createdAt: new Date().toISOString()
+    const nowIso = new Date().toISOString();
+    const newSales: Sale[] = [];
+    const settledIds = new Set(unsettledOrders.map(o => o.id));
+
+    const updatedOrders = (state.foodOrders || []).map(o => {
+      if (!settledIds.has(o.id)) return o;
+
+      let saleId = o.saleId;
+      if (!o.isPaid && !saleId) {
+        saleId = generateUUID();
+        const saleItems: CartLine[] = (o.items || []).map(it => ({
+          productId: it.productId,
+          menuItemId: it.menuItemId,
+          name: it.name,
+          sku: it.menuItemId || it.productId || 'FOOD',
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          originalUnitPrice: it.unitPrice,
+          discountAmount: 0,
+          taxClassification: 'GRAVADO_15',
+          subtotal: it.subtotal,
+          taxAmount: 0,
+          total: it.subtotal
+        }));
+
+        if (driver?.driverType === 'INTERNAL' && o.deliveryFee && o.deliveryFee > 0) {
+          saleItems.push({
+            name: 'Servicio a Domicilio',
+            sku: 'DELIVERY',
+            quantity: 1,
+            unitPrice: o.deliveryFee,
+            originalUnitPrice: o.deliveryFee,
+            discountAmount: 0,
+            taxClassification: 'EXENTO',
+            subtotal: o.deliveryFee,
+            taxAmount: 0,
+            total: o.deliveryFee
+          });
+        }
+
+        const saleTotal = driver?.driverType === 'INTERNAL'
+          ? (o.subtotal + (o.deliveryFee || 0))
+          : o.subtotal;
+
+        const newSale: Sale = {
+          id: saleId,
+          tenantId: state.tenant.id,
+          cashShiftId: targetShiftId,
+          documentNumber: `TICK-${Math.floor(100000 + Math.random() * 900000)}`,
+          isFiscal: false,
+          cajaName: state.activeShift?.cajaName || 'Caja 1 - Principal',
+          customerName: o.customerName || 'Cliente Domicilio',
+          subtotal: o.subtotal,
+          discountAmount: 0,
+          exemptAmount: 0,
+          exoneratedAmount: 0,
+          taxable15: o.subtotal,
+          tax15: 0,
+          taxable18: 0,
+          tax18: 0,
+          total: saleTotal,
+          paymentMethod: 'CASH',
+          createdAt: nowIso,
+          items: saleItems
+        };
+        newSales.push(newSale);
+      }
+
+      return {
+        ...o,
+        isPaid: true,
+        status: 'DELIVERED' as const,
+        driverSettled: true,
+        paymentMethod: o.paymentMethod || 'CASH',
+        saleId
       };
-      updatedMovements = [...updatedMovements, movement];
-      if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
-        saveCashMovementToSupabase(movement).catch(err => console.warn('Supabase save settlement movement info:', err));
+    });
+
+    let updatedMovements = state.cashMovements || [];
+    if (targetShiftId && totalCash > 0 && newSales.length === 0) {
+      const existingSaleIds = new Set((state.sales || []).filter(s => s.cashShiftId === targetShiftId).map(s => s.id));
+      const hasSalesInCurrentShift = unsettledOrders.some(o => o.saleId && existingSaleIds.has(o.saleId));
+      if (!hasSalesInCurrentShift) {
+        const movement: CashMovement = {
+          id: generateUUID(),
+          tenantId: state.tenant.id,
+          cashShiftId: targetShiftId,
+          fiscalRangeId: state.selectedFiscalRangeId,
+          type: 'ENTRADA',
+          amount: totalCash,
+          concept: `Liquidación Repartidor: ${driver?.fullName || 'Repartidor'} (${unsettledOrders.length} entregas)`,
+          registeredBy: state.currentUser?.fullName || 'Sistema',
+          createdAt: nowIso
+        };
+        updatedMovements = [...updatedMovements, movement];
+        if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+          saveCashMovementToSupabase(movement).catch(err => console.warn('Supabase save settlement movement info:', err));
+        }
       }
     }
 
     set({
+      sales: newSales.length > 0 ? [...newSales, ...(state.sales || [])] : state.sales,
       foodOrders: updatedOrders,
       cashMovements: updatedMovements
     });
 
     if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      newSales.forEach(s => {
+        saveSaleToSupabase(s).catch(err => console.warn('Supabase save settlement sale info:', err));
+      });
       unsettledOrders.forEach(o => {
-        saveFoodOrderToSupabase({ ...o, driverSettled: true }).catch(err => console.warn('Supabase sync settled order info:', err));
+        const targetUpdated = updatedOrders.find(u => u.id === o.id);
+        if (targetUpdated) {
+          saveFoodOrderToSupabase(targetUpdated).catch(err => console.warn('Supabase sync settled order info:', err));
+        }
       });
     }
 

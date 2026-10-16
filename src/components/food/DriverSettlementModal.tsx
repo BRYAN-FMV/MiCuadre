@@ -102,7 +102,8 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
     }
 
     const result = settleDriverOrders(activeDriver.id, activeShift?.id);
-    toast.success(`Liquidación exitosa: ${result.ordersCount} pedidos liquidados por ${formatCurrency(result.totalCash, tenant.currencySymbol)}.`);
+    const cajaName = activeShift?.cajaName || 'Caja Registradora';
+    toast.success(`Liquidación exitosa: ${result.ordersCount} pedidos liquidados por ${formatCurrency(result.totalCash, tenant.currencySymbol)}. Efectivo ingresado a ${cajaName}.`);
   };
 
   return (
@@ -262,6 +263,41 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
 
           {activeDriver ? (
             <>
+              {/* Cash Register Destination Box */}
+              <div
+                style={{
+                  background: activeShift ? '#f0fdf4' : '#fffbeb',
+                  border: activeShift ? '1px solid #bbf7d0' : '1px solid #fde68a',
+                  borderRadius: '10px',
+                  padding: '0.75rem 1rem',
+                  fontSize: '0.82rem',
+                  color: activeShift ? '#166534' : '#92400e',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <DollarSign size={18} style={{ color: activeShift ? '#16a34a' : '#d97706', flexShrink: 0 }} />
+                  <div>
+                    <strong>Caja de Destino: </strong>
+                    <span>{activeShift ? `${activeShift.cajaName || 'Caja 1 - Principal'} (Turno Abierto)` : 'Sin turno de caja abierto'}</span>
+                    <div style={{ fontSize: '0.74rem', opacity: 0.9, marginTop: '2px' }}>
+                      {activeShift 
+                        ? 'El efectivo entregado ingresa directamente a tu turno de caja registradora y se suma al cuadre del Cierre Z.' 
+                        : 'Abre un turno de caja para que el efectivo sume automáticamente al arqueo de caja registradora.'}
+                    </div>
+                  </div>
+                </div>
+                {activeShift && (
+                  <span style={{ background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800 }}>
+                    Entrada a Caja Confirmada
+                  </span>
+                )}
+              </div>
+
               {/* Driver Type Rule Notice */}
               <div
                 style={{
@@ -330,6 +366,9 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
                                 {order.deliveryAddress}
                               </div>
                             )}
+                            <div style={{ fontSize: '0.68rem', marginTop: '2px', color: order.isPaid ? '#16a34a' : '#ea580c', fontWeight: 600 }}>
+                              {order.isPaid ? 'Cobrado previamente' : 'Pendiente -> Ingresa a caja al liquidar'}
+                            </div>
                           </div>
                           <span style={{ textAlign: 'right', color: '#475569' }}>
                             {formatCurrency(order.subtotal, tenant.currencySymbol)}

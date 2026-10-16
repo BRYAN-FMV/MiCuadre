@@ -24,7 +24,8 @@ import {
   Trash2,
   MessageCircle,
   Eye,
-  Filter
+  Filter,
+  Pencil
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -47,6 +48,7 @@ export const FoodOrdersBoard: React.FC = () => {
 
   // Modals State
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<FoodOrder | null>(null);
   const [paymentModalOrder, setPaymentModalOrder] = useState<FoodOrder | null>(null);
   const [isDriversModalOpen, setIsDriversModalOpen] = useState(false);
 
@@ -62,7 +64,8 @@ export const FoodOrdersBoard: React.FC = () => {
   };
 
   const getUrgencyBadge = (order: FoodOrder) => {
-    if (order.isPaid || order.status === 'COMPLETED' || order.status === 'DELIVERED' || order.status === 'CANCELLED') {
+    const isPaidEff = Boolean(order.isPaid || (order.saleId && sales.some(s => s.id === order.saleId)));
+    if (isPaidEff || order.status === 'COMPLETED' || order.status === 'DELIVERED' || order.status === 'CANCELLED') {
       return null;
     }
 
@@ -226,6 +229,10 @@ export const FoodOrdersBoard: React.FC = () => {
     window.open(waUrl, '_blank');
   };
 
+  // Helper to determine if an order is effectively paid (checks order.isPaid and linked sale)
+  const isOrderPaidEffective = (order: FoodOrder) =>
+    Boolean(order.isPaid || (order.saleId && sales.some(s => s.id === order.saleId)));
+
   // Filtered & Sorted Orders
   const filteredOrders = useMemo(() => {
     return foodOrders.filter(o => {
@@ -244,28 +251,32 @@ export const FoodOrdersBoard: React.FC = () => {
 
       if (!matchesSearch) return false;
 
+      const isPaid = isOrderPaidEffective(o);
+
       if (statusFilter === 'KITCHEN') {
-        return (o.status === 'ORDERED' || o.status === 'PREPARING') && !o.isPaid;
+        return (o.status === 'ORDERED' || o.status === 'PREPARING') && !isPaid;
       }
       if (statusFilter === 'TABLES') {
-        return o.deliveryType === 'DINE_IN' && !o.isPaid;
+        return o.deliveryType === 'DINE_IN' && !isPaid;
       }
       if (statusFilter === 'DELIVERY') {
-        return o.deliveryType === 'DELIVERY' && !o.isPaid;
+        return o.deliveryType === 'DELIVERY' && !isPaid;
       }
       if (statusFilter === 'COMPLETED') {
-        return o.isPaid || o.status === 'COMPLETED' || o.status === 'DELIVERED';
+        return isPaid || o.status === 'COMPLETED' || o.status === 'DELIVERED';
       }
 
       return true;
     });
-  }, [foodOrders, searchTerm, statusFilter, dateFilter, customDate]);
+  }, [foodOrders, sales, searchTerm, statusFilter, dateFilter, customDate]);
 
   // Sort: Active unpaid first (urgent oldest first), Completed at the bottom
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
-      const aDone = a.isPaid || a.status === 'COMPLETED' || a.status === 'DELIVERED' || a.status === 'CANCELLED';
-      const bDone = b.isPaid || b.status === 'COMPLETED' || b.status === 'DELIVERED' || b.status === 'CANCELLED';
+      const aPaid = isOrderPaidEffective(a);
+      const bPaid = isOrderPaidEffective(b);
+      const aDone = aPaid || a.status === 'COMPLETED' || a.status === 'DELIVERED' || a.status === 'CANCELLED';
+      const bDone = bPaid || b.status === 'COMPLETED' || b.status === 'DELIVERED' || b.status === 'CANCELLED';
 
       if (aDone && !bDone) return 1;
       if (!aDone && bDone) return -1;
@@ -278,7 +289,7 @@ export const FoodOrdersBoard: React.FC = () => {
       // Both done: newest first
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [filteredOrders]);
+  }, [filteredOrders, sales]);
 
   // Date-filtered base orders for counters
   const dateOrders = useMemo(() => {
@@ -286,11 +297,11 @@ export const FoodOrdersBoard: React.FC = () => {
   }, [foodOrders, dateFilter, customDate]);
 
   // KPI Metrics based on selected date period
-  const activeCount = dateOrders.filter(o => !o.isPaid && o.status !== 'CANCELLED').length;
-  const inKitchenCount = dateOrders.filter(o => (o.status === 'ORDERED' || o.status === 'PREPARING') && !o.isPaid).length;
-  const tablesCount = dateOrders.filter(o => o.deliveryType === 'DINE_IN' && !o.isPaid && o.status !== 'CANCELLED').length;
-  const deliveryCount = dateOrders.filter(o => o.deliveryType === 'DELIVERY' && !o.isPaid && o.status !== 'CANCELLED').length;
-  const completedCount = dateOrders.filter(o => o.isPaid || o.status === 'COMPLETED' || o.status === 'DELIVERED').length;
+  const activeCount = dateOrders.filter(o => !isOrderPaidEffective(o) && o.status !== 'CANCELLED').length;
+  const inKitchenCount = dateOrders.filter(o => (o.status === 'ORDERED' || o.status === 'PREPARING') && !isOrderPaidEffective(o)).length;
+  const tablesCount = dateOrders.filter(o => o.deliveryType === 'DINE_IN' && !isOrderPaidEffective(o) && o.status !== 'CANCELLED').length;
+  const deliveryCount = dateOrders.filter(o => o.deliveryType === 'DELIVERY' && !isOrderPaidEffective(o) && o.status !== 'CANCELLED').length;
+  const completedCount = dateOrders.filter(o => isOrderPaidEffective(o) || o.status === 'COMPLETED' || o.status === 'DELIVERED').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -474,7 +485,10 @@ export const FoodOrdersBoard: React.FC = () => {
           {/* CTA: Nuevo Pedido */}
           <button
             type="button"
-            onClick={() => setIsNewOrderModalOpen(true)}
+            onClick={() => {
+              setEditingOrder(null);
+              setIsNewOrderModalOpen(true);
+            }}
             style={{
               minHeight: '42px',
               padding: '0.55rem 1.25rem',
@@ -528,7 +542,8 @@ export const FoodOrdersBoard: React.FC = () => {
         ) : (
           sortedOrders.map(order => {
             const urgency = getUrgencyBadge(order);
-            const isCompleted = order.isPaid || order.status === 'COMPLETED' || order.status === 'DELIVERED';
+            const isPaid = isOrderPaidEffective(order);
+            const isCompleted = isPaid || order.status === 'COMPLETED' || order.status === 'DELIVERED';
             const isCancelled = order.status === 'CANCELLED';
 
             return (
@@ -888,6 +903,32 @@ export const FoodOrdersBoard: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Edit Order Button */}
+                  {!isCompleted && !isCancelled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingOrder(order);
+                        setIsNewOrderModalOpen(true);
+                      }}
+                      style={{
+                        width: '42px',
+                        minHeight: '44px',
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#0f172a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer'
+                      }}
+                      title="Editar comanda"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                  )}
+
                   {/* Print Kitchen Ticket Button */}
                   {!isCompleted && !isCancelled && (
                     <button
@@ -994,10 +1035,14 @@ export const FoodOrdersBoard: React.FC = () => {
         )}
       </div>
 
-      {/* New Food Order Modal */}
+      {/* New / Edit Food Order Modal */}
       <NewFoodOrderModal
         isOpen={isNewOrderModalOpen}
-        onClose={() => setIsNewOrderModalOpen(false)}
+        onClose={() => {
+          setIsNewOrderModalOpen(false);
+          setEditingOrder(null);
+        }}
+        orderToEdit={editingOrder}
         onOrderCreatedAndCharge={(order) => {
           setPaymentModalOrder(order);
         }}
