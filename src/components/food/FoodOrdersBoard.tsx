@@ -558,7 +558,7 @@ export const FoodOrdersBoard: React.FC = () => {
       </div>
 
       {/* 3. Orders Grid Cards (Direct In-Card Checkout Pattern) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '0.85rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '0.85rem' }}>
         {sortedOrders.length === 0 ? (
           <div
             style={{
@@ -596,6 +596,10 @@ export const FoodOrdersBoard: React.FC = () => {
               <div
                 key={order.id}
                 style={{
+                  height: '430px',
+                  minHeight: '430px',
+                  maxHeight: '430px',
+                  boxSizing: 'border-box',
                   background: isCancelled ? '#fff1f2' : isCompleted ? '#f8fafc' : '#ffffff',
                   border: isCancelled
                     ? '1px solid #fecdd3'
@@ -612,7 +616,8 @@ export const FoodOrdersBoard: React.FC = () => {
                   flexDirection: 'column',
                   gap: '0.5rem',
                   boxShadow: isCompleted ? 'none' : '0 2px 5px rgba(0,0,0,0.03)',
-                  opacity: isCancelled ? 0.7 : isCompleted ? 0.85 : 1
+                  opacity: isCancelled ? 0.7 : isCompleted ? 0.85 : 1,
+                  overflow: 'hidden'
                 }}
               >
                 {/* Urgency Highlight Banner if active */}
@@ -679,7 +684,18 @@ export const FoodOrdersBoard: React.FC = () => {
 
                 {/* Customer Details & Phone */}
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h4
+                    style={{
+                      margin: 0,
+                      fontSize: '0.95rem',
+                      fontWeight: 800,
+                      color: '#0f172a',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                    title={order.customerName || (order.tableNumber ? `${order.tableNumber}` : 'Cliente')}
+                  >
                     {order.customerName || (order.tableNumber ? `${order.tableNumber}` : 'Cliente')}
                   </h4>
                   {(order.customerPhone || order.deliveryPhone) && (
@@ -689,7 +705,17 @@ export const FoodOrdersBoard: React.FC = () => {
                     </div>
                   )}
                   {order.deliveryAddress && (
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.1rem' }}>
+                    <div
+                      style={{
+                        fontSize: '0.72rem',
+                        color: '#64748b',
+                        marginTop: '0.1rem',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                      title={order.deliveryAddress}
+                    >
                       <strong>Dir:</strong> {order.deliveryAddress}
                     </div>
                   )}
@@ -711,8 +737,11 @@ export const FoodOrdersBoard: React.FC = () => {
                     flexDirection: 'column',
                     gap: '0.3rem',
                     fontSize: '0.78rem',
-                    maxHeight: '160px',
-                    overflowY: 'auto'
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    scrollbarWidth: 'thin',
+                    boxSizing: 'border-box'
                   }}
                 >
                   {order.items.map((it, idx) => (
@@ -764,313 +793,373 @@ export const FoodOrdersBoard: React.FC = () => {
                   )}
                 </div>
 
-                {/* Total & Status Selector */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Total:</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 900, color: isCompleted ? '#15803d' : '#ea580c' }}>
-                      {formatCurrency(order.total, tenant.currencySymbol)}
-                    </span>
+                {/* Bottom Section: Total & Actions (Anchored at bottom with fixed height) */}
+                <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingTop: '0.2rem' }}>
+                  {/* Total & Status Selector */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '30px' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Total:</span>
+                      <span style={{ fontSize: '1.1rem', fontWeight: 900, color: isCompleted ? '#15803d' : '#ea580c' }}>
+                        {formatCurrency(order.total, tenant.currencySymbol)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Estado:</label>
+                      <select
+                        className="input-control"
+                        value={order.status}
+                        disabled={isCompleted || isCancelled}
+                        onChange={(e) => handleStatusChange(order, e.target.value as FoodOrderStatus)}
+                        style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', height: '28px' }}
+                      >
+                        <option value="ORDERED">Ordenada</option>
+                        <option value="PREPARING">En Cocina</option>
+                        <option value="SERVED">Servida / Lista</option>
+                        <option value="IN_TRANSIT">En Camino</option>
+                        <option value="COMPLETED">Completada</option>
+                        <option value="CANCELLED">Cancelada</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <label style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Estado:</label>
-                    <select
-                      className="input-control"
-                      value={order.status}
-                      disabled={isCompleted || isCancelled}
-                      onChange={(e) => handleStatusChange(order, e.target.value as FoodOrderStatus)}
-                      style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', height: '28px' }}
-                    >
-                      <option value="ORDERED">Ordenada</option>
-                      <option value="PREPARING">En Cocina</option>
-                      <option value="SERVED">Servida / Lista</option>
-                      <option value="IN_TRANSIT">En Camino</option>
-                      <option value="COMPLETED">Completada</option>
-                      <option value="CANCELLED">Cancelada</option>
-                    </select>
-                  </div>
-                </div>
+                  {/* Primary Card Actions: Direct Checkout vs Paid Indicator (Unified 73px height across all states) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {!isCompleted && !isCancelled ? (
+                      <>
+                        {/* Row 1: Primary Action (36px) */}
+                        <div style={{ display: 'flex', gap: '0.35rem', height: '36px' }}>
+                          {order.status === 'ORDERED' && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusChange(order, 'PREPARING')}
+                              style={{
+                                flex: 1,
+                                height: '36px',
+                                padding: '0.4rem 0.5rem',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                borderRadius: '7px',
+                                border: '1px solid #fed7aa',
+                                background: '#fff7ed',
+                                color: '#ea580c',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.25rem',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title="Pasar comanda a En Cocina con 1 toque"
+                            >
+                              <Utensils size={14} />
+                              <span>A Cocina</span>
+                            </button>
+                          )}
 
-                {/* Primary Card Actions: Direct Checkout vs Paid Indicator */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.15rem' }}>
-                  {!isCompleted && !isCancelled ? (
-                    <>
-                      <div style={{ display: 'flex', gap: '0.35rem' }}>
-                        {order.status === 'ORDERED' && (
+                          {order.status === 'PREPARING' && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusChange(order, 'SERVED')}
+                              style={{
+                                flex: 1,
+                                height: '36px',
+                                padding: '0.4rem 0.5rem',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                borderRadius: '7px',
+                                border: '1px solid #bfdbfe',
+                                background: '#eff6ff',
+                                color: '#2563eb',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.25rem',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title="Marcar comanda como Servida / Lista"
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>Servir / Listo</span>
+                            </button>
+                          )}
+
+                          {order.status === 'SERVED' && order.deliveryType === 'DELIVERY' && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusChange(order, 'IN_TRANSIT')}
+                              style={{
+                                flex: 1,
+                                height: '36px',
+                                padding: '0.4rem 0.5rem',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                borderRadius: '7px',
+                                border: '1px solid #bbf7d0',
+                                background: '#f0fdf4',
+                                color: '#16a34a',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.25rem',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title="Marcar pedido En Camino con repartidor"
+                            >
+                              <Bike size={14} />
+                              <span>En Camino</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
-                            onClick={() => handleStatusChange(order, 'PREPARING')}
+                            onClick={() => setPaymentModalOrder(order)}
                             style={{
-                              flex: 1,
-                              minHeight: '36px',
-                              padding: '0.4rem 0.5rem',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
+                              flex: order.status === 'ORDERED' || order.status === 'PREPARING' || (order.status === 'SERVED' && order.deliveryType === 'DELIVERY') ? 1.5 : 1,
+                              height: '36px',
+                              padding: '0.4rem 0.6rem',
+                              fontSize: '0.82rem',
+                              fontWeight: 800,
                               borderRadius: '7px',
-                              border: '1px solid #fed7aa',
-                              background: '#fff7ed',
-                              color: '#ea580c',
+                              border: 'none',
+                              background: '#059669',
+                              color: '#ffffff',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              gap: '0.25rem',
-                              whiteSpace: 'nowrap'
+                              gap: '0.3rem',
+                              boxShadow: '0 1px 4px rgba(5, 150, 105, 0.25)'
                             }}
-                            title="Pasar comanda a En Cocina con 1 toque"
+                            title="Cobro directo sin pasar por el carrito de ventas"
                           >
-                            <Utensils size={14} />
-                            <span>A Cocina</span>
+                            <DollarSign size={15} />
+                            <span>COBRAR {formatCurrency(order.total, tenant.currencySymbol)}</span>
                           </button>
-                        )}
+                        </div>
 
-                        {order.status === 'PREPARING' && (
+                        {/* Secondary Utility Icon Row */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', height: '32px' }}>
+                          {/* Edit */}
                           <button
                             type="button"
-                            onClick={() => handleStatusChange(order, 'SERVED')}
-                            style={{
-                              flex: 1,
-                              minHeight: '36px',
-                              padding: '0.4rem 0.5rem',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
-                              borderRadius: '7px',
-                              border: '1px solid #bfdbfe',
-                              background: '#eff6ff',
-                              color: '#2563eb',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '0.25rem',
-                              whiteSpace: 'nowrap'
+                            onClick={() => {
+                              setEditingOrder(order);
+                              setIsNewOrderModalOpen(true);
                             }}
-                            title="Marcar comanda como Servida / Lista"
-                          >
-                            <CheckCircle2 size={14} />
-                            <span>Servir / Listo</span>
-                          </button>
-                        )}
-
-                        {order.status === 'SERVED' && order.deliveryType === 'DELIVERY' && (
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(order, 'IN_TRANSIT')}
-                            style={{
-                              flex: 1,
-                              minHeight: '36px',
-                              padding: '0.4rem 0.5rem',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
-                              borderRadius: '7px',
-                              border: '1px solid #bbf7d0',
-                              background: '#f0fdf4',
-                              color: '#16a34a',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '0.25rem',
-                              whiteSpace: 'nowrap'
-                            }}
-                            title="Marcar pedido En Camino con repartidor"
-                          >
-                            <Bike size={14} />
-                            <span>En Camino</span>
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => setPaymentModalOrder(order)}
-                          style={{
-                            flex: 1.5,
-                            minHeight: '36px',
-                            padding: '0.4rem 0.6rem',
-                            fontSize: '0.82rem',
-                            fontWeight: 800,
-                            borderRadius: '7px',
-                            border: 'none',
-                            background: '#059669',
-                            color: '#ffffff',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.3rem',
-                            boxShadow: '0 1px 4px rgba(5, 150, 105, 0.25)'
-                          }}
-                          title="Cobro directo sin pasar por el carrito de ventas"
-                        >
-                          <DollarSign size={15} />
-                          <span>COBRAR {formatCurrency(order.total, tenant.currencySymbol)}</span>
-                        </button>
-                      </div>
-
-                      {/* Secondary Utility Icon Row */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', paddingTop: '0.1rem' }}>
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingOrder(order);
-                            setIsNewOrderModalOpen(true);
-                          }}
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '6px',
-                            border: '1px solid #cbd5e1',
-                            background: '#ffffff',
-                            color: '#0f172a',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer'
-                          }}
-                          title="Editar comanda"
-                        >
-                          <Pencil size={14} />
-                        </button>
-
-                        {/* Kitchen Ticket */}
-                        <button
-                          type="button"
-                          onClick={() => handlePrintKitchenTicket(order)}
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '6px',
-                            border: '1px solid #cbd5e1',
-                            background: '#ffffff',
-                            color: '#475569',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer'
-                          }}
-                          title="Imprimir Ticket de Cocina"
-                        >
-                          <Printer size={14} />
-                        </button>
-
-                        {/* WhatsApp Notification */}
-                        {(order.customerPhone || order.deliveryPhone) && (
-                          <button
-                            type="button"
-                            onClick={() => handleSendWhatsAppNotification(order)}
                             style={{
                               width: '32px',
                               height: '32px',
                               borderRadius: '6px',
-                              border: '1px solid #bbf7d0',
-                              background: '#f0fdf4',
-                              color: '#16a34a',
+                              border: '1px solid #cbd5e1',
+                              background: '#ffffff',
+                              color: '#0f172a',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               cursor: 'pointer'
                             }}
-                            title="Enviar mensaje por WhatsApp al cliente"
+                            title="Editar comanda"
                           >
-                            <MessageCircle size={14} />
+                            <Pencil size={14} />
                           </button>
-                        )}
 
-                        {/* Cancel Order */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`¿Cancelar la comanda ${order.orderNumber}?`)) {
-                              cancelFoodOrder(order.id);
-                              toast.info(`Comanda ${order.orderNumber} cancelada`);
-                            }
-                          }}
+                          {/* Kitchen Ticket */}
+                          <button
+                            type="button"
+                            onClick={() => handlePrintKitchenTicket(order)}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              background: '#ffffff',
+                              color: '#475569',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            title="Imprimir Ticket de Cocina"
+                          >
+                            <Printer size={14} />
+                          </button>
+
+                          {/* WhatsApp Notification */}
+                          {(order.customerPhone || order.deliveryPhone) && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendWhatsAppNotification(order)}
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                border: '1px solid #bbf7d0',
+                                background: '#f0fdf4',
+                                color: '#16a34a',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer'
+                              }}
+                              title="Enviar mensaje por WhatsApp al cliente"
+                            >
+                              <MessageCircle size={14} />
+                            </button>
+                          )}
+
+                          {/* Cancel Order */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`¿Cancelar la comanda ${order.orderNumber}?`)) {
+                                cancelFoodOrder(order.id);
+                                toast.info(`Comanda ${order.orderNumber} cancelada`);
+                              }
+                            }}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '6px',
+                              border: '1px solid #fecdd3',
+                              background: '#fff1f2',
+                              color: '#ef4444',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            title="Cancelar comanda"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </>
+                    ) : isCompleted ? (
+                      <>
+                        {/* Row 1: Completed Badge (36px) */}
+                        <div
                           style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '6px',
-                            border: '1px solid #fecdd3',
-                            background: '#fff1f2',
-                            color: '#ef4444',
+                            height: '36px',
+                            background: '#f0fdf4',
+                            border: '1px solid #bbf7d0',
+                            color: '#16a34a',
+                            fontWeight: 800,
+                            fontSize: '0.78rem',
+                            borderRadius: '7px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            cursor: 'pointer'
+                            gap: '0.35rem'
                           }}
-                          title="Cancelar comanda"
                         >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </>
-                  ) : isCompleted ? (
-                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                      <div
-                        style={{
-                          flex: 1,
-                          height: '34px',
-                          background: '#f0fdf4',
-                          border: '1px solid #bbf7d0',
-                          color: '#16a34a',
-                          fontWeight: 800,
-                          fontSize: '0.78rem',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.3rem'
-                        }}
-                      >
-                        <CheckCircle2 size={15} />
-                        <span>Cobrado con Éxito</span>
-                      </div>
+                          <CheckCircle2 size={15} />
+                          <span>Cobrado con Éxito</span>
+                        </div>
 
-                      {order.saleId && (
-                        <button
-                          type="button"
-                          onClick={() => handleReprintSaleReceipt(order)}
+                        {/* Row 2: Secondary Utility Buttons (32px) */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', height: '32px' }}>
+                          {order.saleId && (
+                            <button
+                              type="button"
+                              onClick={() => handleReprintSaleReceipt(order)}
+                              style={{
+                                height: '32px',
+                                padding: '0 0.6rem',
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                background: '#ffffff',
+                                color: '#475569',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                cursor: 'pointer'
+                              }}
+                              title="Reimprimir comprobante de venta"
+                            >
+                              <Printer size={13} />
+                              <span>Ticket</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handlePrintKitchenTicket(order)}
+                            style={{
+                              height: '32px',
+                              padding: '0 0.6rem',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              background: '#ffffff',
+                              color: '#475569',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              cursor: 'pointer'
+                            }}
+                            title="Reimprimir Ticket de Cocina"
+                          >
+                            <Utensils size={13} />
+                            <span>Cocina</span>
+                          </button>
+
+                          {(order.customerPhone || order.deliveryPhone) && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendWhatsAppNotification(order)}
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                border: '1px solid #bbf7d0',
+                                background: '#f0fdf4',
+                                color: '#16a34a',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer'
+                              }}
+                              title="Enviar comprobante por WhatsApp al cliente"
+                            >
+                              <MessageCircle size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Row 1: Cancelled Badge (36px) */}
+                        <div
                           style={{
-                            height: '34px',
-                            padding: '0 0.65rem',
-                            borderRadius: '6px',
-                            border: '1px solid #cbd5e1',
-                            background: '#ffffff',
-                            color: '#475569',
-                            fontSize: '0.76rem',
-                            fontWeight: 700,
+                            height: '36px',
+                            background: '#fef2f2',
+                            border: '1px solid #fecdd3',
+                            color: '#991b1b',
+                            fontWeight: 800,
+                            fontSize: '0.78rem',
+                            borderRadius: '7px',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.25rem',
-                            cursor: 'pointer'
+                            justifyContent: 'center',
+                            gap: '0.35rem'
                           }}
-                          title="Reimprimir comprobante de pago"
                         >
-                          <Printer size={13} />
-                          <span>Ticket</span>
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        height: '34px',
-                        background: '#fef2f2',
-                        border: '1px solid #fecdd3',
-                        color: '#991b1b',
-                        fontWeight: 800,
-                        fontSize: '0.78rem',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.3rem'
-                      }}
-                    >
-                      <span>Orden Cancelada</span>
-                    </div>
-                  )}
+                          <span>Orden Cancelada</span>
+                        </div>
+
+                        {/* Row 2: Empty Spacer (32px) */}
+                        <div style={{ height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic' }}>Comanda anulada</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
