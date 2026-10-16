@@ -3,6 +3,8 @@ import { useAppStore } from '../../store/useAppStore';
 import { FoodOrder, FoodOrderStatus, Sale } from '../../types';
 import { formatCurrency } from '../../lib/monetary';
 import { printKitchenTicket, printSaleReceipt } from '../../lib/thermalPrint';
+import { DateFilterBar } from '../common/DateFilterBar';
+import { DateFilterPeriod, matchesDateFilter } from '../../lib/dateFilter';
 import { QuickOrderPaymentModal } from './QuickOrderPaymentModal';
 import { NewFoodOrderModal } from './NewFoodOrderModal';
 import { DriverSettlementModal } from './DriverSettlementModal';
@@ -40,6 +42,8 @@ export const FoodOrdersBoard: React.FC = () => {
   // Filter & Search State
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'KITCHEN' | 'TABLES' | 'DELIVERY' | 'COMPLETED'>('ALL');
+  const [dateFilter, setDateFilter] = useState<DateFilterPeriod>('TODAY');
+  const [customDate, setCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
   // Modals State
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
@@ -225,6 +229,11 @@ export const FoodOrdersBoard: React.FC = () => {
   // Filtered & Sorted Orders
   const filteredOrders = useMemo(() => {
     return foodOrders.filter(o => {
+      // 1. Date Filter (Default: TODAY)
+      const matchesDate = matchesDateFilter(o.createdAt, dateFilter, customDate);
+      if (!matchesDate) return false;
+
+      // 2. Search
       const search = searchTerm.toLowerCase();
       const matchesSearch =
         o.orderNumber.toLowerCase().includes(search) ||
@@ -250,7 +259,7 @@ export const FoodOrdersBoard: React.FC = () => {
 
       return true;
     });
-  }, [foodOrders, searchTerm, statusFilter]);
+  }, [foodOrders, searchTerm, statusFilter, dateFilter, customDate]);
 
   // Sort: Active unpaid first (urgent oldest first), Completed at the bottom
   const sortedOrders = useMemo(() => {
@@ -271,12 +280,17 @@ export const FoodOrdersBoard: React.FC = () => {
     });
   }, [filteredOrders]);
 
-  // KPI Metrics
-  const activeCount = foodOrders.filter(o => !o.isPaid && o.status !== 'CANCELLED').length;
-  const inKitchenCount = foodOrders.filter(o => (o.status === 'ORDERED' || o.status === 'PREPARING') && !o.isPaid).length;
-  const tablesCount = foodOrders.filter(o => o.deliveryType === 'DINE_IN' && !o.isPaid && o.status !== 'CANCELLED').length;
-  const deliveryCount = foodOrders.filter(o => o.deliveryType === 'DELIVERY' && !o.isPaid && o.status !== 'CANCELLED').length;
-  const completedCount = foodOrders.filter(o => o.isPaid || o.status === 'COMPLETED' || o.status === 'DELIVERED').length;
+  // Date-filtered base orders for counters
+  const dateOrders = useMemo(() => {
+    return foodOrders.filter(o => matchesDateFilter(o.createdAt, dateFilter, customDate));
+  }, [foodOrders, dateFilter, customDate]);
+
+  // KPI Metrics based on selected date period
+  const activeCount = dateOrders.filter(o => !o.isPaid && o.status !== 'CANCELLED').length;
+  const inKitchenCount = dateOrders.filter(o => (o.status === 'ORDERED' || o.status === 'PREPARING') && !o.isPaid).length;
+  const tablesCount = dateOrders.filter(o => o.deliveryType === 'DINE_IN' && !o.isPaid && o.status !== 'CANCELLED').length;
+  const deliveryCount = dateOrders.filter(o => o.deliveryType === 'DELIVERY' && !o.isPaid && o.status !== 'CANCELLED').length;
+  const completedCount = dateOrders.filter(o => o.isPaid || o.status === 'COMPLETED' || o.status === 'DELIVERED').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -312,6 +326,19 @@ export const FoodOrdersBoard: React.FC = () => {
         </div>
       </div>
 
+      {/* Date Period Filter Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', padding: '0.15rem 0' }}>
+        <DateFilterBar
+          value={dateFilter}
+          onChange={setDateFilter}
+          customDate={customDate}
+          onCustomDateChange={setCustomDate}
+        />
+        <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+          {filteredOrders.length} {filteredOrders.length === 1 ? 'comanda mostrada' : 'comandas mostradas'}
+        </span>
+      </div>
+
       {/* 2. Search & Filter Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
         
@@ -345,7 +372,7 @@ export const FoodOrdersBoard: React.FC = () => {
               whiteSpace: 'nowrap'
             }}
           >
-            Todas ({foodOrders.length})
+            Todas ({dateOrders.length})
           </button>
 
           <button

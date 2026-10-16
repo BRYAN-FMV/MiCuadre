@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { Appointment, Service, Product } from '../../types';
 import { QuickAppointmentPaymentModal } from './QuickAppointmentPaymentModal';
+import { DateFilterBar } from '../common/DateFilterBar';
+import { DateFilterPeriod, matchesDateFilter } from '../../lib/dateFilter';
 
 const MONTH_NAMES_ES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -58,6 +60,8 @@ export const ServicesAppointments: React.FC = () => {
 
   // Appointments View State: 'calendar' (Month Grid) or 'cards' (Daily List)
   const [appViewMode, setAppViewMode] = useState<'calendar' | 'cards'>('cards');
+  const [appDateFilter, setAppDateFilter] = useState<DateFilterPeriod>('TODAY');
+  const [appCustomDate, setAppCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [staffFilterId, setStaffFilterId] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | Appointment['status']>('ALL');
@@ -696,6 +700,9 @@ export const ServicesAppointments: React.FC = () => {
     .filter(app => {
       if (staffFilterId !== 'ALL' && app.staffId !== staffFilterId) return false;
       if (statusFilter !== 'ALL' && app.status !== statusFilter) return false;
+      if (appViewMode === 'cards') {
+        if (!matchesDateFilter(app.scheduledAt, appDateFilter, appCustomDate)) return false;
+      }
       if (appSearchTerm.trim() !== '') {
         const q = appSearchTerm.toLowerCase().trim();
         const matchName = app.customerName.toLowerCase().includes(q);
@@ -930,6 +937,18 @@ export const ServicesAppointments: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Date Filter Bar for Cards / Agenda View */}
+          {appViewMode === 'cards' && (
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.6rem 0.85rem' }}>
+              <DateFilterBar
+                value={appDateFilter}
+                onChange={setAppDateFilter}
+                customDate={appCustomDate}
+                onCustomDateChange={setAppCustomDate}
+              />
+            </div>
+          )}
 
           {/* VIEW MODE 1: Interactive Month Calendar */}
           {appViewMode === 'calendar' && (

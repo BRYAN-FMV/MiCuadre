@@ -18,6 +18,8 @@ import {
 } from '../../lib/supabaseService';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { toast } from 'sonner';
+import { DateFilterBar } from '../common/DateFilterBar';
+import { DateFilterPeriod, matchesDateFilter } from '../../lib/dateFilter';
 
 export const ReportsView: React.FC = () => {
   const sales = useAppStore(state => state.sales);
@@ -41,7 +43,8 @@ export const ReportsView: React.FC = () => {
   ].filter((shift, index, self) => self.findIndex(s => s.id === shift.id) === index);
 
   // Filter States
-  const [dateFilter, setDateFilter] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'ALL'>('ALL');
+  const [dateFilter, setDateFilter] = useState<DateFilterPeriod>('TODAY');
+  const [customDate, setCustomDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT'>('ALL');
   const [docTypeFilter, setDocTypeFilter] = useState<'ALL' | 'FISCAL' | 'TICKET'>('ALL');
@@ -201,26 +204,9 @@ export const ReportsView: React.FC = () => {
     }
   }, [tenant.id]);
 
-  // Date range helper shared across Sales & Expenses
+  // Date range helper shared across Sales, Expenses & Reports
   const matchesSelectedDatePeriod = (isoDateStr: string) => {
-    if (dateFilter === 'ALL') return true;
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-
-    const targetDate = new Date(isoDateStr);
-    if (dateFilter === 'TODAY') {
-      return targetDate >= startOfToday && targetDate <= endOfToday;
-    }
-    if (dateFilter === 'WEEK') {
-      return targetDate >= startOfWeek;
-    }
-    if (dateFilter === 'MONTH') {
-      return targetDate >= startOfMonth;
-    }
-    return true;
+    return matchesDateFilter(isoDateStr, dateFilter, customDate);
   };
 
   // Filter Sales based on Selected Time Period & Search & Filters & Tenant ID
@@ -267,6 +253,14 @@ export const ReportsView: React.FC = () => {
     (e: Expense) => e.tenantId === tenant.id && matchesSelectedDatePeriod(e.createdAt || e.expenseDate)
   );
   const totalExpensesPeriod = filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+
+  // Filter shift closures for the same period and selected caja
+  const filteredTenantShifts = tenantShifts.filter((shift: any) => {
+    const shiftDate = shift.closedAt || shift.openedAt || shift.createdAt;
+    const matchesDate = matchesSelectedDatePeriod(shiftDate);
+    const matchesCaja = selectedCajaFilter === 'ALL' || (shift.cajaName || 'Caja Principal') === selectedCajaFilter;
+    return matchesDate && matchesCaja;
+  });
 
   // Financial Metric Calculations (strictly on validSales)
   const totalSalesAmount = validSales.reduce((acc, s) => acc + s.total, 0);
@@ -638,35 +632,14 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* Date Filter Bar for Period-Based Views */}
-      {(mainSubTab === 'sales' || mainSubTab === 'leaderboard' || mainSubTab === 'loyalty') && (
+      {(mainSubTab === 'sales' || mainSubTab === 'leaderboard' || mainSubTab === 'loyalty' || mainSubTab === 'shifts') && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 700 }}>Período consultado:</span>
-            <div style={{ display: 'flex', background: '#ffffff', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '0.25rem' }}>
-              {([
-                { key: 'TODAY', label: 'Hoy' },
-                { key: 'WEEK', label: 'Últimos 7 Días' },
-                { key: 'MONTH', label: 'Este Mes' },
-                { key: 'ALL', label: 'Todo el Historial' }
-              ] as const).map(period => (
-                <button
-                  key={period.key}
-                  className="btn"
-                  onClick={() => setDateFilter(period.key)}
-                  style={{
-                    padding: '0.35rem 0.75rem',
-                    fontSize: '0.8rem',
-                    background: dateFilter === period.key ? '#059669' : 'transparent',
-                    color: dateFilter === period.key ? '#ffffff' : '#64748b',
-                    borderRadius: '7px',
-                    fontWeight: dateFilter === period.key ? 700 : 600
-                  }}
-                >
-                  {period.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <DateFilterBar
+            value={dateFilter}
+            onChange={setDateFilter}
+            customDate={customDate}
+            onCustomDateChange={setCustomDate}
+          />
 
           {cancelledOrRefundedCount > 0 && mainSubTab === 'sales' && (
             <span style={{ fontSize: '0.78rem', color: '#64748b', background: '#f8fafc', padding: '0.35rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontWeight: 500 }}>
@@ -1507,7 +1480,7 @@ export const ReportsView: React.FC = () => {
             <div>
               <h3 style={{ fontSize: '1.05rem', color: '#0f172a', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Wallet size={20} style={{ color: '#059669' }} />
-                Historial de Cierres de Caja ({tenantShifts.length})
+                Historial de Cierres de Caja ({filteredTenantShifts.length})
               </h3>
               <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.15rem 0 0 0' }}>
                 Revisión de efectivo esperado vs. efectivo contado al cerrar cada turno
@@ -1526,7 +1499,7 @@ export const ReportsView: React.FC = () => {
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
-              <span className="badge badge-wholesale">{tenantShifts.length} Cierres</span>
+              <span className="badge badge-wholesale">{filteredTenantShifts.length} Cierres</span>
             </div>
           </div>
 
@@ -1545,16 +1518,14 @@ export const ReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {tenantShifts.length === 0 ? (
+                {filteredTenantShifts.length === 0 ? (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
-                      Aún no se han registrado cierres de turno en este comercio.
+                      No se encontraron cierres de turno para el período seleccionado.
                     </td>
                   </tr>
                 ) : (
-                  tenantShifts
-                    .filter((shift: any) => selectedCajaFilter === 'ALL' || (shift.cajaName || 'Caja Principal') === selectedCajaFilter)
-                    .map((shift: any) => {
+                  filteredTenantShifts.map((shift: any) => {
                       const diff = shift.difference ?? ((shift.closingDeclared ?? 0) - (shift.closingSystem ?? 0));
                       const isPerfect = Math.abs(diff) < 0.01;
                       const isShortage = diff < -0.01;
