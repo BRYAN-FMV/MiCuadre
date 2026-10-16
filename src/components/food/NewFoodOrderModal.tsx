@@ -771,6 +771,9 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                           type="text"
                           placeholder="Nota cocina (ej. Sin cebolla, aderezo aparte)"
                           value={item.notes || ''}
+                          spellCheck={false}
+                          data-gramm="false"
+                          data-enable-grammarly="false"
                           onChange={(e) => handleUpdateItemNote(idx, e.target.value)}
                           style={{
                             width: '100%',
@@ -798,6 +801,9 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                   type="text"
                   placeholder="Nota general para la cocina o mesero..."
                   value={generalNotes}
+                  spellCheck={false}
+                  data-gramm="false"
+                  data-enable-grammarly="false"
                   onChange={(e) => setGeneralNotes(e.target.value)}
                   style={{
                     width: '100%',
