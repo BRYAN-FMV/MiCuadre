@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import {
   BarChart3, TrendingUp, DollarSign, FileText,
@@ -27,6 +27,7 @@ export const ReportsView: React.FC = () => {
   const allMenuItems = useAppStore(state => state.menuItems) || [];
   const foodOrders = useAppStore(state => state.foodOrders) || [];
   const expenses = useAppStore(state => state.expenses);
+  const cashMovements = useAppStore(state => state.cashMovements);
   const tenant = useAppStore(state => state.tenant);
   const shiftHistory = useAppStore(state => state.shiftHistory);
   const activeShift = useAppStore(state => state.activeShift);
@@ -153,6 +154,73 @@ export const ReportsView: React.FC = () => {
   // Selected Sale / Shift for Detail Modals
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<Sale | null>(null);
   const [selectedShiftDetail, setSelectedShiftDetail] = useState<any | null>(null);
+
+  const selectedShiftAudit = useMemo(() => {
+    if (!selectedShiftDetail) return null;
+    const shift = selectedShiftDetail;
+    const openTime = new Date(shift.openedAt).getTime();
+    const closeTime = shift.closedAt ? new Date(shift.closedAt).getTime() : Date.now();
+
+    const shiftSales = (sales || []).filter((s: Sale) => {
+      const matchesTenant = !s.tenantId || s.tenantId === tenant.id;
+      if (!matchesTenant) return false;
+      if (s.status === 'VOIDED') return false;
+      if (s.cashShiftId && s.cashShiftId === shift.id) return true;
+
+      const matchesCaja = (s.cajaName && shift.cajaName && s.cajaName === shift.cajaName) ||
+                          (s.fiscalRangeId && shift.fiscalRangeId && s.fiscalRangeId === shift.fiscalRangeId);
+      if (matchesCaja && openTime > 0) {
+        const saleTime = new Date(s.createdAt).getTime();
+        return saleTime >= openTime && saleTime <= closeTime;
+      }
+      return false;
+    });
+
+    const shiftCashSales = shiftSales.reduce((acc, s) => {
+      if (s.cashAmount !== undefined) return acc + s.cashAmount;
+      if (s.paymentMethod === 'CASH') return acc + s.total;
+      return acc;
+    }, 0);
+    const shiftCardSales = shiftSales.reduce((acc, s) => {
+      if (s.cardAmount !== undefined) return acc + s.cardAmount;
+      if (s.paymentMethod === 'CARD') return acc + s.total;
+      return acc;
+    }, 0);
+    const shiftTransferSales = shiftSales.reduce((acc, s) => {
+      if (s.transferAmount !== undefined) return acc + s.transferAmount;
+      if (s.paymentMethod === 'TRANSFER') return acc + s.total;
+      return acc;
+    }, 0);
+    const shiftCreditSales = shiftSales
+      .filter(s => s.paymentMethod === 'CREDIT')
+      .reduce((acc, s) => acc + s.total, 0);
+
+    const shiftMovs = (cashMovements || []).filter(m => {
+      const matchesTenant = !m.tenantId || m.tenantId === tenant.id;
+      if (!matchesTenant) return false;
+      if (m.cashShiftId && m.cashShiftId === shift.id) return true;
+
+      const matchesCaja = (m.fiscalRangeId && shift.fiscalRangeId && m.fiscalRangeId === shift.fiscalRangeId);
+      if (matchesCaja && openTime > 0) {
+        const movTime = new Date(m.createdAt).getTime();
+        return movTime >= openTime && movTime <= closeTime;
+      }
+      return false;
+    });
+
+    const totalIngresos = shiftMovs.filter(m => m.type === 'ENTRADA').reduce((acc, m) => acc + m.amount, 0);
+    const totalEgresos = shiftMovs.filter(m => m.type === 'SALIDA').reduce((acc, m) => acc + m.amount, 0);
+
+    return {
+      shiftSales,
+      shiftCashSales,
+      shiftCardSales,
+      shiftTransferSales,
+      shiftCreditSales,
+      totalIngresos,
+      totalEgresos
+    };
+  }, [selectedShiftDetail, sales, cashMovements, tenant.id]);
 
   // Void & Refund Modals state
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
@@ -2476,8 +2544,24 @@ export const ReportsView: React.FC = () => {
                   <span style={{ fontWeight: 600 }}>{tenant.currencySymbol} {(selectedShiftDetail.openingAmount || 0).toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Efectivo Esperado (Sistema):</span>
-                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{tenant.currencySymbol} {(selectedShiftDetail.closingSystem || 0).toFixed(2)}</span>
+                  <span style={{ color: '#64748b' }}>(+) Ventas en Efectivo:</span>
+                  <span style={{ fontWeight: 600, color: '#10b981' }}>{tenant.currencySymbol} {(selectedShiftAudit?.shiftCashSales || 0).toFixed(2)}</span>
+                </div>
+                {(selectedShiftAudit?.totalIngresos || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>(+) Ingresos de Caja:</span>
+                    <span style={{ fontWeight: 600, color: '#10b981' }}>{tenant.currencySymbol} {(selectedShiftAudit?.totalIngresos || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                {(selectedShiftAudit?.totalEgresos || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>(-) Egresos / Gastos de Caja:</span>
+                    <span style={{ fontWeight: 600, color: '#ef4444' }}>-{tenant.currencySymbol} {(selectedShiftAudit?.totalEgresos || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.4rem', borderTop: '1px solid #e2e8f0' }}>
+                  <span style={{ color: '#64748b' }}>(=) Efectivo Esperado (Sistema):</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{tenant.currencySymbol} {(selectedShiftDetail.closingSystem ?? ((selectedShiftDetail.openingAmount || 0) + (selectedShiftAudit?.shiftCashSales || 0) + (selectedShiftAudit?.totalIngresos || 0) - (selectedShiftAudit?.totalEgresos || 0))).toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#64748b' }}>Efectivo Arqueado (Declarado):</span>
@@ -2493,23 +2577,43 @@ export const ReportsView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Other payment methods */}
+              <div style={{ background: '#f8fafc', padding: '0.85rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>Otras Formas de Pago</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                  <span>Tarjeta Crédito/Débito:</span>
+                  <strong>{tenant.currencySymbol} {(selectedShiftAudit?.shiftCardSales || 0).toFixed(2)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                  <span>Transferencia Bancaria:</span>
+                  <strong>{tenant.currencySymbol} {(selectedShiftAudit?.shiftTransferSales || 0).toFixed(2)}</strong>
+                </div>
+                {(selectedShiftAudit?.shiftCreditSales || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#dc2626' }}>
+                    <span>Ventas al Crédito (Fiado):</span>
+                    <strong>{tenant.currencySymbol} {(selectedShiftAudit?.shiftCreditSales || 0).toFixed(2)}</strong>
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
                 <button
                   className="btn btn-primary"
                   onClick={() => {
+                    const expectedCash = selectedShiftDetail.closingSystem ?? ((selectedShiftDetail.openingAmount || 0) + (selectedShiftAudit?.shiftCashSales || 0) + (selectedShiftAudit?.totalIngresos || 0) - (selectedShiftAudit?.totalEgresos || 0));
                     printZReport({
                       tenant,
                       cajaName: selectedShiftDetail.cajaName,
                       zReport: {
                         openingAmount: selectedShiftDetail.openingAmount || 0,
-                        totalCashSales: selectedShiftDetail.cashSales || 0,
-                        totalCardSales: selectedShiftDetail.cardSales || 0,
-                        totalTransferSales: selectedShiftDetail.transferSales || 0,
-                        totalCreditSales: selectedShiftDetail.creditSales || 0,
-                        totalIngresos: selectedShiftDetail.cashInflow || 0,
-                        totalEgresos: selectedShiftDetail.cashOutflow || 0,
-                        closingSystem: selectedShiftDetail.expectedCash || 0,
-                        closingDeclared: selectedShiftDetail.actualCash || 0,
+                        totalCashSales: selectedShiftAudit?.shiftCashSales || 0,
+                        totalCardSales: selectedShiftAudit?.shiftCardSales || 0,
+                        totalTransferSales: selectedShiftAudit?.shiftTransferSales || 0,
+                        totalCreditSales: selectedShiftAudit?.shiftCreditSales || 0,
+                        totalIngresos: selectedShiftAudit?.totalIngresos || 0,
+                        totalEgresos: selectedShiftAudit?.totalEgresos || 0,
+                        closingSystem: expectedCash,
+                        closingDeclared: selectedShiftDetail.closingDeclared || 0,
                         difference: selectedShiftDetail.difference || 0
                       }
                     });

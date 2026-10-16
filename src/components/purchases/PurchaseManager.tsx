@@ -1082,6 +1082,11 @@ export const PurchaseManager: React.FC = () => {
                         <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
                       ))}
                     </select>
+                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.72rem', color: selectedCashFundId === 'ACTIVE_CASH_SHIFT' ? '#b45309' : '#0369a1' }}>
+                      {selectedCashFundId === 'ACTIVE_CASH_SHIFT'
+                        ? 'Se restará del efectivo físico en gaveta de caja al cerrar turno (Cierre Z).'
+                        : 'Se restará del saldo de la cuenta bancaria / fondo seleccionado (no afecta la gaveta física de caja).'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -1468,24 +1473,36 @@ export const PurchaseManager: React.FC = () => {
                 <div className="form-group">
                   <label className="form-label">Fondo / Cuenta Pagadora *</label>
                   {currentUser?.role === 'ADMIN' ? (
-                    <select
-                      className="input-control"
-                      value={expFundId}
-                      onChange={(e) => setExpFundId(e.target.value)}
-                      required
-                    >
-                      <option value="ACTIVE_CASH_SHIFT">
-                        Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
-                      </option>
-                      {tenantFunds.map(f => (
-                        <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
-                      ))}
-                    </select>
+                    <>
+                      <select
+                        className="input-control"
+                        value={expFundId}
+                        onChange={(e) => setExpFundId(e.target.value)}
+                        required
+                      >
+                        <option value="ACTIVE_CASH_SHIFT">
+                          Caja Registradora en Turno ({activeShift && activeShift.status === 'OPEN' ? `Caja: ${activeShift.cajaName || fiscalRange?.name || 'Principal'}` : 'Sin Turno Abierto'})
+                        </option>
+                        {tenantFunds.map(f => (
+                          <option key={f.id} value={f.id}>{f.name} ({formatCurrency(f.balance, tenant.currencySymbol)})</option>
+                        ))}
+                      </select>
+                      <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.72rem', color: expFundId === 'ACTIVE_CASH_SHIFT' ? '#b45309' : '#0369a1' }}>
+                        {expFundId === 'ACTIVE_CASH_SHIFT'
+                          ? 'Se restará del efectivo físico en gaveta de caja al cerrar turno (Cierre Z).'
+                          : 'Se restará del saldo del fondo seleccionado (no afecta el arqueo físico de caja).'}
+                      </p>
+                    </>
                   ) : (
-                    <div className="input-control" style={{ background: '#f8fafc', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Wallet size={15} style={{ color: '#059669' }} />
-                      <span>Caja Registradora en Turno (Gaveta Activa)</span>
-                    </div>
+                    <>
+                      <div className="input-control" style={{ background: '#f8fafc', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Wallet size={15} style={{ color: '#059669' }} />
+                        <span>Caja Registradora en Turno (Gaveta Activa)</span>
+                      </div>
+                      <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.72rem', color: '#b45309' }}>
+                        Se restará del efectivo físico en gaveta de caja al cerrar turno (Cierre Z).
+                      </p>
+                    </>
                   )}
                 </div>
               </div>

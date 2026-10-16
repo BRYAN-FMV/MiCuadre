@@ -886,5 +886,87 @@ describe('App Zustand Store Business Logic', () => {
       expect(hasUserPermission(useAppStore.getState().currentUser, 'canSellCredit')).toBe(false);
     });
   });
+
+  describe('Cash Shift Audit, Mixed Sales, and Operational Expenses', () => {
+    it('should accurately split mixed payment and calculate expected drawer cash upon closing', () => {
+      const store = useAppStore.getState();
+      // 1. Open shift with L 500
+      store.openCashShift(500);
+      const shiftId = useAppStore.getState().activeShift?.id;
+      expect(shiftId).toBeDefined();
+
+      const testProduct: Product = {
+        id: 'prod-audit-1',
+        tenantId: store.tenant.id,
+        sku: 'AUD-01',
+        name: 'Articulo Test',
+        category: 'General',
+        unitOfMeasure: 'UND',
+        salePrice: 200,
+        costPrice: 100,
+        currentStock: 10,
+        minStockAlert: 1,
+        taxClassification: 'EXENTO',
+        isActive: true
+      };
+      useAppStore.setState({ products: [testProduct] });
+
+      // 2. Perform MIXED sale of 200: 80 cash, 120 card
+      store.addToCart({ product: testProduct, quantity: 1 });
+      const sale = store.processSale('MIXED', 0, false, { cash: 80, card: 120 });
+      expect(sale).toBeDefined();
+      expect(sale?.paymentMethod).toBe('MIXED');
+      expect(sale?.cashAmount).toBe(80);
+      expect(sale?.cardAmount).toBe(120);
+
+      // 3. Register cash drawer expense of L 30
+      store.addExpense({
+        category: 'OTROS',
+        description: 'Compra de bolsas',
+        amount: 30,
+        fundId: 'ACTIVE_CASH_SHIFT',
+        paymentSource: 'ACTIVE_CASH_SHIFT',
+        expenseDate: new Date().toISOString().split('T')[0],
+        registeredBy: 'Admin'
+      });
+
+      // Expected cash in drawer: 500 (open) + 80 (cash portion of sale) - 30 (expense) = 550
+      // Declare 550: perfect match
+      const result = store.closeCashShift(550);
+      expect(result.closingSystem).toBe(550);
+      expect(result.difference).toBe(0);
+    });
+
+    it('should detect shortage (difference < 0) when expense was made and cashier declared less', () => {
+      const store = useAppStore.getState();
+      store.openCashShift(1000);
+
+      const testProduct: Product = {
+        id: 'prod-audit-2',
+        tenantId: store.tenant.id,
+        sku: 'AUD-02',
+        name: 'Articulo 2',
+        category: 'General',
+        unitOfMeasure: 'UND',
+        salePrice: 300,
+        costPrice: 150,
+        currentStock: 10,
+        minStockAlert: 1,
+        taxClassification: 'EXENTO',
+        isActive: true
+      };
+      useAppStore.setState({ products: [testProduct] });
+
+      store.addToCart({ product: testProduct, quantity: 1 });
+      store.processSale('CASH', 0, false);
+
+      // Expected: 1000 + 300 = 1300
+      // If declared 1200: shortage of -100
+      const result = store.closeCashShift(1200);
+      expect(result.closingSystem).toBe(1300);
+      expect(result.difference).toBe(-100);
+    });
+  });
 });
+
 

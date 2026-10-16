@@ -1257,17 +1257,17 @@ export async function saveCashMovementToSupabase(movement: CashMovement) {
       concept: movement.concept,
       registered_by: movement.registeredBy,
       created_at: movement.createdAt || new Date().toISOString(),
-      reference_id: movement.referenceId || null
+      reference_id: (movement.referenceId && isValidUUID(movement.referenceId)) ? movement.referenceId : null
     };
 
     const { data, error } = await supabase
       .from('cash_movements')
-      .insert(payload)
+      .upsert(payload, { onConflict: 'id' })
       .select()
       .single();
 
     if (error) {
-      console.warn('Error inserting cash_movement to Supabase:', error.message);
+      console.warn('Error upserting cash_movement to Supabase:', error.message);
     } else {
       console.log('Movimiento de caja guardado en Supabase:', movement.type, movement.amount);
     }
@@ -1326,12 +1326,32 @@ export async function saveExpenseToSupabase(expense: Expense) {
       category: expense.category || 'VARIOS',
       description: expense.description || '',
       amount: expense.amount,
-      fund_id: (expense.fundId && isValidUUID(expense.fundId)) ? expense.fundId : null,
+      cash_shift_id: (expense.cashShiftId && isValidUUID(expense.cashShiftId)) ? expense.cashShiftId : null,
+      registered_by: expense.registeredBy || null,
       created_at: expense.createdAt || new Date().toISOString()
     };
+    if (expense.fundId && isValidUUID(expense.fundId)) {
+      payload.fund_id = expense.fundId;
+    }
 
-    const { data, error } = await supabase.from('expenses').insert(payload).select().single();
-    if (error) console.warn('Supabase insert expense info:', error.message);
+    const { data, error } = await supabase.from('expenses').upsert(payload, { onConflict: 'id' }).select().single();
+    if (error) {
+      console.warn('Supabase upsert expense info:', error.message);
+      // Resilient fallback if cash_shift_id or fund_id columns don't exist
+      if (error.message.includes('column')) {
+        const minimalPayload: any = {
+          ...(expUuid ? { id: expUuid } : {}),
+          tenant_id: expense.tenantId,
+          category: expense.category || 'VARIOS',
+          description: expense.description || '',
+          amount: expense.amount,
+          created_at: expense.createdAt || new Date().toISOString()
+        };
+        await supabase.from('expenses').upsert(minimalPayload, { onConflict: 'id' });
+      }
+    } else {
+      console.log('Gasto guardado en Supabase con éxito:', expense.description, expense.amount);
+    }
     return data;
   } catch (err) {
     console.warn('Error saving expense to Supabase:', err);

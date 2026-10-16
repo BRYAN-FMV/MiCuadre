@@ -39,6 +39,7 @@ export const CashShiftModal: React.FC = () => {
     totalCashSales: number;
     totalCardSales: number;
     totalTransferSales: number;
+    totalCreditSales?: number;
     totalIngresos: number;
     totalEgresos: number;
   } | null>(null);
@@ -130,15 +131,28 @@ export const CashShiftModal: React.FC = () => {
     });
 
     const shiftCashSales = shiftSales
-      .filter((s: Sale) => s.paymentMethod === 'CASH' || s.paymentMethod === 'MIXED')
-      .reduce((acc: number, s: Sale) => acc + s.total, 0);
+      .reduce((acc: number, s: Sale) => {
+        if (s.cashAmount !== undefined) return acc + s.cashAmount;
+        if (s.paymentMethod === 'CASH') return acc + s.total;
+        return acc;
+      }, 0);
 
     const shiftCardSales = shiftSales
-      .filter((s: Sale) => s.paymentMethod === 'CARD')
-      .reduce((acc: number, s: Sale) => acc + s.total, 0);
+      .reduce((acc: number, s: Sale) => {
+        if (s.cardAmount !== undefined) return acc + s.cardAmount;
+        if (s.paymentMethod === 'CARD') return acc + s.total;
+        return acc;
+      }, 0);
 
     const shiftTransferSales = shiftSales
-      .filter((s: Sale) => s.paymentMethod === 'TRANSFER')
+      .reduce((acc: number, s: Sale) => {
+        if (s.transferAmount !== undefined) return acc + s.transferAmount;
+        if (s.paymentMethod === 'TRANSFER') return acc + s.total;
+        return acc;
+      }, 0);
+
+    const shiftCreditSales = shiftSales
+      .filter((s: Sale) => s.paymentMethod === 'CREDIT')
       .reduce((acc: number, s: Sale) => acc + s.total, 0);
 
     const shiftMovs = (cashMovements || []).filter(m => {
@@ -167,6 +181,7 @@ export const CashShiftModal: React.FC = () => {
       totalCashSales: shiftCashSales,
       totalCardSales: shiftCardSales,
       totalTransferSales: shiftTransferSales,
+      totalCreditSales: shiftCreditSales,
       totalIngresos,
       totalEgresos
     });
@@ -530,6 +545,12 @@ export const CashShiftModal: React.FC = () => {
                 <span>Transferencia Bancaria:</span>
                 <strong style={{ color: '#0f172a' }}>{formatCurrency(zReportData.totalTransferSales, tenant.currencySymbol)}</strong>
               </div>
+              {zReportData.totalCreditSales !== undefined && zReportData.totalCreditSales > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', margin: '0.15rem 0' }}>
+                  <span>Ventas al Crédito (Fiado):</span>
+                  <strong style={{ color: '#dc2626' }}>{formatCurrency(zReportData.totalCreditSales, tenant.currencySymbol)}</strong>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>

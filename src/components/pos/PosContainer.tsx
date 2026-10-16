@@ -56,6 +56,7 @@ export const PosContainer: React.FC = () => {
   const [selectedDocType, setSelectedDocType] = useState<'FISCAL' | 'TICKET'>('FISCAL');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT'>('CASH');
   const [cashTendered, setCashTendered] = useState<string>('');
+  const [mixedCashAmount, setMixedCashAmount] = useState<string>('');
   const [lastCompletedSale, setLastCompletedSale] = useState<Sale | null>(null);
   const [selectedTicketCopy, setSelectedTicketCopy] = useState<'ORIGINAL' | 'COPIA'>('ORIGINAL');
   const [presentationModalProduct, setPresentationModalProduct] = useState<Product | null>(null);
@@ -331,6 +332,8 @@ export const PosContainer: React.FC = () => {
 
   const tenderedAmount = parseFloat(cashTendered) || 0;
   const changeDue = Math.max(0, tenderedAmount - netPayableTotal);
+  const parsedMixedCash = Math.min(netPayableTotal, Math.max(0, parseFloat(mixedCashAmount) || 0));
+  const parsedMixedCard = Math.max(0, netPayableTotal - parsedMixedCash);
 
   const filteredCustomers = tenantCustomers.filter((c: Customer) => {
     const q = customerSearchQuery.toLowerCase().trim();
@@ -380,6 +383,10 @@ export const PosContainer: React.FC = () => {
     }
 
     const isOverrideFiscal = Boolean(tenant.isFiscalEnabled);
+    const splitConfig = paymentMethod === 'MIXED' ? {
+      cash: parsedMixedCash,
+      card: parsedMixedCard
+    } : undefined;
 
     if (paymentMethod === 'CREDIT' && !hasUserPermission(currentUser, 'canSellCredit')) {
       setAdminPinConfig({
@@ -387,11 +394,12 @@ export const PosContainer: React.FC = () => {
         title: 'Autorizar Venta al Fiado / Crédito',
         actionDescription: `Se requiere autorizacion de Administrador para otorgar credito por ${formatCurrency(netPayableTotal, tenant.currencySymbol)} a ${cartCustomer.name}.`,
         onSuccess: () => {
-          const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
+          const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal, splitConfig);
           if (!completedSale) return;
           setLastCompletedSale(completedSale);
           setIsPaymentModalOpen(false);
           setCashTendered('');
+          setMixedCashAmount('');
           setRedeemedPoints(0);
           toast.success(`Venta ${completedSale.isFiscal ? 'Fiscal SAR' : 'Ticket Interno'} (Crédito) #${completedSale.documentNumber} realizada con éxito`);
         }
@@ -399,12 +407,13 @@ export const PosContainer: React.FC = () => {
       return;
     }
 
-    const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal);
+    const completedSale = processSale(paymentMethod, redeemedPoints, isOverrideFiscal, splitConfig);
     if (!completedSale) return;
 
     setLastCompletedSale(completedSale);
     setIsPaymentModalOpen(false);
     setCashTendered('');
+    setMixedCashAmount('');
     setRedeemedPoints(0);
     toast.success(`Venta ${completedSale.isFiscal ? 'Fiscal SAR' : 'Ticket Interno'} ${paymentMethod === 'CREDIT' ? '(Crédito)' : ''} #${completedSale.documentNumber} realizada con éxito`);
   };
@@ -1477,6 +1486,40 @@ export const PosContainer: React.FC = () => {
                     <span>{formatCurrency(changeDue, tenant.currencySymbol)}</span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {paymentMethod === 'MIXED' && (
+              <div className="form-group" style={{ background: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <label className="form-label" style={{ fontWeight: 700, color: '#0f172a' }}>Desglose de Pago Mixto</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>
+                      Efectivo (Gaveta):
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input-control"
+                      placeholder="0.00"
+                      value={mixedCashAmount}
+                      onChange={(e) => setMixedCashAmount(e.target.value)}
+                      style={{ fontWeight: 700, textAlign: 'center' }}
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>
+                      Tarjeta / Banco:
+                    </label>
+                    <div className="input-control" style={{ background: '#f1f5f9', fontWeight: 700, textAlign: 'center', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {formatCurrency(parsedMixedCard, tenant.currencySymbol)}
+                    </div>
+                  </div>
+                </div>
+                <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.74rem', color: '#64748b' }}>
+                  Solo los <strong>{formatCurrency(parsedMixedCash, tenant.currencySymbol)}</strong> de efectivo entrarán al arqueo de la caja registradora.
+                </p>
               </div>
             )}
 

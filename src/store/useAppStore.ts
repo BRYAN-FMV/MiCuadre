@@ -176,7 +176,7 @@ interface AppState {
   addCashMovement: (type: 'ENTRADA' | 'SALIDA', amount: number, concept: string, referenceId?: string) => void;
 
   // Sales Action & Returns
-  processSale: (paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT', loyaltyPointsRedeemed?: number, overrideIsFiscal?: boolean) => Sale | null;
+  processSale: (paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT', loyaltyPointsRedeemed?: number, overrideIsFiscal?: boolean, paymentSplit?: { cash?: number; card?: number; transfer?: number }) => Sale | null;
   voidSale: (saleId: string, reason: string) => boolean;
   refundSale: (refundData: { saleId: string; reason: string; refundMethod: 'CASH' | 'STORE_CREDIT'; isDamagedWaste?: boolean; items: Array<{ productId?: string; productName: string; quantity: number; unitPrice: number; subtotal: number; isDamaged?: boolean }> }) => boolean;
   addInventoryAdjustment: (adjustment: Omit<InventoryAdjustment, 'id' | 'tenantId' | 'createdAt' | 'previousStock' | 'newStock' | 'registeredBy'> & { previousStock?: number; newStock?: number; registeredBy?: string }) => void;
@@ -381,14 +381,43 @@ export const useAppStore = create<AppState>()(
 
       addAccountPayment: (paymentData) => {
         const state = get();
+        const paymentId = generateUUID();
         const newPayment: AccountPayment = {
           ...paymentData,
-          id: `pay-${Date.now()}`,
+          id: paymentId,
           tenantId: state.tenant.id,
           createdAt: new Date().toISOString()
         };
 
-        set((s) => ({ accountPayments: [newPayment, ...s.accountPayments] }));
+        let updatedMovements = [...(state.cashMovements || [])];
+        if (paymentData.paymentMethod === 'CASH' && state.activeShift && state.activeShift.status === 'OPEN') {
+          const shift = state.activeShift;
+          const tenantRanges = (state.fiscalRanges || []).filter(r => !r.tenantId || r.tenantId === state.tenant.id);
+          const ranges = tenantRanges.length > 0 ? tenantRanges : [state.fiscalRange];
+          const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
+
+          const mov: CashMovement = {
+            id: generateUUID(),
+            tenantId: state.tenant.id,
+            cashShiftId: shift.id,
+            fiscalRangeId: shift.fiscalRangeId || activeCaja?.id || '',
+            type: 'ENTRADA',
+            amount: paymentData.amount,
+            concept: `Abono Cliente: ${paymentData.customerName || 'Cliente'} (${paymentData.notes || 'Abono a cuenta'})`,
+            registeredBy: paymentData.createdBy || state.currentUser?.fullName || 'Sistema',
+            createdAt: new Date().toISOString(),
+            referenceId: paymentId
+          };
+          updatedMovements = [mov, ...updatedMovements];
+          if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+            saveCashMovementToSupabase(mov).catch(err => console.warn('Supabase save abono movement error:', err));
+          }
+        }
+
+        set((s) => ({
+          accountPayments: [newPayment, ...s.accountPayments],
+          cashMovements: updatedMovements
+        }));
         return newPayment;
       },
 
@@ -1095,8 +1124,10 @@ export const useAppStore = create<AppState>()(
       if (!matchesTenant) return false;
       if (s.status === 'VOIDED') return false;
 
-      // 1. Direct ID match
-      if (s.cashShiftId && s.cashShiftId === shift.id) return true;
+      // 1. Direct ID match (if cashShiftId is present, must match this shift)
+      if (s.cashShiftId) {
+        return s.cashShiftId === shift.id;
+      }
 
       // 2. Terminal-scoped matching (so Caja 1 and Caja 2 never mix sales)
       const matchesCaja = (s.cajaName && shift.cajaName && s.cajaName === shift.cajaName) ||
@@ -1111,15 +1142,19 @@ export const useAppStore = create<AppState>()(
       return false;
     });
 
-    const shiftCashSales = shiftSales
-      .filter(s => s.paymentMethod === 'CASH' || s.paymentMethod === 'MIXED')
-      .reduce((acc, s) => acc + s.total, 0);
+    const shiftCashSales = shiftSales.reduce((acc, s) => {
+      if (s.cashAmount !== undefined) return acc + s.cashAmount;
+      if (s.paymentMethod === 'CASH') return acc + s.total;
+      return acc;
+    }, 0);
 
     const shiftMovements = (state.cashMovements || []).filter(m => {
       const matchesTenant = !m.tenantId || m.tenantId === shift.tenantId;
       if (!matchesTenant) return false;
 
-      if (m.cashShiftId && m.cashShiftId === shift.id) return true;
+      if (m.cashShiftId) {
+        return m.cashShiftId === shift.id;
+      }
 
       const matchesCaja = (m.fiscalRangeId && shift.fiscalRangeId && m.fiscalRangeId === shift.fiscalRangeId);
       if (matchesCaja && shiftOpenedTime > 0) {
@@ -1170,7 +1205,7 @@ export const useAppStore = create<AppState>()(
     return { difference, closingSystem };
   },
 
-  processSale: (paymentMethod, loyaltyPointsRedeemed = 0, overrideIsFiscal?: boolean) => {
+  processSale: (paymentMethod, loyaltyPointsRedeemed = 0, overrideIsFiscal?: boolean, paymentSplit?: { cash?: number; card?: number; transfer?: number }) => {
     const state = get();
     if (!state.activeShift || state.activeShift.status !== 'OPEN') {
       toast.error('Debes abrir un turno de caja registradora antes de realizar una venta.');
@@ -1265,6 +1300,22 @@ export const useAppStore = create<AppState>()(
     const activeTargetRange = ranges.find(r => r.id === selectedId) || ranges[0] || state.fiscalRange;
     const activeShift = (state.activeShift && state.activeShift.tenantId === state.tenant.id) ? state.activeShift : null;
 
+    let cashAmount = 0;
+    let cardAmount = 0;
+    let transferAmount = 0;
+
+    if (paymentMethod === 'CASH') {
+      cashAmount = finalTotal;
+    } else if (paymentMethod === 'CARD') {
+      cardAmount = finalTotal;
+    } else if (paymentMethod === 'TRANSFER') {
+      transferAmount = finalTotal;
+    } else if (paymentMethod === 'MIXED') {
+      const splitCash = paymentSplit?.cash !== undefined ? paymentSplit.cash : finalTotal;
+      cashAmount = Math.min(finalTotal, Math.max(0, splitCash));
+      cardAmount = Math.max(0, finalTotal - cashAmount);
+    }
+
     const newSale: Sale = {
       id: generateUUID(),
       tenantId: state.tenant.id,
@@ -1291,6 +1342,9 @@ export const useAppStore = create<AppState>()(
       tax18: totals.tax18,
       total: finalTotal,
       paymentMethod,
+      cashAmount,
+      cardAmount,
+      transferAmount,
       loyaltyPointsEarned: pointsEarned,
       loyaltyPointsRedeemed: actualRedeemedPoints,
       loyaltyDiscountAmount: loyaltyDiscount,
@@ -1690,23 +1744,25 @@ export const useAppStore = create<AppState>()(
       }
     }
 
+    const invoiceId = generateUUID();
     const newInvoice: PurchaseInvoice = {
       ...purchaseData,
-      id: `pur-${Date.now()}`,
+      id: invoiceId,
       tenantId: state.tenant.id,
       paymentSource: paidFromFundId === 'ACTIVE_CASH_SHIFT' ? 'ACTIVE_CASH_SHIFT' : 'FUND',
       cashShiftId: paidFromFundId === 'ACTIVE_CASH_SHIFT' ? state.activeShift?.id : undefined
     };
 
     const updatedFunds = [...state.funds];
-    const updatedMovements = [...(state.cashMovements || [])];
+    let updatedMovements = [...(state.cashMovements || [])];
 
     if (purchaseData.paymentTerms === 'CASH') {
       if (paidFromFundId === 'ACTIVE_CASH_SHIFT') {
         const ranges = state.fiscalRanges || [state.fiscalRange];
         const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
-        updatedMovements.unshift({
-          id: `mov-${Date.now()}`,
+        const movId = generateUUID();
+        const purchaseMovement: CashMovement = {
+          id: movId,
           tenantId: state.tenant.id,
           cashShiftId: state.activeShift?.id || 'general',
           fiscalRangeId: state.activeShift?.fiscalRangeId || activeCaja?.id || '',
@@ -1715,8 +1771,12 @@ export const useAppStore = create<AppState>()(
           concept: `Compra al Contado #${purchaseData.invoiceNumber} (${purchaseData.supplierName || 'Proveedor'})`,
           registeredBy: state.currentUser.fullName,
           createdAt: new Date().toISOString(),
-          referenceId: newInvoice.id
-        });
+          referenceId: invoiceId
+        };
+        updatedMovements = [purchaseMovement, ...updatedMovements];
+        if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+          saveCashMovementToSupabase(purchaseMovement).catch(err => console.warn('Supabase save purchase movement info:', err));
+        }
       } else if (paidFromFundId) {
         const fundIndex = updatedFunds.findIndex(f => f.id === paidFromFundId);
         if (fundIndex >= 0) {
@@ -1830,10 +1890,11 @@ export const useAppStore = create<AppState>()(
   addExpense: (expenseData) => set((state) => {
     const isFromCashShift = expenseData.fundId === 'ACTIVE_CASH_SHIFT' || expenseData.paymentSource === 'ACTIVE_CASH_SHIFT';
     const fund = isFromCashShift ? null : state.funds.find(f => f.id === expenseData.fundId);
+    const expenseId = generateUUID();
 
     const newExpense: Expense = {
       ...expenseData,
-      id: `exp-${Date.now()}`,
+      id: expenseId,
       tenantId: state.tenant.id,
       fundName: isFromCashShift ? 'Caja Registradora (Efectivo)' : (fund?.name || 'Fondo'),
       paymentSource: isFromCashShift ? 'ACTIVE_CASH_SHIFT' : 'FUND',
@@ -1847,12 +1908,13 @@ export const useAppStore = create<AppState>()(
         : f
     );
 
-    const updatedMovements = [...(state.cashMovements || [])];
+    let updatedMovements = [...(state.cashMovements || [])];
     if (isFromCashShift) {
       const ranges = state.fiscalRanges || [state.fiscalRange];
       const activeCaja = ranges.find(r => r.id === state.selectedFiscalRangeId) || ranges[0] || state.fiscalRange;
-      updatedMovements.unshift({
-        id: `mov-${Date.now()}`,
+      const movId = generateUUID();
+      const movement: CashMovement = {
+        id: movId,
         tenantId: state.tenant.id,
         cashShiftId: state.activeShift?.id || 'general',
         fiscalRangeId: state.activeShift?.fiscalRangeId || activeCaja?.id || '',
@@ -1861,23 +1923,26 @@ export const useAppStore = create<AppState>()(
         concept: `Gasto Operativo (${expenseData.category}): ${expenseData.description}`,
         registeredBy: state.currentUser.fullName,
         createdAt: new Date().toISOString(),
-        referenceId: newExpense.id
-      });
+        referenceId: expenseId
+      };
+      updatedMovements = [movement, ...updatedMovements];
+
+      if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+        saveCashMovementToSupabase(movement).catch(err => {
+          console.warn('Supabase save expense movement info:', err);
+          get().enqueueOfflineItem({
+            id: movement.id,
+            tenantId: movement.tenantId,
+            type: 'MOVEMENT',
+            payload: movement
+          });
+        });
+      }
     }
 
-    if (isSupabaseConfigured()) {
-      supabase.from('expenses').insert({
-        id: newExpense.id,
-        tenant_id: newExpense.tenantId,
-        category: newExpense.category,
-        description: newExpense.description,
-        amount: newExpense.amount,
-        fund_id: newExpense.fundId,
-        receipt_number: newExpense.receiptNumber || null,
-        expense_date: newExpense.expenseDate,
-        registered_by: newExpense.registeredBy || null
-      }).then(({ error }) => {
-        if (error) console.warn('Supabase add expense info:', error.message);
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      saveExpenseToSupabase(newExpense).catch(err => {
+        console.warn('Supabase save expense info:', err);
       });
     }
 
@@ -1898,15 +1963,19 @@ export const useAppStore = create<AppState>()(
         : f
     );
 
-    if (isSupabaseConfigured()) {
+    if (isSupabaseConfigured() && isValidUUID(id)) {
       supabase.from('expenses').delete().eq('id', id).then(({ error }) => {
         if (error) console.warn('Supabase delete expense info:', error.message);
+      });
+      supabase.from('cash_movements').delete().eq('reference_id', id).then(({ error }) => {
+        if (error) console.warn('Supabase delete movement for expense info:', error.message);
       });
     }
 
     return {
       expenses: (state.expenses || []).filter(e => e.id !== id),
-      funds: updatedFunds
+      funds: updatedFunds,
+      cashMovements: (state.cashMovements || []).filter(m => m.referenceId !== id)
     };
   }),
 
@@ -2113,6 +2182,20 @@ export const useAppStore = create<AppState>()(
 
     const totals = calculateCartTotals(saleItems);
 
+    let cashAmount = 0;
+    let cardAmount = 0;
+    let transferAmount = 0;
+
+    if (paymentMethod === 'CASH') {
+      cashAmount = totals.total;
+    } else if (paymentMethod === 'CARD') {
+      cardAmount = totals.total;
+    } else if (paymentMethod === 'TRANSFER') {
+      transferAmount = totals.total;
+    } else if (paymentMethod === 'MIXED') {
+      cashAmount = totals.total;
+    }
+
     const newSale: Sale = {
       id: generateUUID(),
       tenantId: state.tenant.id,
@@ -2136,6 +2219,9 @@ export const useAppStore = create<AppState>()(
       tax18: 0,
       total: totals.total,
       paymentMethod,
+      cashAmount,
+      cardAmount,
+      transferAmount,
       createdAt: new Date().toISOString(),
       items: saleItems
     };
@@ -2812,6 +2898,20 @@ export const useAppStore = create<AppState>()(
 
     const totals = calculateCartTotals(saleItems);
 
+    let cashAmount = 0;
+    let cardAmount = 0;
+    let transferAmount = 0;
+
+    if (paymentMethod === 'CASH') {
+      cashAmount = order.total;
+    } else if (paymentMethod === 'CARD') {
+      cardAmount = order.total;
+    } else if (paymentMethod === 'TRANSFER') {
+      transferAmount = order.total;
+    } else if (paymentMethod === 'MIXED') {
+      cashAmount = order.total;
+    }
+
     const newSale: Sale = {
       id: generateUUID(),
       tenantId: state.tenant.id,
@@ -2835,6 +2935,9 @@ export const useAppStore = create<AppState>()(
       tax18: 0,
       total: order.total,
       paymentMethod,
+      cashAmount,
+      cardAmount,
+      transferAmount,
       createdAt: new Date().toISOString(),
       items: saleItems
     };
@@ -3013,6 +3116,9 @@ export const useAppStore = create<AppState>()(
           tax18: 0,
           total: saleTotal,
           paymentMethod: 'CASH',
+          cashAmount: saleTotal,
+          cardAmount: 0,
+          transferAmount: 0,
           createdAt: nowIso,
           items: saleItems
         };

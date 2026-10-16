@@ -246,6 +246,9 @@ export interface Sale {
   tax18: number;
   total: number;
   paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT';
+  cashAmount?: number;
+  cardAmount?: number;
+  transferAmount?: number;
   paymentStatus?: 'UNPAID' | 'PARTIAL' | 'PAID';
   creditDueDate?: string;
   amountPaid?: number;
