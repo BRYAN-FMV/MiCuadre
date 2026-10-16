@@ -404,7 +404,12 @@ export const ReportsView: React.FC = () => {
     });
   });
 
-  const netSalesBase = Math.max(0, totalSubtotal - totalDiscounts);
+  // In fiscal businesses with collected ISV, tax is owed to SAR and not part of net sales revenue (base = subtotal minus discounts).
+  // In non-fiscal businesses (or with 0 tax), all sales revenue minus discounts is part of business income.
+  const isFiscalWithTax = Boolean(tenant.isFiscalEnabled && totalTax > 0);
+  const netSalesBase = isFiscalWithTax
+    ? Math.max(0, totalSubtotal - totalDiscounts)
+    : Math.max(0, totalSalesAmount - totalDiscounts);
   const grossProfit = netSalesBase - estimatedCOGS;
   const netProfit = grossProfit - totalExpensesPeriod;
   const grossMarginPct = netSalesBase > 0 ? (grossProfit / netSalesBase) * 100 : 0;
@@ -876,7 +881,9 @@ export const ReportsView: React.FC = () => {
             <div className="glass-panel" style={{ padding: '1.35rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.85rem' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 700 }}>1. Dinero que Entró (Ventas Netas)</span>
+                  <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 700 }}>
+                    1. Dinero que Entró {isFiscalWithTax ? '(Ventas Totales)' : '(Ventas Netas)'}
+                  </span>
                   <span className="badge" style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.7rem', fontWeight: 700 }}>
                     {validSales.length} {validSales.length === 1 ? 'venta' : 'ventas'}
                   </span>
@@ -887,6 +894,11 @@ export const ReportsView: React.FC = () => {
                 <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
                   Promedio por compra: <strong style={{ color: '#334155' }}>{formatCurrency(avgTicket, tenant.currencySymbol)}</strong>
                 </p>
+                {isFiscalWithTax && (
+                  <p style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.35rem', marginBottom: 0 }}>
+                    Base imponible (sin ISV): <strong style={{ color: '#0f172a' }}>{formatCurrency(netSalesBase, tenant.currencySymbol)}</strong> | ISV Fisco: <strong style={{ color: '#dc2626' }}>{formatCurrency(totalTax, tenant.currencySymbol)}</strong>
+                  </p>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9', fontSize: '0.74rem' }}>
@@ -997,12 +1009,16 @@ export const ReportsView: React.FC = () => {
                   {formatCurrency(netProfit, tenant.currencySymbol)}
                 </h3>
                 <p style={{ fontSize: '0.78rem', color: netProfit >= 0 ? '#166534' : '#991b1b', margin: 0, opacity: 0.9 }}>
-                  Lo que queda libre tras costo de mercadería y gastos
+                  {isFiscalWithTax
+                    ? 'Lo que queda libre tras costo de mercadería, gastos e ISV fiscal'
+                    : 'Lo que queda libre tras costo de mercadería y gastos'}
                 </p>
               </div>
 
               <div style={{ paddingTop: '0.75rem', borderTop: netProfit >= 0 ? '1px solid #bbf7d0' : '1px solid #fecaca', fontSize: '0.74rem', color: netProfit >= 0 ? '#166534' : '#991b1b', fontWeight: 600 }}>
-                Ventas Netas − Costo Mercadería − Gastos
+                {isFiscalWithTax
+                  ? `Base sin ISV (${formatCurrency(netSalesBase, tenant.currencySymbol)}) − Costo (${formatCurrency(estimatedCOGS, tenant.currencySymbol)}) − Gastos (${formatCurrency(totalExpensesPeriod, tenant.currencySymbol)})`
+                  : `Ventas (${formatCurrency(totalSalesAmount, tenant.currencySymbol)}) − Costo (${formatCurrency(estimatedCOGS, tenant.currencySymbol)}) − Gastos (${formatCurrency(totalExpensesPeriod, tenant.currencySymbol)})`}
               </div>
             </div>
 

@@ -4,7 +4,8 @@ import {
   Tenant, UserProfile, UserPermissions, Product, ProductPresentation, FiscalRange, CashShift, CashMovement,
   CartLine, Sale, PurchaseInvoice, Supplier, Service, Staff,
   Appointment, StaffCommission, FinancialEvent, FinancialFund, Expense, Customer, AccountPayment,
-  SalesReturn, InventoryAdjustment, MenuItem, MenuItemExtra, FoodOrder, FoodOrderItem, FoodOrderStatus, DeliveryDriver
+  SalesReturn, InventoryAdjustment, MenuItem, MenuItemExtra, FoodOrder, FoodOrderItem, FoodOrderStatus, DeliveryDriver,
+  TaxClassification
 } from '../types';
 import {
   INITIAL_TENANT, INITIAL_PROFILES, INITIAL_PRODUCTS,
@@ -2766,6 +2767,7 @@ export const useAppStore = create<AppState>()(
 
     // Convert food items into CartLines
     const isTaxIncluded = state.tenant.pricesIncludeTax ?? true;
+    const isFiscalActive = Boolean(isFiscal && state.tenant.isFiscalEnabled);
     const saleItems: CartLine[] = order.items.map(it => {
       const lineNotes = [
         ...(it.selectedExtras || []).map(e => `+ ${e.name} (L. ${e.price})`),
@@ -2773,7 +2775,8 @@ export const useAppStore = create<AppState>()(
       ].filter(Boolean).join(' | ');
 
       const lineTotal = it.subtotal || (it.unitPrice * it.quantity);
-      const calculated = calculateLineTotals(it.unitPrice, it.quantity, 'GRAVADO_15', 0, undefined, isTaxIncluded);
+      const effectiveTaxClass: TaxClassification = isFiscalActive ? 'GRAVADO_15' : 'EXENTO';
+      const calculated = calculateLineTotals(it.unitPrice, it.quantity, effectiveTaxClass, 0, undefined, isTaxIncluded);
 
       return {
         productId: it.productId,
@@ -2784,7 +2787,7 @@ export const useAppStore = create<AppState>()(
         unitPrice: it.unitPrice,
         originalUnitPrice: calculated.originalUnitPrice,
         discountAmount: 0,
-        taxClassification: 'GRAVADO_15',
+        taxClassification: effectiveTaxClass,
         subtotal: calculated.subtotal,
         taxAmount: calculated.taxAmount,
         total: lineTotal,
@@ -3000,11 +3003,11 @@ export const useAppStore = create<AppState>()(
           isFiscal: false,
           cajaName: state.activeShift?.cajaName || 'Caja 1 - Principal',
           customerName: o.customerName || 'Cliente Domicilio',
-          subtotal: o.subtotal,
+          subtotal: saleTotal,
           discountAmount: 0,
-          exemptAmount: 0,
+          exemptAmount: saleTotal,
           exoneratedAmount: 0,
-          taxable15: o.subtotal,
+          taxable15: 0,
           tax15: 0,
           taxable18: 0,
           tax18: 0,
