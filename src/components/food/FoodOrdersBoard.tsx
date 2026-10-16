@@ -558,7 +558,7 @@ export const FoodOrdersBoard: React.FC = () => {
       </div>
 
       {/* 3. Orders Grid Cards (Direct In-Card Checkout Pattern) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 290px), 1fr))', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '0.85rem', alignItems: 'start' }}>
         {sortedOrders.length === 0 ? (
           <div
             style={{
@@ -606,34 +606,34 @@ export const FoodOrdersBoard: React.FC = () => {
                     : urgency?.label.includes('espera')
                     ? '2px solid #f59e0b'
                     : '1px solid #e2e8f0',
-                  borderRadius: '14px',
-                  padding: '1.15rem',
+                  borderRadius: '12px',
+                  padding: '0.85rem 0.95rem',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '0.75rem',
-                  boxShadow: isCompleted ? 'none' : '0 2px 6px rgba(0,0,0,0.04)',
+                  gap: '0.5rem',
+                  boxShadow: isCompleted ? 'none' : '0 2px 5px rgba(0,0,0,0.03)',
                   opacity: isCancelled ? 0.7 : isCompleted ? 0.85 : 1
                 }}
               >
                 {/* Urgency Highlight Banner if active */}
                 {urgency && (
                   <div style={urgency.style}>
-                    <Clock size={13} />
+                    <Clock size={12} />
                     <span>{urgency.label}</span>
                   </div>
                 )}
 
                 {/* Top Line: Number & Destination Badge */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <span
                       style={{
                         background: '#0f172a',
                         color: '#ffffff',
-                        fontSize: '0.82rem',
+                        fontSize: '0.78rem',
                         fontWeight: 900,
-                        padding: '0.2rem 0.55rem',
-                        borderRadius: '6px'
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '5px'
                       }}
                     >
                       {order.orderNumber}
@@ -644,10 +644,10 @@ export const FoodOrdersBoard: React.FC = () => {
                       style={{
                         background: order.deliveryType === 'DINE_IN' ? '#ffedd5' : order.deliveryType === 'TAKE_OUT' ? '#e0f2fe' : '#dcfce7',
                         color: order.deliveryType === 'DINE_IN' ? '#c2410c' : order.deliveryType === 'TAKE_OUT' ? '#0369a1' : '#15803d',
-                        fontSize: '0.75rem',
+                        fontSize: '0.72rem',
                         fontWeight: 800,
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '6px',
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: '5px',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '0.25rem'
@@ -655,17 +655,17 @@ export const FoodOrdersBoard: React.FC = () => {
                     >
                       {order.deliveryType === 'DINE_IN' ? (
                         <>
-                          <Utensils size={13} />
+                          <Utensils size={12} />
                           <span>{order.tableNumber || 'Mesa'}</span>
                         </>
                       ) : order.deliveryType === 'TAKE_OUT' ? (
                         <>
-                          <ShoppingBag size={13} />
+                          <ShoppingBag size={12} />
                           <span>Para Llevar</span>
                         </>
                       ) : (
                         <>
-                          <Bike size={13} />
+                          <Bike size={12} />
                           <span>Domicilio</span>
                         </>
                       )}
@@ -679,22 +679,22 @@ export const FoodOrdersBoard: React.FC = () => {
 
                 {/* Customer Details & Phone */}
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>
                     {order.customerName || (order.tableNumber ? `${order.tableNumber}` : 'Cliente')}
                   </h4>
                   {(order.customerPhone || order.deliveryPhone) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem', fontSize: '0.78rem', color: '#64748b' }}>
-                      <Phone size={12} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem', fontSize: '0.75rem', color: '#64748b' }}>
+                      <Phone size={11} />
                       <span>{order.customerPhone || order.deliveryPhone}</span>
                     </div>
                   )}
                   {order.deliveryAddress && (
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.1rem' }}>
                       <strong>Dir:</strong> {order.deliveryAddress}
                     </div>
                   )}
                   {order.driverName && (
-                    <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 700, marginTop: '0.15rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 700, marginTop: '0.1rem' }}>
                       Repartidor: {order.driverName}
                     </div>
                   )}
@@ -704,13 +704,15 @@ export const FoodOrdersBoard: React.FC = () => {
                 <div
                   style={{
                     background: isCompleted ? '#ffffff' : '#f8fafc',
-                    borderRadius: '10px',
-                    padding: '0.65rem 0.75rem',
+                    borderRadius: '8px',
+                    padding: '0.5rem 0.65rem',
                     border: '1px solid #e2e8f0',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '0.4rem',
-                    fontSize: '0.8rem'
+                    gap: '0.3rem',
+                    fontSize: '0.78rem',
+                    maxHeight: '160px',
+                    overflowY: 'auto'
                   }}
                 >
                   {order.items.map((it, idx) => (
@@ -719,22 +721,22 @@ export const FoodOrdersBoard: React.FC = () => {
                         <span style={{ fontWeight: 700, color: '#0f172a' }}>
                           <span style={{ color: '#ea580c', fontWeight: 800 }}>{it.quantity}x</span> {it.name}
                         </span>
-                        <span style={{ color: '#475569', fontWeight: 700, fontSize: '0.78rem' }}>
+                        <span style={{ color: '#475569', fontWeight: 700, fontSize: '0.76rem' }}>
                           {formatCurrency(it.subtotal, tenant.currencySymbol)}
                         </span>
                       </div>
 
                       {/* Extras */}
                       {it.selectedExtras && it.selectedExtras.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.15rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.1rem' }}>
                           {it.selectedExtras.map((ex, eIdx) => (
                             <span
                               key={eIdx}
                               style={{
                                 background: '#f1f5f9',
                                 color: '#475569',
-                                fontSize: '0.68rem',
-                                padding: '0.1rem 0.35rem',
+                                fontSize: '0.65rem',
+                                padding: '0.05rem 0.3rem',
                                 borderRadius: '4px',
                                 fontWeight: 600
                               }}
@@ -747,38 +749,38 @@ export const FoodOrdersBoard: React.FC = () => {
 
                       {/* Notes */}
                       {it.notes && (
-                        <span style={{ fontSize: '0.72rem', fontStyle: 'italic', color: '#64748b', marginTop: '0.1rem' }}>
+                        <span style={{ fontSize: '0.7rem', fontStyle: 'italic', color: '#64748b', marginTop: '0.05rem' }}>
                           Nota: {it.notes}
                         </span>
                       )}
                     </div>
                   ))}
 
-                  {order.deliveryFee && order.deliveryFee > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.3rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.75rem', color: '#64748b' }}>
+                  {Boolean(order.deliveryFee && order.deliveryFee > 0) && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.25rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.74rem', color: '#64748b' }}>
                       <span>Envío a domicilio:</span>
-                      <span>{formatCurrency(order.deliveryFee, tenant.currencySymbol)}</span>
+                      <span>{formatCurrency(order.deliveryFee || 0, tenant.currencySymbol)}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Total & Status Selector */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.2rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, display: 'block' }}>Total Comanda:</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 900, color: isCompleted ? '#15803d' : '#ea580c' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Total:</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 900, color: isCompleted ? '#15803d' : '#ea580c' }}>
                       {formatCurrency(order.total, tenant.currencySymbol)}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     <label style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Estado:</label>
                     <select
                       className="input-control"
                       value={order.status}
                       disabled={isCompleted || isCancelled}
                       onChange={(e) => handleStatusChange(order, e.target.value as FoodOrderStatus)}
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.4rem', height: '32px' }}
+                      style={{ fontSize: '0.74rem', padding: '0.2rem 0.35rem', height: '28px' }}
                     >
                       <option value="ORDERED">Ordenada</option>
                       <option value="PREPARING">En Cocina</option>
@@ -791,288 +793,283 @@ export const FoodOrdersBoard: React.FC = () => {
                 </div>
 
                 {/* Primary Card Actions: Direct Checkout vs Paid Indicator */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.15rem' }}>
                   {!isCompleted && !isCancelled ? (
                     <>
-                      {order.status === 'ORDERED' && (
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        {order.status === 'ORDERED' && (
+                          <button
+                            type="button"
+                            onClick={() => handleStatusChange(order, 'PREPARING')}
+                            style={{
+                              flex: 1,
+                              minHeight: '36px',
+                              padding: '0.4rem 0.5rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              borderRadius: '7px',
+                              border: '1px solid #fed7aa',
+                              background: '#fff7ed',
+                              color: '#ea580c',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.25rem',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title="Pasar comanda a En Cocina con 1 toque"
+                          >
+                            <Utensils size={14} />
+                            <span>A Cocina</span>
+                          </button>
+                        )}
+
+                        {order.status === 'PREPARING' && (
+                          <button
+                            type="button"
+                            onClick={() => handleStatusChange(order, 'SERVED')}
+                            style={{
+                              flex: 1,
+                              minHeight: '36px',
+                              padding: '0.4rem 0.5rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              borderRadius: '7px',
+                              border: '1px solid #bfdbfe',
+                              background: '#eff6ff',
+                              color: '#2563eb',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.25rem',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title="Marcar comanda como Servida / Lista"
+                          >
+                            <CheckCircle2 size={14} />
+                            <span>Servir / Listo</span>
+                          </button>
+                        )}
+
+                        {order.status === 'SERVED' && order.deliveryType === 'DELIVERY' && (
+                          <button
+                            type="button"
+                            onClick={() => handleStatusChange(order, 'IN_TRANSIT')}
+                            style={{
+                              flex: 1,
+                              minHeight: '36px',
+                              padding: '0.4rem 0.5rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              borderRadius: '7px',
+                              border: '1px solid #bbf7d0',
+                              background: '#f0fdf4',
+                              color: '#16a34a',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.25rem',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title="Marcar pedido En Camino con repartidor"
+                          >
+                            <Bike size={14} />
+                            <span>En Camino</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
-                          onClick={() => handleStatusChange(order, 'PREPARING')}
+                          onClick={() => setPaymentModalOrder(order)}
                           style={{
-                            minHeight: '44px',
-                            minWidth: '105px',
-                            flex: '1 1 105px',
-                            padding: '0.55rem 0.75rem',
+                            flex: 1.5,
+                            minHeight: '36px',
+                            padding: '0.4rem 0.6rem',
                             fontSize: '0.82rem',
-                            fontWeight: 700,
-                            borderRadius: '8px',
-                            border: '1px solid #fed7aa',
-                            background: '#fff7ed',
-                            color: '#ea580c',
+                            fontWeight: 800,
+                            borderRadius: '7px',
+                            border: 'none',
+                            background: '#059669',
+                            color: '#ffffff',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             gap: '0.3rem',
-                            whiteSpace: 'nowrap'
+                            boxShadow: '0 1px 4px rgba(5, 150, 105, 0.25)'
                           }}
-                          title="Pasar comanda a En Cocina con 1 toque"
+                          title="Cobro directo sin pasar por el carrito de ventas"
                         >
-                          <Utensils size={15} />
-                          <span>A Cocina</span>
+                          <DollarSign size={15} />
+                          <span>COBRAR {formatCurrency(order.total, tenant.currencySymbol)}</span>
                         </button>
-                      )}
+                      </div>
 
-                      {order.status === 'PREPARING' && (
+                      {/* Secondary Utility Icon Row */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.35rem', paddingTop: '0.1rem' }}>
+                        {/* Edit */}
                         <button
                           type="button"
-                          onClick={() => handleStatusChange(order, 'SERVED')}
+                          onClick={() => {
+                            setEditingOrder(order);
+                            setIsNewOrderModalOpen(true);
+                          }}
                           style={{
-                            minHeight: '44px',
-                            minWidth: '115px',
-                            flex: '1 1 115px',
-                            padding: '0.55rem 0.75rem',
-                            fontSize: '0.82rem',
-                            fontWeight: 700,
-                            borderRadius: '8px',
-                            border: '1px solid #bfdbfe',
-                            background: '#eff6ff',
-                            color: '#2563eb',
-                            cursor: 'pointer',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            color: '#0f172a',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '0.3rem',
-                            whiteSpace: 'nowrap'
+                            cursor: 'pointer'
                           }}
-                          title="Marcar comanda como Servida / Lista"
+                          title="Editar comanda"
                         >
-                          <CheckCircle2 size={15} />
-                          <span>Servir / Listo</span>
+                          <Pencil size={14} />
                         </button>
-                      )}
 
-                      {order.status === 'SERVED' && order.deliveryType === 'DELIVERY' && (
+                        {/* Kitchen Ticket */}
                         <button
                           type="button"
-                          onClick={() => handleStatusChange(order, 'IN_TRANSIT')}
+                          onClick={() => handlePrintKitchenTicket(order)}
                           style={{
-                            minHeight: '44px',
-                            minWidth: '110px',
-                            flex: '1 1 110px',
-                            padding: '0.55rem 0.75rem',
-                            fontSize: '0.82rem',
-                            fontWeight: 700,
-                            borderRadius: '8px',
-                            border: '1px solid #bbf7d0',
-                            background: '#f0fdf4',
-                            color: '#16a34a',
-                            cursor: 'pointer',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            color: '#475569',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '0.3rem',
-                            whiteSpace: 'nowrap'
+                            cursor: 'pointer'
                           }}
-                          title="Marcar pedido En Camino con repartidor"
+                          title="Imprimir Ticket de Cocina"
                         >
-                          <Bike size={15} />
-                          <span>En Camino</span>
+                          <Printer size={14} />
                         </button>
-                      )}
 
-                      <button
-                        type="button"
-                        onClick={() => setPaymentModalOrder(order)}
+                        {/* WhatsApp Notification */}
+                        {(order.customerPhone || order.deliveryPhone) && (
+                          <button
+                            type="button"
+                            onClick={() => handleSendWhatsAppNotification(order)}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '6px',
+                              border: '1px solid #bbf7d0',
+                              background: '#f0fdf4',
+                              color: '#16a34a',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            title="Enviar mensaje por WhatsApp al cliente"
+                          >
+                            <MessageCircle size={14} />
+                          </button>
+                        )}
+
+                        {/* Cancel Order */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`¿Cancelar la comanda ${order.orderNumber}?`)) {
+                              cancelFoodOrder(order.id);
+                              toast.info(`Comanda ${order.orderNumber} cancelada`);
+                            }
+                          }}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '6px',
+                            border: '1px solid #fecdd3',
+                            background: '#fff1f2',
+                            color: '#ef4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                          }}
+                          title="Cancelar comanda"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </>
+                  ) : isCompleted ? (
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <div
                         style={{
-                          flex: '2 1 130px',
-                          minHeight: '44px',
-                          minWidth: '130px',
-                          padding: '0.55rem',
-                          fontSize: '0.85rem',
+                          flex: 1,
+                          height: '34px',
+                          background: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          color: '#16a34a',
                           fontWeight: 800,
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: '#059669',
-                          color: '#ffffff',
-                          cursor: 'pointer',
+                          fontSize: '0.78rem',
+                          borderRadius: '6px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: '0.35rem',
-                          boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
+                          gap: '0.3rem'
                         }}
-                        title="Cobro directo sin pasar por el carrito de ventas"
                       >
-                        <DollarSign size={16} />
-                        <span>COBRAR {formatCurrency(order.total, tenant.currencySymbol)}</span>
-                      </button>
-                    </>
-                  ) : isCompleted ? (
-                    <div
-                      style={{
-                        flex: 2,
-                        minHeight: '40px',
-                        background: '#f0fdf4',
-                        border: '1px solid #bbf7d0',
-                        color: '#16a34a',
-                        fontWeight: 800,
-                        fontSize: '0.8rem',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem'
-                      }}
-                    >
-                      <CheckCircle2 size={16} />
-                      <span>Cobrado con Éxito</span>
+                        <CheckCircle2 size={15} />
+                        <span>Cobrado con Éxito</span>
+                      </div>
+
+                      {order.saleId && (
+                        <button
+                          type="button"
+                          onClick={() => handleReprintSaleReceipt(order)}
+                          style={{
+                            height: '34px',
+                            padding: '0 0.65rem',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            color: '#475569',
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            cursor: 'pointer'
+                          }}
+                          title="Reimprimir comprobante de pago"
+                        >
+                          <Printer size={13} />
+                          <span>Ticket</span>
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div
                       style={{
-                        flex: 2,
-                        minHeight: '40px',
+                        height: '34px',
                         background: '#fef2f2',
                         border: '1px solid #fecdd3',
                         color: '#991b1b',
                         fontWeight: 800,
-                        fontSize: '0.8rem',
-                        borderRadius: '8px',
+                        fontSize: '0.78rem',
+                        borderRadius: '6px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '0.35rem'
+                        gap: '0.3rem'
                       }}
                     >
                       <span>Orden Cancelada</span>
                     </div>
-                  )}
-
-                  {/* Edit Order Button */}
-                  {!isCompleted && !isCancelled && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingOrder(order);
-                        setIsNewOrderModalOpen(true);
-                      }}
-                      style={{
-                        width: '42px',
-                        minHeight: '44px',
-                        borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
-                        color: '#0f172a',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer'
-                      }}
-                      title="Editar comanda"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                  )}
-
-                  {/* Print Kitchen Ticket Button */}
-                  {!isCompleted && !isCancelled && (
-                    <button
-                      type="button"
-                      onClick={() => handlePrintKitchenTicket(order)}
-                      style={{
-                        width: '42px',
-                        minHeight: '44px',
-                        borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
-                        color: '#475569',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer'
-                      }}
-                      title="Imprimir Ticket de Cocina"
-                    >
-                      <Printer size={16} />
-                    </button>
-                  )}
-
-                  {/* WhatsApp Notification Button */}
-                  {(order.customerPhone || order.deliveryPhone) && (
-                    <button
-                      type="button"
-                      onClick={() => handleSendWhatsAppNotification(order)}
-                      style={{
-                        width: '42px',
-                        minHeight: '44px',
-                        borderRadius: '8px',
-                        border: '1px solid #bbf7d0',
-                        background: '#f0fdf4',
-                        color: '#16a34a',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer'
-                      }}
-                      title="Enviar mensaje por WhatsApp al cliente"
-                    >
-                      <MessageCircle size={16} />
-                    </button>
-                  )}
-
-                  {/* Reprint Receipt if completed */}
-                  {isCompleted && order.saleId && (
-                    <button
-                      type="button"
-                      onClick={() => handleReprintSaleReceipt(order)}
-                      style={{
-                        padding: '0.4rem 0.65rem',
-                        minHeight: '40px',
-                        borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
-                        color: '#475569',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        cursor: 'pointer'
-                      }}
-                      title="Reimprimir comprobante de pago"
-                    >
-                      <Printer size={14} />
-                      <span>Ticket</span>
-                    </button>
-                  )}
-
-                  {/* Cancel Button if active */}
-                  {!isCompleted && !isCancelled && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`¿Cancelar la comanda ${order.orderNumber}?`)) {
-                          cancelFoodOrder(order.id);
-                          toast.info(`Comanda ${order.orderNumber} cancelada`);
-                        }
-                      }}
-                      style={{
-                        width: '42px',
-                        minHeight: '44px',
-                        borderRadius: '8px',
-                        border: '1px solid #fecdd3',
-                        background: '#fff1f2',
-                        color: '#ef4444',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer'
-                      }}
-                      title="Cancelar comanda"
-                    >
-                      <Trash2 size={16} />
-                    </button>
                   )}
                 </div>
               </div>
