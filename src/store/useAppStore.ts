@@ -1122,9 +1122,7 @@ export const useAppStore = create<AppState>()(
     const shiftSales = state.sales.filter(s => {
       const matchesTenant = !s.tenantId || s.tenantId === shift.tenantId;
       if (!matchesTenant) return false;
-      if (s.status === 'VOIDED') return false;
-
-      // 1. Direct ID match (if cashShiftId is present, must match this shift)
+      // Direct ID match (if cashShiftId is present, must match this shift)
       if (s.cashShiftId) {
         return s.cashShiftId === shift.id;
       }

@@ -165,7 +165,6 @@ export const ReportsView: React.FC = () => {
     const shiftSales = (sales || []).filter((s: Sale) => {
       const matchesTenant = !s.tenantId || s.tenantId === tenant.id;
       if (!matchesTenant) return false;
-      if (s.status === 'VOIDED') return false;
       if (s.cashShiftId && s.cashShiftId === shift.id) return true;
 
       const matchesCaja = (s.cajaName && shift.cajaName && s.cajaName === shift.cajaName) ||

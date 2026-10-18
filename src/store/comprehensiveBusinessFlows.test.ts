@@ -56,6 +56,11 @@ describe('Comprehensive Business Flow Test Suite (MiCuadre)', () => {
       const refundMovement = movements.find(m => m.type === 'SALIDA' && m.referenceId === sale!.id);
       expect(refundMovement).toBeDefined();
       expect(refundMovement?.amount).toBe(200);
+
+      // Cuadre de caja tras anulación: la gaveta física cuadra con el fondo inicial (1000 + 200 - 200 = 1000)
+      const closeRes = useAppStore.getState().closeCashShift(1000);
+      expect(closeRes.closingSystem).toBe(1000);
+      expect(closeRes.difference).toBe(0);
     });
 
     it('debe procesar devoluciones por producto defectuoso (merma) sin regresar al stock vendible', () => {
@@ -114,6 +119,11 @@ describe('Comprehensive Business Flow Test Suite (MiCuadre)', () => {
       const returns = useAppStore.getState().salesReturns;
       expect(returns.length).toBeGreaterThan(0);
       expect(returns[0].total).toBe(35);
+
+      // Cuadre de caja tras devolución: 500 (fondo) + 70 (venta) - 35 (devolución) = 535
+      const closeRes = useAppStore.getState().closeCashShift(535);
+      expect(closeRes.closingSystem).toBe(535);
+      expect(closeRes.difference).toBe(0);
     });
   });
 
