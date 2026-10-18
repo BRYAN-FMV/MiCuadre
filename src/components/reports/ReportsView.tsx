@@ -337,17 +337,25 @@ export const ReportsView: React.FC = () => {
             const localSalesMap = new Map((state.sales || []).map(s => [s.id, s]));
             const mergedLiveSales = liveSales.map(ls => {
               const local = localSalesMap.get(ls.id);
+              const effectiveStatus = (local?.status && local.status !== 'COMPLETED') ? local.status : (ls.status || 'COMPLETED');
+              const effectiveVoidReason = local?.voidReason || ls.voidReason;
+              const effectiveVoidedAt = local?.voidedAt || ls.voidedAt;
+              let items = ls.items;
+
               if (local && local.items && local.items.length > 0) {
                 const hasLocalRealNames = local.items.some(i => i.name && i.name !== 'Artículo POS');
                 const liveHasOnlyGeneric = !ls.items || ls.items.every(i => !i.name || i.name === 'Artículo POS');
                 if (hasLocalRealNames && liveHasOnlyGeneric) {
-                  return {
-                    ...ls,
-                    items: local.items
-                  };
+                  items = local.items;
                 }
               }
-              return ls;
+              return {
+                ...ls,
+                status: effectiveStatus,
+                voidReason: effectiveVoidReason,
+                voidedAt: effectiveVoidedAt,
+                items: items || local?.items || []
+              };
             });
             const liveIds = new Set(liveSales.map(ls => ls.id));
             const localOnly = (state.sales || []).filter(s => !liveIds.has(s.id));

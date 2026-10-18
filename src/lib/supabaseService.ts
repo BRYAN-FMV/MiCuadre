@@ -936,7 +936,7 @@ export async function fetchSalesFromSupabase(
   if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
 
   try {
-    const [salesRes, ranges, products, foodOrdersRes, menuItemsRes] = await Promise.all([
+    const [salesRes, ranges, products, foodOrdersRes, menuItemsRes, cashMovRes] = await Promise.all([
       supabase
         .from('sales')
         .select('*, sale_items(*)')
@@ -954,11 +954,24 @@ export async function fetchSalesFromSupabase(
       supabase
         .from('menu_items')
         .select('id, name, price')
+        .eq('tenant_id', tenantId),
+      supabase
+        .from('cash_movements')
+        .select('reference_id, concept, type')
         .eq('tenant_id', tenantId)
+        .eq('type', 'SALIDA')
+        .limit(200)
     ]);
 
     const data = salesRes.data;
     if (salesRes.error || !data) return null;
+
+    const refundMovementsMap = new Map<string, string>();
+    ((cashMovRes?.data as any[]) || []).forEach(m => {
+      if (m.reference_id && m.concept) {
+        refundMovementsMap.set(m.reference_id, m.concept);
+      }
+    });
 
     const caiRangeMap = new Map((ranges || []).map(r => [r.cai, r.name]));
     const productMap = new Map((products || []).map(p => [p.id, p.name]));
@@ -1073,6 +1086,21 @@ export async function fetchSalesFromSupabase(
         });
       }
 
+      let resolvedStatus: 'COMPLETED' | 'VOIDED' | 'REFUNDED' = (s.status as any) || 'COMPLETED';
+      let cleanCustomerName = s.customer_name || 'Consumidor Final';
+
+      const refundConcept = s.id ? refundMovementsMap.get(s.id) : undefined;
+      const isVoidConcept = refundConcept ? refundConcept.toLowerCase().includes('anulación') : false;
+      const isRefundConcept = refundConcept ? refundConcept.toLowerCase().includes('devolución') : false;
+
+      if (s.status === 'VOIDED' || (s.customer_name && s.customer_name.includes('[ANULADA')) || isVoidConcept) {
+        resolvedStatus = 'VOIDED';
+        cleanCustomerName = cleanCustomerName.replace(/\s*\[ANULADA:.*?\]/g, '').trim() || 'Consumidor Final';
+      } else if (s.status === 'REFUNDED' || (s.customer_name && s.customer_name.includes('[DEVUELTA')) || isRefundConcept) {
+        resolvedStatus = 'REFUNDED';
+        cleanCustomerName = cleanCustomerName.replace(/\s*\[DEVUELTA:.*?\]/g, '').trim() || 'Consumidor Final';
+      }
+
       return {
         id: s.id,
         tenantId: s.tenant_id,
@@ -1086,7 +1114,7 @@ export async function fetchSalesFromSupabase(
         fiscalRangeId: s.fiscal_range_id,
         cajaName: s.caja_name || (s.cai && caiRangeMap.get(s.cai)) || defaultCajaName,
         customerId: s.customer_id,
-        customerName: s.customer_name || 'Consumidor Final',
+        customerName: cleanCustomerName,
         customerRtn: s.customer_rtn,
         subtotal: Number(s.subtotal),
         discountAmount: Number(s.discount_amount),
@@ -1098,6 +1126,7 @@ export async function fetchSalesFromSupabase(
         tax18: Number(s.tax_18),
         total: Number(s.total),
         paymentMethod: s.payment_method,
+        status: resolvedStatus,
         createdAt: s.created_at,
         items
       };
@@ -1738,17 +1767,25 @@ export async function syncAllCloudData(tenantId: string) {
         const localSalesMap = new Map((state.sales || []).map(s => [s.id, s]));
         const mergedLiveSales = liveSales.map(ls => {
           const local = localSalesMap.get(ls.id);
+          const effectiveStatus = (local?.status && local.status !== 'COMPLETED') ? local.status : (ls.status || 'COMPLETED');
+          const effectiveVoidReason = local?.voidReason || ls.voidReason;
+          const effectiveVoidedAt = local?.voidedAt || ls.voidedAt;
+          let items = ls.items;
+
           if (local && local.items && local.items.length > 0) {
             const hasLocalRealNames = local.items.some(i => i.name && i.name !== 'Artículo POS');
             const liveHasOnlyGeneric = !ls.items || ls.items.every(i => !i.name || i.name === 'Artículo POS');
             if (hasLocalRealNames && liveHasOnlyGeneric) {
-              return {
-                ...ls,
-                items: local.items
-              };
+              items = local.items;
             }
           }
-          return ls;
+          return {
+            ...ls,
+            status: effectiveStatus,
+            voidReason: effectiveVoidReason,
+            voidedAt: effectiveVoidedAt,
+            items: items || local?.items || []
+          };
         });
 
         const liveIds = new Set(liveSales.map(s => s.id));

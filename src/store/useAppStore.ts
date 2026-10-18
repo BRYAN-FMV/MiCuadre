@@ -1650,6 +1650,14 @@ export const useAppStore = create<AppState>()(
         : s
     );
 
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      supabase.from('sales').update({
+        customer_name: `${sale.customerName} [DEVUELTA: ${refundData.reason}]`
+      }).eq('id', refundData.saleId).then(({ error }) => {
+        if (error) console.warn('Supabase update sale on refund error:', error.message);
+      });
+    }
+
     set({
       sales: updatedSales,
       products: updatedProducts,
@@ -3200,6 +3208,8 @@ export const useAppStore = create<AppState>()(
     cartCustomer: state.cartCustomer,
     heldOrders: state.heldOrders,
     sales: state.sales,
+    salesReturns: state.salesReturns,
+    inventoryAdjustments: state.inventoryAdjustments,
     customers: state.customers,
     suppliers: state.suppliers,
     purchaseInvoices: state.purchaseInvoices,

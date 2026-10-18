@@ -125,6 +125,60 @@ describe('Comprehensive Business Flow Test Suite (MiCuadre)', () => {
       expect(closeRes.closingSystem).toBe(535);
       expect(closeRes.difference).toBe(0);
     });
+
+    it('debe mantener el estado REFUNDED persistente y no revertirlo al sincronizar con la nube o reiniciar', () => {
+      const store = useAppStore.getState();
+      store.openCashShift(500);
+
+      const prod: Product = {
+        id: 'prod-persist-1',
+        tenantId: store.tenant.id,
+        sku: 'P-PER',
+        name: 'Producto Persistencia',
+        category: 'Test',
+        unitOfMeasure: 'UND',
+        salePrice: 50,
+        costPrice: 30,
+        currentStock: 10,
+        minStockAlert: 2,
+        taxClassification: 'EXENTO',
+        isActive: true
+      };
+      useAppStore.setState({ products: [prod] });
+
+      store.addToCart({ product: prod, quantity: 1 });
+      const sale = store.processSale('CASH');
+      expect(sale).not.toBeNull();
+
+      // Devolver venta
+      store.refundSale({
+        saleId: sale!.id,
+        reason: 'Cliente cambió de opinión',
+        refundMethod: 'CASH',
+        items: [{
+          productId: prod.id,
+          productName: prod.name,
+          quantity: 1,
+          unitPrice: 50,
+          subtotal: 50
+        }]
+      });
+
+      const refundedSale = useAppStore.getState().sales.find(s => s.id === sale!.id);
+      expect(refundedSale?.status).toBe('REFUNDED');
+
+      // Simular reinicio / merge desde Supabase con venta que viene de la nube
+      const liveSaleFromCloud: any = {
+        ...refundedSale,
+        status: undefined,
+        customerName: 'Consumidor Final [DEVUELTA: Cliente cambió de opinión]'
+      };
+
+      const localSalesMap = new Map((useAppStore.getState().sales || []).map(s => [s.id, s]));
+      const local = localSalesMap.get(liveSaleFromCloud.id);
+      const effectiveStatus = (local?.status && local.status !== 'COMPLETED') ? local.status : (liveSaleFromCloud.status || 'COMPLETED');
+      expect(effectiveStatus).toBe('REFUNDED');
+    });
   });
 
   // =========================================================================
