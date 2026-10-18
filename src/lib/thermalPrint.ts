@@ -58,8 +58,9 @@ export function printHtmlThermal(
   const is80mm = paperWidth === '80mm';
   // 58mm roll: total width 58mm. 5.5mm left padding avoids cutting off letters due to printer head offset.
   // 80mm roll: total width 80mm, printable width 72mm.
+  // 50mm (5cm) bottom margin ensures paper feeds completely past the cutter / tear bar.
   const ticketWidth = is80mm ? '72mm' : '52mm';
-  const padding = is80mm ? '2mm 3mm 25mm 5.5mm' : '2mm 2mm 25mm 5.5mm';
+  const padding = is80mm ? '2mm 3mm 50mm 5.5mm' : '2mm 2mm 50mm 5.5mm';
   const fontSize = is80mm ? '12px' : '11px';
 
   doc.open();
@@ -104,12 +105,12 @@ export function printHtmlThermal(
     .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
     table { width: 100%; border-collapse: collapse; font-size: 10px; }
     th, td { padding: 1px 0; vertical-align: top; }
-    .feed-spacer { height: 25mm; width: 100%; display: block; }
+    .feed-spacer { height: 50mm; min-height: 50mm; width: 100%; display: block; }
   </style>
 </head>
 <body>
   ${htmlContent}
-  <div class="feed-spacer">&nbsp;</div>
+  <div class="feed-spacer" style="height: 50mm; min-height: 50mm; font-size: 1px; color: transparent; user-select: none;">.</div>
 </body>
 </html>`);
   doc.close();
