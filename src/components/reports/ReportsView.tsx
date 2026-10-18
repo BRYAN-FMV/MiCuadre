@@ -149,6 +149,7 @@ export const ReportsView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CASH' | 'CARD' | 'TRANSFER' | 'MIXED' | 'CREDIT'>('ALL');
   const [docTypeFilter, setDocTypeFilter] = useState<'ALL' | 'FISCAL' | 'TICKET'>('ALL');
+  const [saleStatusFilter, setSaleStatusFilter] = useState<'ALL' | 'VALID' | 'REFUNDED' | 'VOIDED'>('ALL');
   const [selectedCajaFilter, setSelectedCajaFilter] = useState<string>('ALL');
 
   // Selected Sale / Shift for Detail Modals
@@ -423,7 +424,16 @@ export const ReportsView: React.FC = () => {
         matchesDocType = !s.isFiscal && !s.cai;
       }
 
-      return matchesDate && matchesSearch && matchesPayment && matchesDocType;
+      let matchesStatus = true;
+      if (saleStatusFilter === 'VALID') {
+        matchesStatus = s.status !== 'VOIDED' && s.status !== 'REFUNDED';
+      } else if (saleStatusFilter === 'REFUNDED') {
+        matchesStatus = s.status === 'REFUNDED';
+      } else if (saleStatusFilter === 'VOIDED') {
+        matchesStatus = s.status === 'VOIDED';
+      }
+
+      return matchesDate && matchesSearch && matchesPayment && matchesDocType && matchesStatus;
     });
   };
 
@@ -1329,13 +1339,26 @@ export const ReportsView: React.FC = () => {
                   </select>
                 )}
 
-                {(searchTerm || docTypeFilter !== 'ALL' || paymentFilter !== 'ALL') && (
+                <select
+                  className="form-control"
+                  value={saleStatusFilter}
+                  onChange={(e) => setSaleStatusFilter(e.target.value as any)}
+                  style={{ fontSize: '0.82rem', width: 'auto', height: '36px' }}
+                >
+                  <option value="ALL">Estado: Todos</option>
+                  <option value="VALID">Solo Vigentes</option>
+                  <option value="REFUNDED">Devueltas</option>
+                  <option value="VOIDED">Anuladas</option>
+                </select>
+
+                {(searchTerm || docTypeFilter !== 'ALL' || paymentFilter !== 'ALL' || saleStatusFilter !== 'ALL') && (
                   <button
                     className="btn btn-secondary"
                     onClick={() => {
                       setSearchTerm('');
                       setDocTypeFilter('ALL');
                       setPaymentFilter('ALL');
+                      setSaleStatusFilter('ALL');
                     }}
                     style={{ padding: '0.4rem 0.7rem', fontSize: '0.78rem', height: '36px' }}
                   >
@@ -1409,11 +1432,11 @@ export const ReportsView: React.FC = () => {
                               {formatCurrency(totalTaxSale, tenant.currencySymbol)}
                             </td>
                           )}
-                          <td style={{ padding: '0.75rem 1rem', fontWeight: 800, color: isInactiveSale ? '#64748b' : '#059669', textDecoration: s.status === 'VOIDED' ? 'line-through' : 'none' }}>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 800, color: isInactiveSale ? '#94a3b8' : '#059669', textDecoration: isInactiveSale ? 'line-through' : 'none' }}>
                             {formatCurrency(s.total, tenant.currencySymbol)}
                           </td>
                           <td style={{ padding: '0.75rem 1rem' }}>
-                            <span className={`badge ${s.paymentMethod === 'CASH' ? 'badge-success' : 'badge-wholesale'}`}>
+                            <span className={`badge ${isInactiveSale ? '' : (s.paymentMethod === 'CASH' ? 'badge-success' : 'badge-wholesale')}`} style={isInactiveSale ? { background: '#f1f5f9', color: '#94a3b8' } : undefined}>
                               {getPaymentMethodLabel(s.paymentMethod)}
                             </span>
                           </td>
