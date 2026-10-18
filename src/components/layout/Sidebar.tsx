@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import { ShoppingCart, Package, Truck, Calendar, Scissors, Settings, Lock, BarChart3, X, Key, BookOpen, UtensilsCrossed } from 'lucide-react';
+import { ShoppingCart, Package, Truck, Calendar, Scissors, Settings, Lock, BarChart3, X, Key, BookOpen, UtensilsCrossed, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateProfilePinInSupabase } from '../../lib/supabaseService';
+import { LegalModal } from '../legal/LegalModal';
 
 export const Sidebar: React.FC = () => {
   const activeTab = useAppStore(state => state.activeTab);
@@ -17,6 +18,7 @@ export const Sidebar: React.FC = () => {
 
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [newPinCode, setNewPinCode] = useState('');
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
 
   const handleUpdateCurrentPin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,6 +202,31 @@ export const Sidebar: React.FC = () => {
             <Lock size={14} />
             <span>{isShiftOpen ? 'Arqueo & Cierre Z' : 'Abrir Turno'}</span>
           </button>
+
+          {/* Legal & Terms Access */}
+          <div style={{ marginTop: '0.2rem', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setIsLegalModalOpen(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: '0.72rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.2rem 0.4rem',
+                borderRadius: '4px',
+                transition: 'all 0.15s ease'
+              }}
+              title="Términos y Condiciones, Privacidad y Aviso Beta"
+            >
+              <Shield size={12} style={{ color: '#059669' }} />
+              <span>Legal & Privacidad (Beta)</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -238,6 +265,13 @@ export const Sidebar: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* MODAL LEGAL (Términos, Privacidad, Beta, Cookies) */}
+      <LegalModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialDocId="terms"
+      />
     </>
   );
 };

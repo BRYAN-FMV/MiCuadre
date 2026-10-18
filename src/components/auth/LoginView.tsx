@@ -6,6 +6,7 @@ import { UserProfile, Tenant } from '../../types';
 import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase, getStoredTenantFoodEnabled } from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
 import { setRememberedStore, updateDynamicManifest, isPwaStandalone, promptPwaInstall, hasInstallPrompt } from '../../lib/pwa';
+import { LegalModal } from '../legal/LegalModal';
 
 interface LoginViewProps {
   onBackToLanding?: () => void;
@@ -27,6 +28,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isInstallGuideOpen, setIsInstallGuideOpen] = useState<boolean>(false);
   const [canPromptInstall, setCanPromptInstall] = useState<boolean>(hasInstallPrompt());
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false);
+  const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | 'beta' | 'cookies'>('terms');
 
   useEffect(() => {
     const handleInstallable = () => setCanPromptInstall(true);
@@ -440,11 +443,37 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
             />
           </div>
 
+          <div style={{ marginTop: '0.85rem', marginBottom: '0.65rem', textAlign: 'center', fontSize: '0.74rem', color: '#64748b', lineHeight: 1.45 }}>
+            Al ingresar, confirmas que aceptas los{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setLegalModalTab('terms');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ background: 'none', border: 'none', padding: 0, color: '#059669', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer', fontSize: '0.74rem' }}
+            >
+              Términos de Servicio
+            </button>
+            {' '}y la{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setLegalModalTab('privacy');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ background: 'none', border: 'none', padding: 0, color: '#059669', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer', fontSize: '0.74rem' }}
+            >
+              Política de Privacidad
+            </button>
+            .
+          </div>
+
           <button
             type="submit"
             disabled={isLoading}
             className="btn btn-primary"
-            style={{ padding: '0.85rem', fontSize: '1rem', marginTop: '0.5rem', fontWeight: 800, background: '#059669', borderColor: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+            style={{ padding: '0.85rem', fontSize: '1rem', marginTop: '0.25rem', fontWeight: 800, background: '#059669', borderColor: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
           >
             <span>{isLoading ? 'Verificando...' : 'Entrar al Sistema'}</span>
             {!isLoading && <ArrowRight size={18} />}
@@ -475,6 +504,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
                 &larr; Cambiar de Comercio / Volver a Inicio
               </button>
             )}
+
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLegalModalTab('beta');
+                  setIsLegalModalOpen(true);
+                }}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#64748b', cursor: 'pointer', fontSize: '0.72rem' }}
+              >
+                Aviso Versión Beta
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setLegalModalTab('cookies');
+                  setIsLegalModalOpen(true);
+                }}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#64748b', cursor: 'pointer', fontSize: '0.72rem' }}
+              >
+                Cookies & Datos
+              </button>
+            </div>
           </div>
 
         </form>
@@ -576,6 +629,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
           </div>
         </div>
       )}
+
+      {/* MODAL LEGAL (Términos, Privacidad, Beta, Cookies) */}
+      <LegalModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialDocId={legalModalTab}
+      />
     </div>
   );
 };

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
-import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors } from 'lucide-react';
+import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors, FileText, Shield, AlertCircle } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
 import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
 import { compressImageToWebP } from '../../lib/imageUtils';
+import { LegalModal } from '../legal/LegalModal';
 
 export const PERMISSION_DEFINITIONS: { key: keyof UserPermissions; label: string; desc: string; category: string }[] = [
   { key: 'canApplyDiscounts', label: 'Aplicar Descuentos', desc: 'Permite aplicar descuentos en caja (manuales o tercera edad).', category: 'Ventas & Caja' },
@@ -48,6 +49,8 @@ export const SettingsView: React.FC = () => {
   const [businessType, setBusinessType] = useState<BusinessType>(tenant.businessType || 'RETAIL');
   const [accessPassword, setAccessPassword] = useState(tenant.accessPassword || '');
   const [ticketPaperWidth, setTicketPaperWidth] = useState<'58mm' | '80mm'>(tenant.ticketPaperWidth || '58mm');
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | 'beta' | 'cookies'>('terms');
 
   // Loyalty Settings State
   const [loyaltyEarnRate, setLoyaltyEarnRate] = useState(String(tenant.loyaltyEarnRate || 100));
@@ -1215,6 +1218,137 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      {/* SECTION: Marco Legal, Normativa & Privacidad (Fase Beta) */}
+      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ fontSize: '1.05rem', margin: 0, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <ShieldCheck size={18} style={{ color: 'var(--accent-primary)' }} />
+            Marco Legal, Normativa & Privacidad (Fase Beta)
+          </h3>
+          <span style={{
+            background: '#ecfdf5',
+            color: '#047857',
+            fontSize: '0.72rem',
+            fontWeight: 700,
+            padding: '0.2rem 0.55rem',
+            borderRadius: '4px',
+            border: '1px solid #a7f3d0'
+          }}>
+            Honduras (SAR / CAI / RLS)
+          </span>
+        </div>
+
+        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 1rem 0', lineHeight: 1.5 }}>
+          Documentación contractual, de privacidad de datos y deslinde de responsabilidad aplicable a los comercios participantes en el programa beta de MiCuadre.
+        </p>
+
+        <div className="grid-2-responsive" style={{ gap: '0.85rem' }}>
+          {/* Card 1: Términos y Condiciones */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
+                <FileText size={16} style={{ color: '#059669' }} />
+                <h4 style={{ fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, margin: 0 }}>
+                  Términos y Condiciones
+                </h4>
+              </div>
+              <p style={{ fontSize: '0.76rem', color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                Condiciones de uso comercial, exención de responsabilidad fiscal SAR/CAI y deslinde de custodia de gaveta física.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setLegalModalTab('terms');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ fontSize: '0.76rem', padding: '0.4rem 0.65rem', alignSelf: 'flex-start' }}
+            >
+              Consultar Términos
+            </button>
+          </div>
+
+          {/* Card 2: Política de Privacidad */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
+                <Shield size={16} style={{ color: '#0284c7' }} />
+                <h4 style={{ fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, margin: 0 }}>
+                  Política de Privacidad
+                </h4>
+              </div>
+              <p style={{ fontSize: '0.76rem', color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                Aislamiento estricto multi-inquilino mediante Row Level Security (RLS), retención, eliminación y no comercialización de datos.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setLegalModalTab('privacy');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ fontSize: '0.76rem', padding: '0.4rem 0.65rem', alignSelf: 'flex-start' }}
+            >
+              Consultar Privacidad
+            </button>
+          </div>
+
+          {/* Card 3: Descargo Versión Beta */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
+                <AlertCircle size={16} style={{ color: '#d97706' }} />
+                <h4 style={{ fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, margin: 0 }}>
+                  Descargo Versión Beta
+                </h4>
+              </div>
+              <p style={{ fontSize: '0.76rem', color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                Disponibilidad en estado experimental "tal cual", exención de lucro cesante y procedimiento de reporte de incidencias.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setLegalModalTab('beta');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ fontSize: '0.76rem', padding: '0.4rem 0.65rem', alignSelf: 'flex-start' }}
+            >
+              Consultar Descargo Beta
+            </button>
+          </div>
+
+          {/* Card 4: Cookies y Datos Locales */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
+                <Database size={16} style={{ color: '#475569' }} />
+                <h4 style={{ fontSize: '0.88rem', color: '#0f172a', fontWeight: 700, margin: 0 }}>
+                  Cookies & Almacenamiento Local
+                </h4>
+              </div>
+              <p style={{ fontSize: '0.76rem', color: '#64748b', margin: 0, lineHeight: 1.45 }}>
+                Uso de LocalStorage e IndexedDB para funcionamiento sin conexión continua y advertencia sobre limpieza de memoria caché.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setLegalModalTab('cookies');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ fontSize: '0.76rem', padding: '0.4rem 0.65rem', alignSelf: 'flex-start' }}
+            >
+              Consultar Almacenamiento
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* MODAL: Add/Edit Customer */}
       {isCustomerModalOpen && (
         <div className="modal-backdrop">
@@ -1620,6 +1754,12 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL LEGAL (Términos, Privacidad, Beta, Cookies) */}
+      <LegalModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialDocId={legalModalTab}
+      />
     </div>
   );
 };

@@ -10,6 +10,7 @@ import { fetchTenantsFromSupabase, findTenantInSupabase } from '../../lib/supaba
 import { normalizeSlug } from '../../lib/security';
 import { isPwaStandalone, promptPwaInstall } from '../../lib/pwa';
 import { toast } from 'sonner';
+import { LegalModal } from '../legal/LegalModal';
 
 interface LandingViewProps {
   onSelectStore: (tenant: Tenant) => void;
@@ -21,6 +22,8 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
   const [storeInput, setStoreInput] = useState('');
   const [storePasswordInput, setStorePasswordInput] = useState('');
   const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | 'beta' | 'cookies'>('terms');
 
   const toggleFaq = (index: number) => {
     setActiveFaqIndex(activeFaqIndex === index ? null : index);
@@ -532,9 +535,65 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectStore, onEnter
       </section>
 
       {/* 10. FOOTER */}
-      <footer style={{ borderTop: '1px solid #e2e8f0', background: '#ffffff', padding: '1.75rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.86rem' }}>
-        <p>© {new Date().getFullYear()} MiCuadre.app — Sistema POS & Gestión Comercial en Honduras.</p>
+      <footer style={{ borderTop: '1px solid #e2e8f0', background: '#ffffff', padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.86rem' }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap', justifyContent: 'center', fontSize: '0.82rem', fontWeight: 600 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setLegalModalTab('terms');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 0 }}
+            >
+              Términos y Condiciones
+            </button>
+            <span style={{ color: '#cbd5e1' }}>•</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLegalModalTab('privacy');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 0 }}
+            >
+              Política de Privacidad
+            </button>
+            <span style={{ color: '#cbd5e1' }}>•</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLegalModalTab('beta');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ background: 'none', border: 'none', color: '#059669', cursor: 'pointer', padding: 0, fontWeight: 700 }}
+            >
+              Aviso Versión Beta
+            </button>
+            <span style={{ color: '#cbd5e1' }}>•</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLegalModalTab('cookies');
+                setIsLegalModalOpen(true);
+              }}
+              style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 0 }}
+            >
+              Cookies & Datos Locales
+            </button>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8' }}>
+            © {new Date().getFullYear()} MiCuadre.app — Sistema POS & Gestión Comercial en Honduras. Todos los derechos reservados.
+          </p>
+        </div>
       </footer>
+
+      {/* MODAL LEGAL (Términos, Privacidad, Beta, Cookies) */}
+      <LegalModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialDocId={legalModalTab}
+      />
 
       {/* MODAL PRIVADO: Ingresar a mi Comercio (UI/UX Pro Max) */}
       {isAccessModalOpen && (
