@@ -37,7 +37,10 @@ export interface ZReportPrintData {
  * Sends clean HTML content directly to the browser print engine using a hidden iframe.
  * Avoids raw binary ESC/POS corruption and blank screen issues.
  */
-export function printHtmlThermal(htmlContent: string): void {
+export function printHtmlThermal(
+  htmlContent: string,
+  paperWidth: '58mm' | '80mm' = '58mm'
+): void {
   const iframe = document.createElement('iframe');
   iframe.setAttribute(
     'style',
@@ -51,6 +54,13 @@ export function printHtmlThermal(htmlContent: string): void {
     window.print();
     return;
   }
+
+  const is80mm = paperWidth === '80mm';
+  // 58mm roll: total width 58mm. 5.5mm left padding avoids cutting off letters due to printer head offset.
+  // 80mm roll: total width 80mm, printable width 72mm.
+  const ticketWidth = is80mm ? '72mm' : '52mm';
+  const padding = is80mm ? '2mm 3mm 25mm 5.5mm' : '2mm 2mm 25mm 5.5mm';
+  const fontSize = is80mm ? '12px' : '11px';
 
   doc.open();
   doc.write(`<!DOCTYPE html>
@@ -70,15 +80,17 @@ export function printHtmlThermal(htmlContent: string): void {
     }
     body {
       margin: 0;
-      padding: 2mm 2.5mm 6mm 2.5mm;
+      padding: ${padding};
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 11px;
+      font-size: ${fontSize};
       font-weight: 600;
       line-height: 1.25;
       color: #000000;
       background: #ffffff;
-      width: 48mm;
-      max-width: 48mm;
+      width: ${ticketWidth};
+      max-width: ${ticketWidth};
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
@@ -86,16 +98,18 @@ export function printHtmlThermal(htmlContent: string): void {
     .bold { font-weight: 800; }
     .title { font-size: 13px; font-weight: 800; text-transform: uppercase; }
     .subtitle { font-size: 11px; font-weight: 800; }
-    .small { font-size: 9px; line-height: 1.2; }
+    .small { font-size: 9.5px; line-height: 1.25; }
     .divider { border-bottom: 1px dashed #000000; margin: 4px 0; }
     .double-divider { border-bottom: 2px dashed #000000; margin: 5px 0; }
-    .row { display: flex; justify-content: space-between; align-items: baseline; }
+    .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
     table { width: 100%; border-collapse: collapse; font-size: 10px; }
     th, td { padding: 1px 0; vertical-align: top; }
+    .feed-spacer { height: 25mm; width: 100%; display: block; }
   </style>
 </head>
 <body>
   ${htmlContent}
+  <div class="feed-spacer">&nbsp;</div>
 </body>
 </html>`);
   doc.close();
@@ -455,15 +469,15 @@ export function generateZReportHtml(data: ZReportPrintData): string {
 
     <div class="double-divider"></div>
 
-    <div class="row bold" style="font-size: 13px;">
+    <div class="row bold" style="font-size: 11.5px;">
       <span>DIFERENCIA DE CAJA:</span>
-      <span>${formatCurrency(zReport.difference, tenant.currencySymbol)}</span>
+      <span style="white-space: nowrap;">${formatCurrency(zReport.difference, tenant.currencySymbol)}</span>
     </div>
 
     <div class="divider"></div>
 
     <div class="small">
-      <div class="bold" style="margin-bottom: 2px;">CONTROL BANCARIO / OTRAS FORMAS:</div>
+      <div class="bold" style="font-size: 10px; margin-bottom: 2px;">CONTROL BANCARIO / OTRAS FORMAS:</div>
       <div class="row">
         <span>Ventas con Tarjeta:</span>
         <span>${formatCurrency(zReport.totalCardSales, tenant.currencySymbol)}</span>
@@ -498,15 +512,18 @@ export function printSaleReceipt(
   copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL'
 ): void {
   const html = generateSaleReceiptHtml(sale, tenant, copyType);
-  printHtmlThermal(html);
+  printHtmlThermal(html, tenant.ticketPaperWidth || '58mm');
 }
 
 /**
  * Convenient high-level helper to print a Kitchen ticket.
  */
-export function printKitchenTicket(data: KitchenTicketData): void {
+export function printKitchenTicket(
+  data: KitchenTicketData,
+  paperWidth: '58mm' | '80mm' = '58mm'
+): void {
   const html = generateKitchenTicketHtml(data);
-  printHtmlThermal(html);
+  printHtmlThermal(html, paperWidth);
 }
 
 /**
@@ -514,7 +531,7 @@ export function printKitchenTicket(data: KitchenTicketData): void {
  */
 export function printPaymentReceipt(data: PaymentReceiptData): void {
   const html = generatePaymentReceiptHtml(data);
-  printHtmlThermal(html);
+  printHtmlThermal(html, data.tenant?.ticketPaperWidth || '58mm');
 }
 
 /**
@@ -522,5 +539,5 @@ export function printPaymentReceipt(data: PaymentReceiptData): void {
  */
 export function printZReport(data: ZReportPrintData): void {
   const html = generateZReportHtml(data);
-  printHtmlThermal(html);
+  printHtmlThermal(html, data.tenant?.ticketPaperWidth || '58mm');
 }

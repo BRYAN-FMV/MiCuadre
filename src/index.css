@@ -842,13 +842,13 @@ select.input-control, input.input-control, select, input {
   #thermal-receipt-print,
   .printable-z-report {
     position: absolute !important;
-    left: 4mm !important;
+    left: 0 !important;
     top: 0 !important;
-    width: 48mm !important;
-    max-width: 48mm !important;
+    width: 52mm !important;
+    max-width: 52mm !important;
     transform: none !important;
     margin: 0 !important;
-    padding: 1mm 1.5mm 5mm 1.5mm !important;
+    padding: 1mm 2mm 25mm 5.5mm !important;
     font-family: Arial, Helvetica, sans-serif !important;
     font-size: 11px !important;
     font-weight: 700 !important;
