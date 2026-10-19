@@ -44,6 +44,8 @@ export const PosContainer: React.FC = () => {
   const deleteHeldCart = useAppStore(state => state.deleteHeldCart);
   const processSale = useAppStore(state => state.processSale);
   const applyGlobalCartDiscount = useAppStore(state => state.applyGlobalCartDiscount);
+  const setCartLineDiscount = useAppStore(state => state.setCartLineDiscount);
+  const setCartLinePriceType = useAppStore(state => state.setCartLinePriceType);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('TODOS');
@@ -51,6 +53,12 @@ export const PosContainer: React.FC = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isHeldOrdersModalOpen, setIsHeldOrdersModalOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [lineDiscountModal, setLineDiscountModal] = useState<{
+    index: number;
+    line: CartLine;
+    type: 'PERCENT' | 'FIXED';
+    value: string;
+  } | null>(null);
   const [discountType, setDiscountType] = useState<'PERCENT' | 'FIXED'>('PERCENT');
   const [discountValue, setDiscountValue] = useState<string>('');
   const [selectedDocType, setSelectedDocType] = useState<'FISCAL' | 'TICKET'>('FISCAL');
@@ -82,6 +90,7 @@ export const PosContainer: React.FC = () => {
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustEmail, setNewCustEmail] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
+  const [newCustPriceType, setNewCustPriceType] = useState('');
 
   // Loyalty Points Redemption state
   const [redeemedPoints, setRedeemedPoints] = useState<number>(0);
@@ -172,18 +181,90 @@ export const PosContainer: React.FC = () => {
   const outOfStockCount = tenantProducts.filter((p: Product) => p.isActive && p.currentStock <= 0).length;
   const lowStockCount = tenantProducts.filter((p: Product) => p.isActive && p.currentStock > 0 && p.currentStock <= p.minStockAlert).length;
 
-  const filteredProducts = tenantProducts.filter((p: Product) => {
-    const term = searchTerm.toLowerCase();
-    const matchesSearch = p.name.toLowerCase().includes(term) ||
-                          p.sku.toLowerCase().includes(term) ||
-                          (p.barcode && p.barcode.includes(searchTerm)) ||
-                          (p.presentations && p.presentations.some(pres =>
-                            pres.name.toLowerCase().includes(term) ||
-                            (pres.barcode && pres.barcode.includes(searchTerm))
-                          ));
-    const matchesCategory = selectedCategory === 'TODOS' || p.category === selectedCategory;
-    return matchesSearch && matchesCategory && p.isActive;
-  });
+  interface PosGridItem {
+    id: string;
+    product: Product;
+    presentation?: ProductPresentation;
+    displayName: string;
+    salePrice: number;
+    unitsCount: number;
+    availableStock: number;
+    baseStock: number;
+    isOutOfStock: boolean;
+    isLowStock: boolean;
+    hasTiers: boolean;
+    hasPriceTypes: boolean;
+    barcode?: string;
+  }
+
+  const posGridItems = useMemo<PosGridItem[]>(() => {
+    const items: PosGridItem[] = [];
+    const term = searchTerm.toLowerCase().trim();
+
+    for (const product of tenantProducts) {
+      if (!product.isActive) continue;
+      if (selectedCategory !== 'TODOS' && product.category !== selectedCategory) continue;
+
+      const baseNameMatches = !term ||
+                              product.name.toLowerCase().includes(term) ||
+                              product.sku.toLowerCase().includes(term) ||
+                              (product.barcode && product.barcode.includes(searchTerm));
+
+      // 1. Tarjeta de Producto Base (Unidad)
+      if (baseNameMatches) {
+        const isOutOfStock = product.currentStock <= 0;
+        const isLowStock = product.currentStock > 0 && product.currentStock <= product.minStockAlert;
+        items.push({
+          id: product.id,
+          product,
+          displayName: product.name,
+          salePrice: product.salePrice,
+          unitsCount: 1,
+          availableStock: product.currentStock,
+          baseStock: product.currentStock,
+          isOutOfStock,
+          isLowStock,
+          hasTiers: Boolean(product.tiers && product.tiers.length > 0),
+          hasPriceTypes: Boolean(product.priceTypes && product.priceTypes.length > 0),
+          barcode: product.barcode
+        });
+      }
+
+      // 2. Tarjetas de Empaque Separadas (Six-Packs, Cajas, etc.)
+      if (product.presentations && product.presentations.length > 0) {
+        for (const pres of product.presentations) {
+          const presMatches = !term ||
+                              pres.name.toLowerCase().includes(term) ||
+                              `${product.name} ${pres.name}`.toLowerCase().includes(term) ||
+                              (pres.barcode && pres.barcode.includes(searchTerm)) ||
+                              baseNameMatches;
+
+          if (presMatches) {
+            const packsAvailable = Math.floor(product.currentStock / pres.unitsCount);
+            const isOutOfStock = packsAvailable <= 0;
+            const isLowStock = packsAvailable > 0 && packsAvailable <= 2;
+            items.push({
+              id: `${product.id}-${pres.id}`,
+              product,
+              presentation: pres,
+              displayName: `${product.name} [${pres.name}]`,
+              salePrice: pres.salePrice,
+              unitsCount: pres.unitsCount,
+              availableStock: packsAvailable,
+              baseStock: product.currentStock,
+              isOutOfStock,
+              isLowStock,
+              hasTiers: false,
+              hasPriceTypes: Boolean(pres.priceTypes && pres.priceTypes.length > 0),
+              barcode: pres.barcode
+            });
+          }
+        }
+      }
+    }
+
+    return items;
+  }, [tenantProducts, selectedCategory, searchTerm]);
 
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -197,39 +278,26 @@ export const PosContainer: React.FC = () => {
 
       const trimmedSearch = searchTerm.trim();
 
-      // 1. Direct match on a packaging presentation's barcode
-      let presentationMatch: { product: Product; presentation: ProductPresentation } | null = null;
+      // 1. Coincidencia directa por código de barras de empaque
       for (const p of tenantProducts) {
         if (p.isActive && p.presentations) {
           const matchedPres = p.presentations.find(pres => pres.barcode && pres.barcode.trim() === trimmedSearch);
           if (matchedPres) {
-            presentationMatch = { product: p, presentation: matchedPres };
-            break;
+            if (!tenant.allowNegativeStock && p.currentStock < matchedPres.unitsCount) {
+              toast.error(`"${p.name} [${matchedPres.name}]" no tiene suficiente stock (Disponible: ${p.currentStock}, Requiere: ${matchedPres.unitsCount}).`);
+              return;
+            }
+            addToCart({ product: p, presentation: matchedPres });
+            toast.success(`+ ${p.name} [${matchedPres.name}]`);
+            setSearchTerm('');
+            return;
           }
         }
       }
 
-      if (presentationMatch) {
-        const { product, presentation } = presentationMatch;
-        if (!tenant.allowNegativeStock && product.currentStock < presentation.unitsCount) {
-          toast.error(`"${product.name} [${presentation.name}]" no tiene suficiente stock (Disponible: ${product.currentStock}, Requiere: ${presentation.unitsCount}).`);
-          return;
-        }
-        addToCart({ product, presentation });
-        toast.success(`+ ${product.name} [${presentation.name}]`);
-        setSearchTerm('');
-        return;
-      }
-
-      // 2. Direct match on product base barcode or SKU
+      // 2. Coincidencia directa por código de barras o SKU del producto base
       const match = tenantProducts.find((p: Product) => (p.barcode === trimmedSearch || p.sku.toLowerCase() === trimmedSearch.toLowerCase()) && p.isActive);
       if (match) {
-        // If matched by SKU (not exact barcode) and has presentations, open presentation selector
-        if (match.presentations && match.presentations.length > 0 && match.barcode !== trimmedSearch) {
-          setPresentationModalProduct(match);
-          setSearchTerm('');
-          return;
-        }
         if (!tenant.allowNegativeStock && match.currentStock <= 0) {
           toast.error(`"${match.name}" está AGOTADO. No se puede agregar al carrito.`);
           return;
@@ -237,22 +305,21 @@ export const PosContainer: React.FC = () => {
         addToCart({ product: match });
         toast.success(`+ ${match.name}`);
         setSearchTerm('');
-      } else if (filteredProducts.length === 1) {
-        const single = filteredProducts[0];
-        if (single.presentations && single.presentations.length > 0) {
-          setPresentationModalProduct(single);
-          setSearchTerm('');
+        return;
+      }
+
+      // 3. Coincidencia única en el catálogo visible posGridItems
+      if (posGridItems.length === 1) {
+        const item = posGridItems[0];
+        if (!tenant.allowNegativeStock && item.isOutOfStock) {
+          toast.error(`"${item.displayName}" no tiene stock suficiente.`);
           return;
         }
-        if (!tenant.allowNegativeStock && single.currentStock <= 0) {
-          toast.error(`"${single.name}" está AGOTADO. No se puede agregar al carrito.`);
-          return;
-        }
-        addToCart({ product: single });
-        toast.success(`+ ${single.name}`);
+        addToCart({ product: item.product, presentation: item.presentation });
+        toast.success(`+ ${item.displayName}`);
         setSearchTerm('');
       } else if (trimmedSearch !== '') {
-        toast.error('Producto no encontrado');
+        toast.error('Producto o empaque no encontrado');
       }
     }
   };
@@ -319,6 +386,59 @@ export const PosContainer: React.FC = () => {
     applyGlobalCartDiscount(0, false);
     setIsDiscountModalOpen(false);
     toast.info('Descuento eliminado');
+  };
+
+  const handleOpenLineDiscount = (index: number, line: CartLine) => {
+    setLineDiscountModal({
+      index,
+      line,
+      type: 'PERCENT',
+      value: line.discountAmount > 0 ? '' : '10'
+    });
+  };
+
+  const handleApplyLineDiscount = () => {
+    if (!lineDiscountModal) return;
+    const { index, line, type, value } = lineDiscountModal;
+    const numVal = parseFloat(value) || 0;
+    if (numVal <= 0) {
+      toast.error('Ingrese un valor de descuento mayor a cero');
+      return;
+    }
+
+    if (type === 'PERCENT' && numVal > 100) {
+      toast.error('El porcentaje no puede superar el 100%');
+      return;
+    }
+
+    const lineGross = line.originalUnitPrice * line.quantity;
+    let disc = type === 'PERCENT' ? (lineGross * (numVal / 100)) : numVal;
+    disc = Math.min(lineGross, Math.round(disc * 100) / 100);
+
+    const applyAction = () => {
+      setCartLineDiscount(index, disc);
+      toast.success(`Descuento de ${type === 'PERCENT' ? `${numVal}%` : formatCurrency(disc, tenant.currencySymbol)} aplicado a ${line.name}`);
+      setLineDiscountModal(null);
+    };
+
+    if (!hasUserPermission(currentUser, 'canApplyDiscounts')) {
+      setAdminPinConfig({
+        isOpen: true,
+        title: 'Autorizar Descuento por Producto',
+        actionDescription: `Se requiere autorización de Administrador para aplicar descuento a "${line.name}".`,
+        onSuccess: applyAction
+      });
+      return;
+    }
+
+    applyAction();
+  };
+
+  const handleRemoveLineDiscount = () => {
+    if (!lineDiscountModal) return;
+    setCartLineDiscount(lineDiscountModal.index, 0);
+    toast.info(`Descuento eliminado de ${lineDiscountModal.line.name}`);
+    setLineDiscountModal(null);
   };
 
   // Tenant Customers & Loyalty Calculations
@@ -430,14 +550,16 @@ export const PosContainer: React.FC = () => {
       rtn: newCustRtn.trim() || undefined,
       phone: newCustPhone.trim() || undefined,
       email: newCustEmail.trim() || undefined,
-      address: newCustAddress.trim() || undefined
+      address: newCustAddress.trim() || undefined,
+      defaultPriceTypeName: newCustPriceType.trim() || undefined
     });
 
     setCartCustomer({
       id: created.id,
       name: created.name,
       rtn: created.rtn,
-      loyaltyPoints: created.loyaltyPoints
+      loyaltyPoints: created.loyaltyPoints,
+      defaultPriceTypeName: created.defaultPriceTypeName
     });
 
     toast.success(`Cliente ${created.name} registrado y seleccionado`);
@@ -447,6 +569,7 @@ export const PosContainer: React.FC = () => {
     setNewCustPhone('');
     setNewCustEmail('');
     setNewCustAddress('');
+    setNewCustPriceType('');
   };
 
   const handleHoldCart = () => {
@@ -650,27 +773,21 @@ export const PosContainer: React.FC = () => {
 
             {/* Product Cards Grid */}
             <div className="pos-products-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 150px), 1fr))', gap: '0.85rem', overflowY: 'auto', flex: 1, paddingRight: '0.2rem' }}>
-              {filteredProducts.map((product: Product) => {
-                const hasTiers = product.tiers && product.tiers.length > 0;
-                const isOutOfStock = product.currentStock <= 0;
-                const isLowStock = product.currentStock > 0 && product.currentStock <= product.minStockAlert;
-                const isDisabled = isOutOfStock && !tenant.allowNegativeStock;
+              {posGridItems.map((item: PosGridItem) => {
+                const isDisabled = item.isOutOfStock && !tenant.allowNegativeStock;
+                const isPack = Boolean(item.presentation);
 
                 return (
                   <div
-                    key={product.id}
+                    key={item.id}
                     className="product-card"
                     onClick={() => {
                       if (isDisabled) {
-                        toast.error(`"${product.name}" está AGOTADO. Habilite "Venta con Stock Negativo" en Configuración para vender sin existencia.`);
+                        toast.error(`"${item.displayName}" no tiene stock suficiente. Habilite "Venta con Stock Negativo" en Configuración para vender sin existencia.`);
                         return;
                       }
-                      if (product.presentations && product.presentations.length > 0) {
-                        setPresentationModalProduct(product);
-                        return;
-                      }
-                      addToCart({ product });
-                      toast.success(`+ ${product.name}`);
+                      addToCart({ product: item.product, presentation: item.presentation });
+                      toast.success(`+ ${item.displayName}`);
                     }}
                     style={{
                       padding: '0.85rem',
@@ -678,8 +795,8 @@ export const PosContainer: React.FC = () => {
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
-                      background: isDisabled ? '#f8fafc' : '#ffffff',
-                      border: `1px solid ${isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0')}`,
+                      background: isDisabled ? '#f8fafc' : (isPack ? '#faf5ff' : '#ffffff'),
+                      border: `1px solid ${item.isOutOfStock ? '#fca5a5' : (item.isLowStock ? '#fde68a' : (isPack ? '#d8b4fe' : '#e2e8f0'))}`,
                       borderRadius: '10px',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                       transition: 'transform 0.1s ease, border-color 0.1s ease',
@@ -688,55 +805,62 @@ export const PosContainer: React.FC = () => {
                     }}
                     onMouseEnter={(e) => {
                       if (!isDisabled) {
-                        e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                        e.currentTarget.style.borderColor = isPack ? '#9333ea' : 'var(--accent-primary)';
                         e.currentTarget.style.transform = 'translateY(-2px)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isDisabled) {
-                        e.currentTarget.style.borderColor = isOutOfStock ? '#fca5a5' : (isLowStock ? '#fde68a' : '#e2e8f0');
+                        e.currentTarget.style.borderColor = item.isOutOfStock ? '#fca5a5' : (item.isLowStock ? '#fde68a' : (isPack ? '#d8b4fe' : '#e2e8f0'));
                         e.currentTarget.style.transform = 'translateY(0)';
                       }
                     }}
                   >
-                    {isOutOfStock ? (
+                    {item.isOutOfStock ? (
                       <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 700 }}>
                         Agotado
                       </span>
-                    ) : isLowStock ? (
+                    ) : item.isLowStock ? (
                       <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.62rem', padding: '0.15rem 0.45rem', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>
                         Poco Stock
                       </span>
-                    ) : hasTiers ? (
+                    ) : item.hasTiers ? (
                       <span className="badge badge-wholesale" style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '0.6rem', padding: '0.15rem 0.4rem' }}>
                         Mayoreo
                       </span>
                     ) : null}
 
                     <div>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: isOutOfStock ? '#fee2e2' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: isOutOfStock ? '#ef4444' : '#64748b' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: item.isOutOfStock ? '#fee2e2' : (isPack ? '#f3e8ff' : '#f1f5f9'), display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem', color: item.isOutOfStock ? '#ef4444' : (isPack ? '#9333ea' : '#64748b') }}>
                         <Package size={20} />
                       </div>
 
                       <h4 style={{ fontSize: '0.85rem', color: isDisabled ? '#64748b' : '#0f172a', fontWeight: 600, lineHeight: '1.25', height: '2.5em', overflow: 'hidden', marginBottom: '0.4rem' }}>
-                        {product.name}
+                        {item.displayName}
                       </h4>
                     </div>
 
                     <div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isDisabled ? '#94a3b8' : 'var(--accent-primary)' }}>
-                        {formatCurrency(product.salePrice, tenant.currencySymbol)}
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: isDisabled ? '#94a3b8' : (isPack ? '#7e22ce' : 'var(--accent-primary)') }}>
+                        {formatCurrency(item.salePrice, tenant.currencySymbol)}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: isOutOfStock ? '#ef4444' : (isLowStock ? '#d97706' : '#64748b'), fontWeight: isOutOfStock || isLowStock ? 700 : 400, marginTop: '0.15rem' }}>
-                        Stock: {product.currentStock} {product.unitOfMeasure}
+                      <div style={{ fontSize: '0.7rem', color: item.isOutOfStock ? '#ef4444' : (item.isLowStock ? '#d97706' : '#64748b'), fontWeight: item.isOutOfStock || item.isLowStock ? 700 : 400, marginTop: '0.15rem' }}>
+                        {isPack
+                          ? `Stock: ${item.availableStock} packs (${item.baseStock} unids)`
+                          : `Stock: ${item.availableStock} ${item.product.unitOfMeasure}`}
                       </div>
-                      {product.presentations && product.presentations.length > 0 && (
-                        <div style={{ marginTop: '0.25rem' }}>
+                      <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                        {isPack && (
                           <span style={{ fontSize: '0.62rem', padding: '0.1rem 0.35rem', borderRadius: '4px', background: '#e0e7ff', color: '#4338ca', fontWeight: 700 }}>
-                            +{product.presentations.length} Empaque{product.presentations.length > 1 ? 's' : ''}
+                            Empaque x{item.unitsCount}
                           </span>
-                        </div>
-                      )}
+                        )}
+                        {item.hasPriceTypes && (
+                          <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.35rem', borderRadius: '4px', background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>
+                            Precios Esp.
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -862,20 +986,25 @@ export const PosContainer: React.FC = () => {
             cartLines.map((line: CartLine, index: number) => (
               <div key={index} className="cart-item" style={{ display: 'grid', gridTemplateColumns: '1fr 90px 80px', alignItems: 'center', padding: '0.6rem 0', borderBottom: '1px solid #f1f5f9' }}>
                 <div>
-                  <h5 style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, margin: 0 }}>
-                    {line.name}
+                  <h5 style={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    <span>{line.name}</span>
                     {line.discountAmount > 0 && (
-                      <span className="badge" style={{ fontSize: '0.62rem', background: '#fee2e2', color: '#dc2626', fontWeight: 700, marginLeft: '0.35rem' }}>
+                      <span className="badge" style={{ fontSize: '0.62rem', background: '#fee2e2', color: '#dc2626', fontWeight: 700 }}>
                         Desc: -{formatCurrency(line.discountAmount, tenant.currencySymbol)}
                       </span>
                     )}
                     {line.presentationName && (
-                      <span className="badge" style={{ fontSize: '0.62rem', background: '#e0e7ff', color: '#4338ca', fontWeight: 700, marginLeft: '0.35rem' }}>
+                      <span className="badge" style={{ fontSize: '0.62rem', background: '#e0e7ff', color: '#4338ca', fontWeight: 700 }}>
                         {line.presentationName} ({line.unitsPerPackage || 1} unids)
                       </span>
                     )}
+                    {line.isSpecialPriceActive && (
+                      <span className="badge" style={{ fontSize: '0.6rem', background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>
+                        {line.selectedPriceTypeName || 'Precio Especial'}
+                      </span>
+                    )}
                   </h5>
-                  {line.appliedTierName && (
+                  {line.appliedTierName && !line.isSpecialPriceActive && (
                     <span className="badge badge-wholesale" style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem' }}>
                       {line.appliedTierName}
                     </span>
@@ -885,6 +1014,67 @@ export const PosContainer: React.FC = () => {
                       Nota: {line.notes}
                     </div>
                   )}
+
+                  {/* Selector de Tipo de Precio (si el producto/empaque tiene tipos configurados) */}
+                  {(() => {
+                    const lineProduct = tenantProducts.find(p => p.id === line.productId || p.sku === line.sku);
+                    const linePres = line.presentationId && lineProduct ? lineProduct.presentations?.find(p => p.id === line.presentationId) : undefined;
+                    const availablePriceTypes = linePres ? (linePres.priceTypes || []) : (lineProduct?.priceTypes || []);
+                    const basePrice = linePres ? linePres.salePrice : (lineProduct?.salePrice || line.originalUnitPrice);
+
+                    return (
+                      <div style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        {availablePriceTypes.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#475569' }}>Tarifa:</span>
+                            <select
+                              value={line.selectedPriceTypeId || ''}
+                              onChange={(e) => setCartLinePriceType(index, e.target.value || undefined)}
+                              style={{
+                                fontSize: '0.7rem',
+                                padding: '0.1rem 0.35rem',
+                                borderRadius: '4px',
+                                border: line.isSpecialPriceActive ? '1px solid #0284c7' : '1px solid #cbd5e1',
+                                background: line.isSpecialPriceActive ? '#f0f9ff' : '#ffffff',
+                                color: line.isSpecialPriceActive ? '#0369a1' : '#334155',
+                                fontWeight: line.isSpecialPriceActive ? 700 : 400
+                              }}
+                            >
+                              <option value="">Público ({formatCurrency(basePrice, tenant.currencySymbol)})</option>
+                              {availablePriceTypes.map(pt => (
+                                <option key={pt.id} value={pt.id}>
+                                  {pt.name} ({formatCurrency(pt.price, tenant.currencySymbol)})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Botón de Descuento por Producto Individual */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenLineDiscount(index, line)}
+                          style={{
+                            padding: '0.15rem 0.45rem',
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            borderRadius: '4px',
+                            border: line.discountAmount > 0 ? '1px solid #f87171' : '1px dashed #94a3b8',
+                            background: line.discountAmount > 0 ? '#fee2e2' : '#f8fafc',
+                            color: line.discountAmount > 0 ? '#b91c1c' : '#475569',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.2rem'
+                          }}
+                          title="Aplicar o modificar descuento por producto"
+                        >
+                          <Percent size={10} />
+                          <span>{line.discountAmount > 0 ? `Desc: -${formatCurrency(line.discountAmount, tenant.currencySymbol)}` : '% Descuento'}</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {line.serviceId && (
                     <div style={{ marginTop: '0.2rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                       <span style={{ fontWeight: 600, color: '#6b21a8' }}>Atendido por:</span>
@@ -1136,6 +1326,17 @@ export const PosContainer: React.FC = () => {
                   />
                 </div>
 
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Tipo de Precio Preferencial (Opcional)</label>
+                  <input
+                    type="text"
+                    className="input-control"
+                    value={newCustPriceType}
+                    onChange={(e) => setNewCustPriceType(e.target.value)}
+                    placeholder="Ej. Mayorista, Taller, Frecuente..."
+                  />
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.4rem' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setIsNewCustomerFormOpen(false)} style={{ fontSize: '0.78rem' }}>
                     Cancelar
@@ -1177,7 +1378,8 @@ export const PosContainer: React.FC = () => {
                               id: c.id,
                               name: c.name,
                               rtn: c.rtn,
-                              loyaltyPoints: c.loyaltyPoints
+                              loyaltyPoints: c.loyaltyPoints,
+                              defaultPriceTypeName: c.defaultPriceTypeName
                             });
                             setIsCustomerModalOpen(false);
                             toast.success(`Cliente ${c.name} seleccionado`);
@@ -1194,7 +1396,14 @@ export const PosContainer: React.FC = () => {
                           }}
                         >
                           <div>
-                            <h5 style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 600, margin: 0 }}>{c.name}</h5>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              <h5 style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 600, margin: 0 }}>{c.name}</h5>
+                              {c.defaultPriceTypeName && (
+                                <span style={{ fontSize: '0.62rem', background: '#e0f2fe', color: '#0369a1', padding: '0.05rem 0.3rem', borderRadius: '4px', fontWeight: 700 }}>
+                                  {c.defaultPriceTypeName}
+                                </span>
+                              )}
+                            </div>
                             <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
                               {c.rtn ? `RTN: ${c.rtn}` : 'Sin RTN registrado'} {c.phone ? `• ${c.phone}` : ''}
                             </span>
@@ -2122,6 +2331,204 @@ export const PosContainer: React.FC = () => {
               >
                 Cancelar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Descuento por Producto Individual */}
+      {lineDiscountModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)',
+          zIndex: 1150, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#ffffff', borderRadius: '14px', width: '100%', maxWidth: '420px',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Percent size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                    Descuento por Producto
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>
+                    {lineDiscountModal.line.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLineDiscountModal(null)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              {/* Resumen de línea */}
+              <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
+                <div>
+                  <span style={{ color: '#64748b' }}>Cant: </span>
+                  <strong>{lineDiscountModal.line.quantity}</strong>
+                  <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>x </span>
+                  <strong>{formatCurrency(lineDiscountModal.line.originalUnitPrice, tenant.currencySymbol)}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b' }}>Subtotal: </span>
+                  <strong>{formatCurrency(lineDiscountModal.line.originalUnitPrice * lineDiscountModal.line.quantity, tenant.currencySymbol)}</strong>
+                </div>
+              </div>
+
+              {/* Selector de Modalidad */}
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  Modalidad de Descuento
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setLineDiscountModal(prev => prev ? { ...prev, type: 'PERCENT', value: prev.value || '10' } : null)}
+                    style={{
+                      padding: '0.45rem',
+                      borderRadius: '6px',
+                      border: lineDiscountModal.type === 'PERCENT' ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                      background: lineDiscountModal.type === 'PERCENT' ? '#fef2f2' : '#ffffff',
+                      color: lineDiscountModal.type === 'PERCENT' ? '#b91c1c' : '#334155',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Porcentaje (%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLineDiscountModal(prev => prev ? { ...prev, type: 'FIXED', value: prev.value || '' } : null)}
+                    style={{
+                      padding: '0.45rem',
+                      borderRadius: '6px',
+                      border: lineDiscountModal.type === 'FIXED' ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                      background: lineDiscountModal.type === 'FIXED' ? '#fef2f2' : '#ffffff',
+                      color: lineDiscountModal.type === 'FIXED' ? '#b91c1c' : '#334155',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Monto Fijo ({tenant.currencySymbol})
+                  </button>
+                </div>
+              </div>
+
+              {/* Porcentajes Rápidos */}
+              {lineDiscountModal.type === 'PERCENT' && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '0.35rem' }}>
+                    Porcentajes Frecuentes
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    {['5', '10', '15', '20', '25', '50'].map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setLineDiscountModal(prev => prev ? { ...prev, value: p } : null)}
+                        style={{
+                          padding: '0.3rem 0.55rem',
+                          borderRadius: '6px',
+                          border: lineDiscountModal.value === p ? '1px solid #dc2626' : '1px solid #e2e8f0',
+                          background: lineDiscountModal.value === p ? '#fee2e2' : '#f8fafc',
+                          color: lineDiscountModal.value === p ? '#dc2626' : '#334155',
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {p}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Input Numérico */}
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
+                  {lineDiscountModal.type === 'PERCENT' ? 'Porcentaje de Descuento (%)' : `Monto a Descontar (${tenant.currencySymbol})`}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={lineDiscountModal.type === 'PERCENT' ? 100 : undefined}
+                  value={lineDiscountModal.value}
+                  onChange={(e) => setLineDiscountModal(prev => prev ? { ...prev, value: e.target.value } : null)}
+                  placeholder={lineDiscountModal.type === 'PERCENT' ? 'Ej. 10' : 'Ej. 25.00'}
+                  className="input-control"
+                  style={{ width: '100%', fontSize: '1rem', fontWeight: 700 }}
+                  autoFocus
+                />
+              </div>
+
+              {/* Vista Previa en Vivo */}
+              {(() => {
+                const lineGross = lineDiscountModal.line.originalUnitPrice * lineDiscountModal.line.quantity;
+                const numVal = parseFloat(lineDiscountModal.value) || 0;
+                let calculatedDisc = lineDiscountModal.type === 'PERCENT' ? (lineGross * (numVal / 100)) : numVal;
+                calculatedDisc = Math.min(lineGross, Math.max(0, Math.round(calculatedDisc * 100) / 100));
+                const finalTotal = Math.max(0, lineGross - calculatedDisc);
+
+                return (
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.75rem', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#166534' }}>
+                      <span>Descuento aplicado:</span>
+                      <strong>-{formatCurrency(calculatedDisc, tenant.currencySymbol)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#15803d', fontWeight: 800, fontSize: '0.9rem', borderTop: '1px solid #dcfce7', paddingTop: '0.25rem' }}>
+                      <span>Nuevo Total de Línea:</span>
+                      <span>{formatCurrency(finalTotal, tenant.currencySymbol)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', background: '#f8fafc', gap: '0.5rem' }}>
+              {lineDiscountModal.line.discountAmount > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleRemoveLineDiscount}
+                  className="btn btn-secondary"
+                  style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: '0.8rem' }}
+                >
+                  Quitar Descuento
+                </button>
+              ) : <div />}
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setLineDiscountModal(null)}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleApplyLineDiscount}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  Aplicar Descuento
+                </button>
+              </div>
             </div>
           </div>
         </div>

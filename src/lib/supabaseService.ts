@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Product, Sale, CartLine, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, UserPermissions, MenuItem, DeliveryDriver, FoodOrder } from '../types';
+import { Product, Sale, CartLine, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, ProductPriceType, UserPermissions, MenuItem, DeliveryDriver, FoodOrder } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
 import { useAppStore } from '../store/useAppStore';
@@ -26,6 +26,32 @@ export function getStoredPresentations(tenantId: string, productId: string): Pro
   if (typeof localStorage === 'undefined') return [];
   try {
     const key = `micuadre_presentations_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const map = JSON.parse(raw);
+    return Array.isArray(map[productId]) ? map[productId] : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function backupProductPriceTypes(tenantId: string, productId: string, priceTypes: ProductPriceType[]) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const key = `micuadre_pricetypes_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    const map = raw ? JSON.parse(raw) : {};
+    map[productId] = priceTypes;
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+export function getStoredPriceTypes(tenantId: string, productId: string): ProductPriceType[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const key = `micuadre_pricetypes_${tenantId}`;
     const raw = localStorage.getItem(key);
     if (!raw) return [];
     const map = JSON.parse(raw);
@@ -85,12 +111,17 @@ export function getStoredTenantFoodEnabled(tenantId: string): boolean | undefine
 }
 
 let isPresentationsDbColumnAvailable: boolean | null = null;
+let isPriceTypesDbColumnAvailable: boolean | null = null;
 let isPermissionsDbColumnAvailable: boolean | null = null;
 
 if (typeof localStorage !== 'undefined') {
   const cachedPres = localStorage.getItem('micuadre_col_presentations_exists');
   if (cachedPres === '1') isPresentationsDbColumnAvailable = true;
   else if (cachedPres === '0') isPresentationsDbColumnAvailable = false;
+
+  const cachedPriceTypes = localStorage.getItem('micuadre_col_pricetypes_exists');
+  if (cachedPriceTypes === '1') isPriceTypesDbColumnAvailable = true;
+  else if (cachedPriceTypes === '0') isPriceTypesDbColumnAvailable = false;
 
   const cachedPerm = localStorage.getItem('micuadre_col_permissions_exists');
   if (cachedPerm === '1') isPermissionsDbColumnAvailable = true;
@@ -106,6 +137,19 @@ export function setIsPresentationsDbColumnAvailable(val: boolean) {
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem('micuadre_col_presentations_exists', val ? '1' : '0');
+    } catch (e) {}
+  }
+}
+
+export function getIsPriceTypesDbColumnAvailable(): boolean | null {
+  return isPriceTypesDbColumnAvailable;
+}
+
+export function setIsPriceTypesDbColumnAvailable(val: boolean) {
+  isPriceTypesDbColumnAvailable = val;
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem('micuadre_col_pricetypes_exists', val ? '1' : '0');
     } catch (e) {}
   }
 }
@@ -563,6 +607,8 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
     if (data.length > 0) {
       const hasCol = 'presentations' in data[0];
       setIsPresentationsDbColumnAvailable(hasCol);
+      const hasPriceTypesCol = 'price_types' in data[0];
+      setIsPriceTypesDbColumnAvailable(hasPriceTypesCol);
     }
 
     let filteredData = data;
@@ -583,6 +629,11 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
         ? p.presentations
         : stored;
 
+      const storedPriceTypes = getStoredPriceTypes(p.tenant_id, p.id);
+      const priceTypes = (Array.isArray(p.price_types) && p.price_types.length > 0)
+        ? p.price_types
+        : (Array.isArray(p.priceTypes) && p.priceTypes.length > 0 ? p.priceTypes : storedPriceTypes);
+
       return {
         id: p.id,
         tenantId: p.tenant_id,
@@ -598,6 +649,7 @@ export async function fetchProductsFromSupabase(tenantId: string): Promise<Produ
         taxClassification: p.tax_classification,
         isActive: p.is_active,
         presentations: presentations || [],
+        priceTypes: priceTypes || [],
         tiers: p.product_price_tiers?.map((t: any) => ({
           id: t.id,
           minQuantity: t.min_quantity,
@@ -630,6 +682,14 @@ export async function saveProductToSupabase(product: Product) {
       }
     }
 
+    // Always backup price types locally so they are never lost even before SQL migration
+    if (product.priceTypes && product.priceTypes.length > 0) {
+      backupProductPriceTypes(product.tenantId, prodUuid, product.priceTypes);
+      if (product.id && product.id !== prodUuid) {
+        backupProductPriceTypes(product.tenantId, product.id, product.priceTypes);
+      }
+    }
+
     const payload: any = {
       id: prodUuid,
       tenant_id: product.tenantId,
@@ -651,10 +711,20 @@ export async function saveProductToSupabase(product: Product) {
       payload.presentations = product.presentations || [];
     }
 
+    // If we know price_types column does NOT exist in Supabase yet, do NOT send it
+    if (isPriceTypesDbColumnAvailable !== false) {
+      payload.price_types = product.priceTypes || [];
+    }
+
     let { data, error } = await supabase.from('products').upsert(payload, { onConflict: 'id' }).select().single();
-    if (error && (error.message.includes('column') || error.message.includes('presentations') || error.code === 'PGRST204')) {
-      setIsPresentationsDbColumnAvailable(false);
-      const { presentations, ...fallbackPayload } = payload;
+    if (error && (error.message.includes('column') || error.message.includes('presentations') || error.message.includes('price_types') || error.code === 'PGRST204')) {
+      if (error.message.includes('presentations')) setIsPresentationsDbColumnAvailable(false);
+      if (error.message.includes('price_types')) setIsPriceTypesDbColumnAvailable(false);
+
+      const fallbackPayload = { ...payload };
+      if (isPresentationsDbColumnAvailable === false) delete fallbackPayload.presentations;
+      if (isPriceTypesDbColumnAvailable === false) delete fallbackPayload.price_types;
+
       const retry = await supabase.from('products').upsert(fallbackPayload, { onConflict: 'id' }).select().single();
       data = retry.data;
       error = retry.error;
@@ -1723,9 +1793,15 @@ export async function syncAllCloudData(tenantId: string) {
               : (existing?.presentations && existing.presentations.length > 0
                   ? existing.presentations
                   : getStoredPresentations(tenantId, lp.id));
+            const mergedPriceTypes = (lp.priceTypes && lp.priceTypes.length > 0)
+              ? lp.priceTypes
+              : (existing?.priceTypes && existing.priceTypes.length > 0
+                  ? existing.priceTypes
+                  : getStoredPriceTypes(tenantId, lp.id));
             return {
               ...lp,
-              presentations: mergedPresentations
+              presentations: mergedPresentations,
+              priceTypes: mergedPriceTypes
             };
           });
 

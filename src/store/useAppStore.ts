@@ -73,7 +73,7 @@ interface AppState {
   activeShift: CashShift | null;
   shiftHistory: CashShift[];
   cartLines: CartLine[];
-  cartCustomer: { id?: string; rtn?: string; name: string; loyaltyPoints?: number };
+  cartCustomer: { id?: string; rtn?: string; name: string; loyaltyPoints?: number; defaultPriceTypeName?: string };
   heldOrders: HeldOrder[];
   sales: Sale[];
   salesReturns: SalesReturn[];
@@ -154,6 +154,7 @@ interface AppState {
     staffId?: string;
     quantity?: number;
     presentation?: ProductPresentation;
+    priceTypeId?: string;
     selectedExtras?: MenuItemExtra[];
     notes?: string;
     finalUnitPrice?: number;
@@ -162,11 +163,12 @@ interface AppState {
   updateCartLineStaff: (index: number, staffId: string) => void;
   removeCartLine: (index: number) => void;
   clearCart: () => void;
-  setCartCustomer: (customer: { id?: string; rtn?: string; name: string; loyaltyPoints?: number }) => void;
+  setCartCustomer: (customer: { id?: string; rtn?: string; name: string; loyaltyPoints?: number; defaultPriceTypeName?: string }) => void;
   holdCurrentCart: () => void;
   restoreHeldCart: (heldOrderId: string) => void;
   deleteHeldCart: (heldOrderId: string) => void;
   setCartLineDiscount: (index: number, discountAmount: number) => void;
+  setCartLinePriceType: (index: number, priceTypeId?: string) => void;
   applyGlobalCartDiscount: (percentageOrFixed: number, isPercentage: boolean) => void;
 
   // Shift Actions & Movements
@@ -680,7 +682,7 @@ export const useAppStore = create<AppState>()(
       }),
 
 
-  addToCart: ({ product, service, menuItem, staffId, quantity = 1, presentation, selectedExtras, notes, finalUnitPrice }) => set((state) => {
+  addToCart: ({ product, service, menuItem, staffId, quantity = 1, presentation, selectedExtras, notes, finalUnitPrice, priceTypeId }) => set((state) => {
     // SECURITY GUARD: Strict Multi-tenant Isolation for Cart Additions
     if (product && product.tenantId && product.tenantId !== state.tenant.id) {
       console.warn(`[SECURITY GUARD] Bloqueado intento de agregar producto de otro comercio (${product.tenantId}) al carrito de (${state.tenant.id})`);
@@ -731,12 +733,42 @@ export const useAppStore = create<AppState>()(
       return { cartLines: [...state.cartLines, newLine] };
     }
 
+    const unitsPerPackage = presentation ? presentation.unitsCount : 1;
+    let effectiveUnitPrice = presentation ? presentation.salePrice : (product ? product.salePrice : 0);
+    let selectedPriceTypeId: string | undefined = undefined;
+    let selectedPriceTypeName: string | undefined = undefined;
+    let isSpecialPriceActive = false;
+
+    if (product) {
+      const availablePriceTypes = presentation ? (presentation.priceTypes || []) : (product.priceTypes || []);
+      if (priceTypeId) {
+        const found = availablePriceTypes.find(pt => pt.id === priceTypeId || pt.name.toLowerCase() === priceTypeId?.toLowerCase());
+        if (found) {
+          effectiveUnitPrice = found.price;
+          selectedPriceTypeId = found.id;
+          selectedPriceTypeName = found.name;
+          isSpecialPriceActive = true;
+        }
+      } else if (state.cartCustomer?.defaultPriceTypeName) {
+        const found = availablePriceTypes.find(pt => pt.name.toLowerCase().trim() === state.cartCustomer.defaultPriceTypeName?.toLowerCase().trim());
+        if (found) {
+          effectiveUnitPrice = found.price;
+          selectedPriceTypeId = found.id;
+          selectedPriceTypeName = found.name;
+          isSpecialPriceActive = true;
+        }
+      }
+
+      if (finalUnitPrice !== undefined) {
+        effectiveUnitPrice = finalUnitPrice;
+      }
+    }
+
     const existingIndex = state.cartLines.findIndex(line => {
       if (product) {
-        if (presentation) {
-          return line.productId === product.id && line.presentationId === presentation.id;
-        }
-        return line.productId === product.id && !line.presentationId;
+        const samePres = presentation ? line.presentationId === presentation.id : !line.presentationId;
+        const samePriceType = (line.selectedPriceTypeId || '') === (selectedPriceTypeId || '');
+        return line.productId === product.id && samePres && samePriceType;
       }
       return service ? line.serviceId === service.id : false;
     });
@@ -744,8 +776,6 @@ export const useAppStore = create<AppState>()(
     let newLines = [...state.cartLines];
 
     if (product) {
-      const unitsPerPackage = presentation ? presentation.unitsCount : 1;
-      const effectiveUnitPrice = presentation ? presentation.salePrice : product.salePrice;
       const lineName = presentation ? `${product.name} [${presentation.name}]` : product.name;
       const effectiveBarcode = (presentation && presentation.barcode) ? presentation.barcode : product.barcode;
 
@@ -783,7 +813,8 @@ export const useAppStore = create<AppState>()(
         effectiveTaxClass,
         0,
         presentation ? undefined : product.tiers,
-        state.tenant.pricesIncludeTax ?? true
+        state.tenant.pricesIncludeTax ?? true,
+        isSpecialPriceActive
       );
 
       const newLine: CartLine = {
@@ -800,6 +831,9 @@ export const useAppStore = create<AppState>()(
         discountAmount: 0,
         taxClassification: effectiveTaxClass,
         appliedTierName: lineCalculations.appliedTierName,
+        selectedPriceTypeId,
+        selectedPriceTypeName,
+        isSpecialPriceActive,
         subtotal: lineCalculations.subtotal,
         taxAmount: lineCalculations.taxAmount,
         total: lineCalculations.total
@@ -887,7 +921,8 @@ export const useAppStore = create<AppState>()(
       effectiveTaxClass,
       targetLine.discountAmount,
       targetLine.presentationId ? undefined : product?.tiers,
-      state.tenant.pricesIncludeTax ?? true
+      state.tenant.pricesIncludeTax ?? true,
+      targetLine.isSpecialPriceActive ?? false
     );
 
     const updatedLines = [...state.cartLines];
@@ -929,8 +964,9 @@ export const useAppStore = create<AppState>()(
       targetLine.quantity,
       effectiveTaxClass,
       discountAmount,
-      product?.tiers,
-      state.tenant.pricesIncludeTax ?? true
+      targetLine.presentationId ? undefined : product?.tiers,
+      state.tenant.pricesIncludeTax ?? true,
+      targetLine.isSpecialPriceActive ?? false
     );
     const updatedLines = [...state.cartLines];
     updatedLines[index] = {
@@ -941,6 +977,72 @@ export const useAppStore = create<AppState>()(
       taxAmount: lineCalculations.taxAmount,
       total: lineCalculations.total
     };
+    return { cartLines: updatedLines };
+  }),
+
+  setCartLinePriceType: (index, priceTypeId) => set((state) => {
+    if (index < 0 || index >= state.cartLines.length) return state;
+    const targetLine = state.cartLines[index];
+    const product = state.products.find(p => String(p.id).trim() === String(targetLine.productId).trim() || p.sku === targetLine.sku);
+    if (!product) return state;
+
+    let newUnitPrice = product.salePrice;
+    let selectedPriceTypeId: string | undefined = undefined;
+    let selectedPriceTypeName: string | undefined = undefined;
+    let isSpecialPriceActive = false;
+
+    if (targetLine.presentationId) {
+      const pres = product.presentations?.find(p => p.id === targetLine.presentationId);
+      if (pres) {
+        newUnitPrice = pres.salePrice;
+        if (priceTypeId) {
+          const pt = pres.priceTypes?.find(p => p.id === priceTypeId || p.name.toLowerCase() === priceTypeId.toLowerCase());
+          if (pt) {
+            newUnitPrice = pt.price;
+            selectedPriceTypeId = pt.id;
+            selectedPriceTypeName = pt.name;
+            isSpecialPriceActive = true;
+          }
+        }
+      }
+    } else {
+      if (priceTypeId) {
+        const pt = product.priceTypes?.find(p => p.id === priceTypeId || p.name.toLowerCase() === priceTypeId.toLowerCase());
+        if (pt) {
+          newUnitPrice = pt.price;
+          selectedPriceTypeId = pt.id;
+          selectedPriceTypeName = pt.name;
+          isSpecialPriceActive = true;
+        }
+      }
+    }
+
+    const isFiscalActive = state.tenant.isFiscalEnabled === true;
+    const effectiveTaxClass = isFiscalActive ? targetLine.taxClassification : 'EXENTO';
+    const lineCalculations = calculateLineTotals(
+      newUnitPrice,
+      targetLine.quantity,
+      effectiveTaxClass,
+      targetLine.discountAmount,
+      targetLine.presentationId ? undefined : product.tiers,
+      state.tenant.pricesIncludeTax ?? true,
+      isSpecialPriceActive
+    );
+
+    const updatedLines = [...state.cartLines];
+    updatedLines[index] = {
+      ...targetLine,
+      originalUnitPrice: newUnitPrice,
+      unitPrice: lineCalculations.unitPrice,
+      appliedTierName: lineCalculations.appliedTierName,
+      selectedPriceTypeId,
+      selectedPriceTypeName,
+      isSpecialPriceActive,
+      subtotal: lineCalculations.subtotal,
+      taxAmount: lineCalculations.taxAmount,
+      total: lineCalculations.total
+    };
+
     return { cartLines: updatedLines };
   }),
 
@@ -985,7 +1087,60 @@ export const useAppStore = create<AppState>()(
 
   clearCart: () => set({ cartLines: [], cartCustomer: { name: 'Consumidor Final' } }),
 
-  setCartCustomer: (customer) => set({ cartCustomer: customer }),
+  setCartCustomer: (customer) => set((state) => {
+    const existingCust = customer.id ? state.customers.find(c => c.id === customer.id) : undefined;
+    const effectiveDefaultPriceTypeName = customer.defaultPriceTypeName || existingCust?.defaultPriceTypeName;
+    const effectiveCustomer = {
+      ...customer,
+      defaultPriceTypeName: effectiveDefaultPriceTypeName
+    };
+
+    if (effectiveDefaultPriceTypeName && state.cartLines.length > 0) {
+      const updatedLines = state.cartLines.map(line => {
+        const product = state.products.find(p => String(p.id).trim() === String(line.productId).trim() || p.sku === line.sku);
+        if (!product) return line;
+
+        let matchingType: { id: string; name: string; price: number } | undefined;
+        if (line.presentationId) {
+          const pres = product.presentations?.find(p => p.id === line.presentationId);
+          matchingType = pres?.priceTypes?.find(pt => pt.name.toLowerCase().trim() === effectiveDefaultPriceTypeName.toLowerCase().trim());
+        } else {
+          matchingType = product.priceTypes?.find(pt => pt.name.toLowerCase().trim() === effectiveDefaultPriceTypeName.toLowerCase().trim());
+        }
+
+        if (matchingType) {
+          const isFiscalActive = state.tenant.isFiscalEnabled === true;
+          const effectiveTaxClass = isFiscalActive ? line.taxClassification : 'EXENTO';
+          const lineCalculations = calculateLineTotals(
+            matchingType.price,
+            line.quantity,
+            effectiveTaxClass,
+            line.discountAmount,
+            line.presentationId ? undefined : product.tiers,
+            state.tenant.pricesIncludeTax ?? true,
+            true
+          );
+
+          return {
+            ...line,
+            originalUnitPrice: matchingType.price,
+            unitPrice: lineCalculations.unitPrice,
+            appliedTierName: lineCalculations.appliedTierName,
+            selectedPriceTypeId: matchingType.id,
+            selectedPriceTypeName: matchingType.name,
+            isSpecialPriceActive: true,
+            subtotal: lineCalculations.subtotal,
+            taxAmount: lineCalculations.taxAmount,
+            total: lineCalculations.total
+          };
+        }
+        return line;
+      });
+
+      return { cartCustomer: effectiveCustomer, cartLines: updatedLines };
+    }
+    return { cartCustomer: effectiveCustomer };
+  }),
 
   holdCurrentCart: () => set((state) => {
     if (state.cartLines.length === 0) return state;

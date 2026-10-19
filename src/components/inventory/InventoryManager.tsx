@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore, hasUserPermission } from '../../store/useAppStore';
 import { formatCurrency } from '../../lib/monetary';
-import { Product, TaxClassification, PriceTier, ProductPresentation, UserProfile } from '../../types';
+import { Product, TaxClassification, PriceTier, ProductPresentation, UserProfile, ProductPriceType } from '../../types';
 import { toast } from 'sonner';
 import { Plus, History, Search, Package, Edit2, Trash2, X, AlertTriangle, Layers, Eye, EyeOff } from 'lucide-react';
 import { AdminPinModal } from '../common/AdminPinModal';
@@ -59,6 +59,7 @@ export const InventoryManager: React.FC = () => {
   const [taxClassification, setTaxClassification] = useState<TaxClassification>('GRAVADO_15');
   const [tiers, setTiers] = useState<Omit<PriceTier, 'id'>[]>([]);
   const [presentations, setPresentations] = useState<FormPresentation[]>([]);
+  const [priceTypes, setPriceTypes] = useState<Omit<ProductPriceType, 'id'>[]>([]);
 
   const openAddModal = () => {
     resetForm();
@@ -79,6 +80,7 @@ export const InventoryManager: React.FC = () => {
     setMinStockAlert(product.minStockAlert.toString());
     setTaxClassification(product.taxClassification);
     setTiers(product.tiers ? product.tiers.map(t => ({ minQuantity: t.minQuantity, unitPrice: t.unitPrice, tierName: t.tierName })) : []);
+    setPriceTypes(product.priceTypes ? product.priceTypes.map(pt => ({ name: pt.name, price: pt.price })) : []);
     setPresentations(product.presentations ? product.presentations.map(p => ({
       id: p.id,
       name: p.name,
@@ -102,6 +104,7 @@ export const InventoryManager: React.FC = () => {
     setMinStockAlert('5');
     setTaxClassification('GRAVADO_15');
     setTiers([]);
+    setPriceTypes([]);
     setPresentations([]);
   };
 
@@ -111,6 +114,20 @@ export const InventoryManager: React.FC = () => {
 
   const handleRemoveTier = (index: number) => {
     setTiers(tiers.filter((_, i) => i !== index));
+  };
+
+  const handleAddPriceType = () => {
+    setPriceTypes([...priceTypes, { name: 'Mayorista', price: parseFloat(salePrice) || 0 }]);
+  };
+
+  const handleRemovePriceType = (index: number) => {
+    setPriceTypes(priceTypes.filter((_, i) => i !== index));
+  };
+
+  const handleUpdatePriceType = (index: number, field: 'name' | 'price', value: any) => {
+    const updated = [...priceTypes];
+    updated[index] = { ...updated[index], [field]: value };
+    setPriceTypes(updated);
   };
 
   const handleAddPresentation = () => {
@@ -156,6 +173,14 @@ export const InventoryManager: React.FC = () => {
         barcode: p.barcode?.trim() || undefined
       }));
 
+    const formattedPriceTypes: ProductPriceType[] = priceTypes
+      .filter(pt => pt.name.trim() && (Number(pt.price) || 0) > 0)
+      .map((pt, idx) => ({
+        id: `pt-${idx}-${Date.now()}`,
+        name: pt.name.trim(),
+        price: Number(pt.price) || 0
+      }));
+
     if (editingProduct) {
       updateProduct(editingProduct.id, {
         name: name.trim(),
@@ -169,7 +194,8 @@ export const InventoryManager: React.FC = () => {
         minStockAlert: parsedMinStock,
         taxClassification,
         tiers: tiers.map((t, idx) => ({ ...t, id: `tier-${idx}-${Date.now()}` })),
-        presentations: formattedPresentations
+        presentations: formattedPresentations,
+        priceTypes: formattedPriceTypes
       });
       toast.success(`Producto "${name}" actualizado correctamente`);
     } else {
@@ -186,7 +212,8 @@ export const InventoryManager: React.FC = () => {
         taxClassification,
         isActive: true,
         tiers: tiers.map((t, idx) => ({ ...t, id: `tier-${idx}-${Date.now()}` })),
-        presentations: formattedPresentations
+        presentations: formattedPresentations,
+        priceTypes: formattedPriceTypes
       });
       toast.success(`Producto "${name}" agregado al inventario`);
     }
@@ -531,8 +558,31 @@ export const InventoryManager: React.FC = () => {
                       <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
                         {canSeeCosts ? formatCurrency(p.costPrice, tenant.currencySymbol) : '***'}
                       </td>
-                      <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                        {formatCurrency(p.salePrice, tenant.currencySymbol)}
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          {formatCurrency(p.salePrice, tenant.currencySymbol)}
+                        </div>
+                        {p.priceTypes && p.priceTypes.length > 0 && (
+                          <div style={{ marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                            {p.priceTypes.map(pt => (
+                              <span
+                                key={pt.id}
+                                style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 600,
+                                  color: '#0369a1',
+                                  background: '#f0f9ff',
+                                  padding: '0.08rem 0.3rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid #bae6fd',
+                                  display: 'inline-block'
+                                }}
+                              >
+                                {pt.name}: {formatCurrency(pt.price, tenant.currencySymbol)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '0.75rem 1rem' }}>
                         <span style={{ fontSize: '0.75rem', opacity: 0.8 }} className="badge">
@@ -841,6 +891,59 @@ export const InventoryManager: React.FC = () => {
                         type="button"
                         onClick={() => handleRemoveTier(idx)}
                         style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.3rem' }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Precios Especiales por Tipo de Cliente */}
+              <div style={{ background: '#f0f9ff', padding: '1rem', borderRadius: '10px', border: '1px solid #bae6fd' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                  <div>
+                    <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#0369a1' }}>Precios Especiales por Tipo de Cliente</span>
+                    <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.73rem', color: '#0284c7' }}>
+                      Precios fijos por tipo (Mayorista, Frecuente, etc.) que se aplican sin depender del volumen comprado.
+                    </p>
+                  </div>
+                  <button type="button" className="btn btn-secondary" onClick={handleAddPriceType} style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', background: '#ffffff', borderColor: '#38bdf8', color: '#0369a1' }}>
+                    + Agregar Tipo de Precio
+                  </button>
+                </div>
+
+                {priceTypes.length === 0 ? (
+                  <p style={{ fontSize: '0.78rem', color: '#0284c7', margin: 0, opacity: 0.8 }}>
+                    Sin precios especiales asignados (se aplicará siempre el precio público de {tenant.currencySymbol} {salePrice || '0.00'}).
+                  </p>
+                ) : (
+                  priceTypes.map((pt, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr auto', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="Tipo (ej. Mayorista, Taller, Amigo)"
+                        className="input-control"
+                        style={{ fontSize: '0.8rem', background: '#ffffff' }}
+                        value={pt.name}
+                        onChange={(e) => handleUpdatePriceType(idx, 'name', e.target.value)}
+                        required
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder={`Precio (${tenant.currencySymbol})`}
+                        className="input-control"
+                        style={{ fontSize: '0.8rem', background: '#ffffff' }}
+                        value={pt.price || ''}
+                        onChange={(e) => handleUpdatePriceType(idx, 'price', parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePriceType(idx)}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.3rem' }}
+                        title="Eliminar tipo de precio"
                       >
                         <Trash2 size={16} />
                       </button>

@@ -47,6 +47,7 @@ export const AccountsView: React.FC = () => {
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
   const [newCustLimit, setNewCustLimit] = useState('2000');
+  const [newCustPriceType, setNewCustPriceType] = useState('');
 
   // Receipt Modal
   const [selectedPaymentForReceipt, setSelectedPaymentForReceipt] = useState<{
@@ -184,7 +185,8 @@ export const AccountsView: React.FC = () => {
       address: newCustAddress.trim() || undefined,
       creditLimit: parseFloat(newCustLimit) || 2000,
       creditBalance: 0,
-      creditDays: 30
+      creditDays: 30,
+      defaultPriceTypeName: newCustPriceType.trim() || undefined
     });
 
     toast.success(`Cliente "${created.name}" registrado con éxito`);
@@ -193,6 +195,7 @@ export const AccountsView: React.FC = () => {
     setNewCustRtn('');
     setNewCustPhone('');
     setNewCustAddress('');
+    setNewCustPriceType('');
   };
 
   const handleSendWhatsAppReceipt = (payment: AccountPayment, customerName?: string, newBal?: number) => {
@@ -450,7 +453,14 @@ export const AccountsView: React.FC = () => {
                     return (
                       <tr key={customer.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                         <td style={{ padding: '0.75rem 1rem' }}>
-                          <strong style={{ color: '#0f172a', display: 'block' }}>{customer.name}</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                            <strong style={{ color: '#0f172a' }}>{customer.name}</strong>
+                            {customer.defaultPriceTypeName && (
+                              <span style={{ fontSize: '0.68rem', background: '#e0f2fe', color: '#0369a1', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: 700 }}>
+                                {customer.defaultPriceTypeName}
+                              </span>
+                            )}
+                          </div>
                           {customer.rtn && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>RTN: {customer.rtn}</span>}
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
@@ -821,6 +831,20 @@ export const AccountsView: React.FC = () => {
                   onChange={(e) => setNewCustLimit(e.target.value)}
                   placeholder="2000"
                 />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Tipo de Precio Preferencial (Opcional)</label>
+                <input
+                  type="text"
+                  className="input-control"
+                  value={newCustPriceType}
+                  onChange={(e) => setNewCustPriceType(e.target.value)}
+                  placeholder="Ej. Mayorista, Frecuente, Taller..."
+                />
+                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                  Aplica automáticamente este precio especial al venderle en el POS si el producto lo tiene configurado.
+                </span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>

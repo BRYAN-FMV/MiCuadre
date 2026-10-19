@@ -22,7 +22,8 @@ export function calculateLineTotals(
   taxClassification: TaxClassification,
   discountAmount = 0,
   priceTiers?: PriceTier[],
-  pricesIncludeTax = false
+  pricesIncludeTax = false,
+  hasSpecialPriceActive = false
 ): {
   unitPrice: number;
   originalUnitPrice: number;
@@ -36,8 +37,8 @@ export function calculateLineTotals(
   const originalUnitPrice = new Decimal(unitPrice);
   let appliedTierName: string | undefined;
 
-  // 1. Evaluate Wholesale Tiers if available
-  if (priceTiers && priceTiers.length > 0) {
+  // 1. Evaluate Wholesale Tiers ONLY if no special price type is active
+  if (!hasSpecialPriceActive && priceTiers && priceTiers.length > 0) {
     const sortedTiers = [...priceTiers].sort((a, b) => b.minQuantity - a.minQuantity);
     const matchedTier = sortedTiers.find(tier => {
       const minOk = quantity >= tier.minQuantity;

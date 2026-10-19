@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from './useAppStore';
-import { Product, Customer, Supplier, PurchaseInvoice, Service, Staff, FinancialFund } from '../types';
+import { Product, Customer, Supplier, PurchaseInvoice, Service, Staff, FinancialFund, ProductPresentation, ProductPriceType } from '../types';
 
 describe('Comprehensive Business Flow Test Suite (MiCuadre)', () => {
   beforeEach(() => {
@@ -1418,6 +1418,302 @@ describe('Comprehensive Business Flow Test Suite (MiCuadre)', () => {
       store.updateCustomerCreditBalance(clienteRecurrente.id, 200);
 
       expect(useAppStore.getState().customers.find(c => c.id === clienteRecurrente.id)?.creditBalance).toBe(200);
+    });
+  });
+
+  // =========================================================================
+  // 9. MEJORAS DE VENTAS: PRECIOS POR TIPO, EMPAQUES SEPARADOS Y DESCUENTOS POR PRODUCTO
+  // =========================================================================
+  describe('9. Mejoras de Ventas: Precios por Tipo, Empaques Separados y Descuentos por Producto', () => {
+    it('debe permitir asignar múltiples tipos de precio a un producto y seleccionar el precio preferencial en el carrito', () => {
+      const store = useAppStore.getState();
+      store.openCashShift(1000);
+
+      const prodConTipos: Product = {
+        id: 'prod-tipos-1',
+        tenantId: store.tenant.id,
+        sku: 'CAFE-ESP',
+        name: 'Café Especial 500g',
+        category: 'Abarrotes',
+        unitOfMeasure: 'UND',
+        salePrice: 150,
+        costPrice: 90,
+        currentStock: 50,
+        minStockAlert: 5,
+        taxClassification: 'EXENTO',
+        isActive: true,
+        priceTypes: [
+          { id: 'pt-frecuente', name: 'Cliente Frecuente', price: 130 },
+          { id: 'pt-mayorista', name: 'Distribuidor Amigo', price: 110 }
+        ]
+      };
+
+      useAppStore.setState({ products: [prodConTipos] });
+
+      // 1. Agregar al carrito con precio regular
+      store.addToCart({ product: prodConTipos, quantity: 1 });
+      let lines = useAppStore.getState().cartLines;
+      expect(lines).toHaveLength(1);
+      expect(lines[0].originalUnitPrice).toBe(150);
+      expect(lines[0].subtotal).toBe(150);
+      expect(lines[0].isSpecialPriceActive).toBe(false);
+
+      // 2. Cambiar a tarifa 'Cliente Frecuente'
+      store.setCartLinePriceType(0, 'pt-frecuente');
+      lines = useAppStore.getState().cartLines;
+      expect(lines[0].originalUnitPrice).toBe(130);
+      expect(lines[0].selectedPriceTypeId).toBe('pt-frecuente');
+      expect(lines[0].selectedPriceTypeName).toBe('Cliente Frecuente');
+      expect(lines[0].isSpecialPriceActive).toBe(true);
+      expect(lines[0].subtotal).toBe(130);
+
+      // 3. Cambiar a tarifa 'Distribuidor Amigo'
+      store.setCartLinePriceType(0, 'pt-mayorista');
+      lines = useAppStore.getState().cartLines;
+      expect(lines[0].originalUnitPrice).toBe(110);
+      expect(lines[0].selectedPriceTypeId).toBe('pt-mayorista');
+      expect(lines[0].selectedPriceTypeName).toBe('Distribuidor Amigo');
+      expect(lines[0].isSpecialPriceActive).toBe(true);
+      expect(lines[0].subtotal).toBe(110);
+
+      // 4. Volver a precio estándar (sin tipo)
+      store.setCartLinePriceType(0, undefined);
+      lines = useAppStore.getState().cartLines;
+      expect(lines[0].originalUnitPrice).toBe(150);
+      expect(lines[0].selectedPriceTypeId).toBeUndefined();
+      expect(lines[0].isSpecialPriceActive).toBe(false);
+      expect(lines[0].subtotal).toBe(150);
+
+      // 5. Cliente con defaultPriceTypeName auto-asigna tarifa
+      store.clearCart();
+      const clienteVip: Customer = {
+        id: 'cust-vip-1',
+        tenantId: store.tenant.id,
+        name: 'Roberto Gómez',
+        phone: '99887766',
+        loyaltyPoints: 0,
+        totalSpent: 0,
+        defaultPriceTypeName: 'Cliente Frecuente',
+        createdAt: '2026-10-19'
+      };
+      useAppStore.setState({ customers: [clienteVip] });
+
+      store.setCartCustomer({ id: clienteVip.id, name: clienteVip.name });
+      store.addToCart({ product: prodConTipos, quantity: 2 });
+
+      lines = useAppStore.getState().cartLines;
+      expect(lines[0].originalUnitPrice).toBe(130);
+      expect(lines[0].selectedPriceTypeName).toBe('Cliente Frecuente');
+      expect(lines[0].isSpecialPriceActive).toBe(true);
+      expect(lines[0].subtotal).toBe(260); // 2 * 130
+    });
+
+    it('regla de negocio: el precio especial activo debe ignorar las escalas por mayoreo aunque se compre en volumen', () => {
+      const store = useAppStore.getState();
+      store.openCashShift(1000);
+
+      const prodConEscalaYTipo: Product = {
+        id: 'prod-escala-tipo',
+        tenantId: store.tenant.id,
+        sku: 'ACEITE-1L',
+        name: 'Aceite de Cocina 1L',
+        category: 'Abarrotes',
+        unitOfMeasure: 'UND',
+        salePrice: 60,
+        costPrice: 40,
+        currentStock: 100,
+        minStockAlert: 10,
+        taxClassification: 'EXENTO',
+        isActive: true,
+        tiers: [
+          { id: 'tier-1', minQuantity: 10, unitPrice: 48, tierName: 'Mayoreo (10+)' }
+        ],
+        priceTypes: [
+          { id: 'pt-especial', name: 'Precio Amigo / Vecino', price: 52 }
+        ]
+      };
+
+      useAppStore.setState({ products: [prodConEscalaYTipo] });
+
+      // Escenario A: Cliente normal compra 10 unidades (Aplica escala por mayoreo: L. 48 c/u)
+      store.clearCart();
+      store.addToCart({ product: prodConEscalaYTipo, quantity: 10 });
+      let lines = useAppStore.getState().cartLines;
+      expect(lines[0].unitPrice).toBe(48);
+      expect(lines[0].appliedTierName).toBe('Mayoreo (10+)');
+      expect(lines[0].isSpecialPriceActive).toBe(false);
+      expect(lines[0].subtotal).toBe(480);
+
+      // Escenario B: Cliente con Precio Especial compra 10 unidades.
+      // Regla: Si tiene precio especial activado, NO aplica la escala por mayoreo, se respeta el precio convenido L. 52.
+      store.setCartLinePriceType(0, 'pt-especial');
+      lines = useAppStore.getState().cartLines;
+      expect(lines[0].unitPrice).toBe(52);
+      expect(lines[0].appliedTierName).toBeUndefined();
+      expect(lines[0].isSpecialPriceActive).toBe(true);
+      expect(lines[0].subtotal).toBe(520); // 10 * 52 = 520 (en lugar de 480)
+
+      // Si aumentamos a 15 unidades, se sigue respetando los L. 52 fijos sin degradar a la escala de mayoreo
+      store.updateCartLineQty(0, 15);
+      lines = useAppStore.getState().cartLines;
+      expect(lines[0].unitPrice).toBe(52);
+      expect(lines[0].appliedTierName).toBeUndefined();
+      expect(lines[0].isSpecialPriceActive).toBe(true);
+      expect(lines[0].subtotal).toBe(780); // 15 * 52 = 780
+    });
+
+    it('debe permitir vender empaques directamente y restar las unidades equivalentes del stock base central', () => {
+      const store = useAppStore.getState();
+      store.openCashShift(1000);
+
+      const prodRefresco: Product = {
+        id: 'prod-soda-base',
+        tenantId: store.tenant.id,
+        sku: 'REF-500',
+        name: 'Refresco Cola 500ml',
+        category: 'Bebidas',
+        unitOfMeasure: 'UND',
+        salePrice: 20,
+        costPrice: 12,
+        currentStock: 100, // 100 unidades sueltas
+        minStockAlert: 10,
+        taxClassification: 'EXENTO',
+        isActive: true,
+        presentations: [
+          {
+            id: 'pres-sixpack',
+            name: 'Six-Pack (6 Unidades)',
+            unitsCount: 6,
+            salePrice: 110,
+            costPrice: 72,
+            barcode: '7421111222333'
+          },
+          {
+            id: 'pres-caja24',
+            name: 'Caja 24 Unidades',
+            unitsCount: 24,
+            salePrice: 420,
+            costPrice: 288,
+            barcode: '7421111222444'
+          }
+        ]
+      };
+
+      useAppStore.setState({ products: [prodRefresco] });
+      store.clearCart();
+
+      // Venta 1: Agregar 2 Six-Packs (2 * 6 = 12 unidades base)
+      store.addToCart({
+        product: prodRefresco,
+        quantity: 2,
+        presentation: prodRefresco.presentations![0]
+      });
+
+      // Venta 1: Agregar también 3 unidades sueltas
+      store.addToCart({
+        product: prodRefresco,
+        quantity: 3
+      });
+
+      let lines = useAppStore.getState().cartLines;
+      expect(lines).toHaveLength(2);
+      expect(lines[0].name).toContain('Six-Pack');
+      expect(lines[0].unitsPerPackage).toBe(6);
+      expect(lines[0].subtotal).toBe(220); // 2 * 110
+      expect(lines[1].unitsPerPackage).toBe(1);
+      expect(lines[1].subtotal).toBe(60); // 3 * 20
+
+      // Procesar venta en efectivo
+      const sale = store.processSale('CASH');
+      expect(sale).not.toBeNull();
+      expect(sale?.total).toBe(280);
+
+      // Verificar deducción exacta del stock central: 100 - (2 * 6) - 3 = 100 - 15 = 85 unidades
+      const updatedProd = useAppStore.getState().products.find(p => p.id === prodRefresco.id);
+      expect(updatedProd?.currentStock).toBe(85);
+
+      // Venta 2: Vender 1 Caja de 24 (1 * 24 = 24 unidades)
+      store.addToCart({
+        product: prodRefresco,
+        quantity: 1,
+        presentation: prodRefresco.presentations![1]
+      });
+      store.processSale('CASH');
+
+      // Stock final: 85 - 24 = 61 unidades
+      const finalProd = useAppStore.getState().products.find(p => p.id === prodRefresco.id);
+      expect(finalProd?.currentStock).toBe(61);
+    });
+
+    it('debe aplicar descuentos individuales por producto en el carrito sin alterar los demás ítems y calculando impuestos SAR', () => {
+      const store = useAppStore.getState();
+      store.openCashShift(1000);
+
+      useAppStore.setState({
+        tenant: { ...store.tenant, isFiscalEnabled: true, pricesIncludeTax: false }
+      });
+
+      const pExento: Product = {
+        id: 'p-desc-exento',
+        tenantId: store.tenant.id,
+        sku: 'LECHE-L',
+        name: 'Leche Entera 1L',
+        category: 'Lácteos',
+        unitOfMeasure: 'UND',
+        salePrice: 100,
+        costPrice: 70,
+        currentStock: 50,
+        minStockAlert: 5,
+        taxClassification: 'EXENTO',
+        isActive: true
+      };
+
+      const pGravado: Product = {
+        id: 'p-desc-gravado',
+        tenantId: store.tenant.id,
+        sku: 'CHOCO-L',
+        name: 'Caja Bombones',
+        category: 'Dulces',
+        unitOfMeasure: 'UND',
+        salePrice: 200,
+        costPrice: 120,
+        currentStock: 30,
+        minStockAlert: 5,
+        taxClassification: 'GRAVADO_15',
+        isActive: true
+      };
+
+      useAppStore.setState({ products: [pExento, pGravado] });
+      store.clearCart();
+
+      // Agregar ambos productos: Leche (L. 100 exento) y Chocolates (L. 200 gravado 15%)
+      store.addToCart({ product: pExento, quantity: 1 });
+      store.addToCart({ product: pGravado, quantity: 1 });
+
+      // Aplicar descuento por monto fijo a la Leche: L. 15 de descuento (Precio neto L. 85)
+      store.setCartLineDiscount(0, 15);
+
+      // Aplicar descuento porcentual a los Chocolates: 10% de L. 200 = L. 20 de descuento (Precio neto L. 180)
+      store.setCartLineDiscount(1, 20);
+
+      const lines = useAppStore.getState().cartLines;
+      expect(lines[0].discountAmount).toBe(15);
+      expect(lines[0].subtotal).toBe(85);
+      expect(lines[0].taxAmount).toBe(0);
+      expect(lines[0].total).toBe(85);
+
+      expect(lines[1].discountAmount).toBe(20);
+      expect(lines[1].subtotal).toBe(180);
+      expect(lines[1].taxAmount).toBe(27); // 180 * 15% = 27
+      expect(lines[1].total).toBe(207);
+
+      // Procesar venta fiscal
+      const sale = store.processSale('CASH', 0, true);
+      expect(sale).not.toBeNull();
+      expect(sale?.exemptAmount).toBe(85);
+      expect(sale?.taxable15).toBe(180);
+      expect(sale?.tax15).toBe(27);
+      expect(sale?.total).toBe(292); // 85 + 180 + 27 = 292
     });
   });
 });

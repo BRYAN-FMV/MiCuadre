@@ -77,6 +77,12 @@ export interface PriceTier {
   tierName: string;
 }
 
+export interface ProductPriceType {
+  id: string;
+  name: string;        // ej. "Mayorista", "Cliente Frecuente", "Distribuidor", "Precio Especial"
+  price: number;       // Precio de venta para este tipo
+}
+
 export interface ProductPresentation {
   id: string;
   name: string;        // e.g. "Pack x3", "Fardo x24", "Caja x12"
@@ -84,6 +90,7 @@ export interface ProductPresentation {
   salePrice: number;   // Precio de venta del paquete
   costPrice?: number;  // Costo de compra referencial del paquete
   barcode?: string;    // Codigo de barras propio del paquete exterior
+  priceTypes?: ProductPriceType[];
 }
 
 export interface Product {
@@ -102,6 +109,7 @@ export interface Product {
   isActive: boolean;
   tiers?: PriceTier[];
   presentations?: ProductPresentation[];
+  priceTypes?: ProductPriceType[];
 }
 
 export interface CartLine {
@@ -122,6 +130,9 @@ export interface CartLine {
   discountAmount: number;
   taxClassification: TaxClassification;
   appliedTierName?: string;
+  selectedPriceTypeId?: string;
+  selectedPriceTypeName?: string;
+  isSpecialPriceActive?: boolean;
   extras?: MenuItemExtra[];
   notes?: string;
   subtotal: number;
@@ -216,6 +227,7 @@ export interface Customer {
   creditLimit?: number;
   creditBalance?: number;
   creditDays?: number;
+  defaultPriceTypeName?: string;
   createdAt: string;
 }
 
