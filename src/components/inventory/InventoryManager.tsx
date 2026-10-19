@@ -273,9 +273,16 @@ export const InventoryManager: React.FC = () => {
   const wholesaleCount = tenantProducts.filter(p => p.tiers && p.tiers.length > 0).length;
 
   const filteredProducts = tenantProducts.filter((p: Product) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (p.barcode && p.barcode.includes(searchTerm));
+    const term = searchTerm.toLowerCase().trim();
+    const presMatches = (p.presentations || []).some(pres =>
+      pres.name.toLowerCase().includes(term) ||
+      (pres.barcode && pres.barcode.includes(searchTerm))
+    );
+    const matchesSearch = !term ||
+                          p.name.toLowerCase().includes(term) ||
+                          p.sku.toLowerCase().includes(term) ||
+                          (p.barcode && p.barcode.includes(searchTerm)) ||
+                          presMatches;
     const matchesCat = selectedCategory === 'TODOS' || p.category === selectedCategory;
     let matchesStock = true;
     if (stockFilter === 'LOW') {
@@ -515,157 +522,288 @@ export const InventoryManager: React.FC = () => {
               ) : (
                 filteredProducts.map((p: Product) => {
                   const isLow = p.currentStock <= p.minStockAlert;
+                  const hasPresentations = Boolean(p.presentations && p.presentations.length > 0);
+
                   return (
-                    <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', color: '#475569' }}>
-                        <code>{p.sku}</code>
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#0f172a' }}>
-                        {p.name}
-                        {p.barcode && <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 400 }}>Bar: {p.barcode}</div>}
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.category}</td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <span className={`badge ${isLow ? 'badge-danger' : 'badge-success'}`}>
-                          {p.currentStock} {p.unitOfMeasure || 'Unid.'}
-                        </span>
-                        {p.presentations && p.presentations.length > 0 && (
-                          <div style={{ marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                            {p.presentations.map(pres => {
-                              const fullPacks = Math.floor(p.currentStock / pres.unitsCount);
-                              const looseUnits = p.currentStock % pres.unitsCount;
-                              return (
+                    <React.Fragment key={p.id}>
+                      {/* Fila 1: Producto Base (Unidad) */}
+                      <tr style={{ borderBottom: hasPresentations ? '1px dashed #e2e8f0' : '1px solid #f1f5f9', background: '#ffffff' }}>
+                        <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', color: '#475569' }}>
+                          <code>{p.sku}</code>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#0f172a' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <span>{p.name}</span>
+                            {hasPresentations && (
+                              <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '4px', background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>
+                                Unidad Base
+                              </span>
+                            )}
+                          </div>
+                          {p.barcode && <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 400 }}>Bar: {p.barcode}</div>}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.category}</td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <span className={`badge ${isLow ? 'badge-danger' : 'badge-success'}`}>
+                            {p.currentStock} {p.unitOfMeasure || 'Unid.'}
+                          </span>
+                          {hasPresentations && (
+                            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.2rem', fontWeight: 500 }}>
+                              Stock Base Central
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
+                          {canSeeCosts ? formatCurrency(p.costPrice, tenant.currencySymbol) : '***'}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <div style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
+                            {formatCurrency(p.salePrice, tenant.currencySymbol)}
+                          </div>
+                          {p.priceTypes && p.priceTypes.length > 0 && (
+                            <div style={{ marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                              {p.priceTypes.map(pt => (
                                 <span
-                                  key={pres.id}
+                                  key={pt.id}
                                   style={{
-                                    fontSize: '0.7rem',
+                                    fontSize: '0.68rem',
                                     fontWeight: 600,
-                                    color: '#475569',
-                                    background: '#f1f5f9',
-                                    padding: '0.12rem 0.35rem',
+                                    color: '#0369a1',
+                                    background: '#f0f9ff',
+                                    padding: '0.08rem 0.3rem',
                                     borderRadius: '4px',
+                                    border: '1px solid #bae6fd',
                                     display: 'inline-block'
                                   }}
-                                  title={`1 ${pres.name} = ${pres.unitsCount} unidades`}
                                 >
-                                  {fullPacks} {pres.name}{looseUnits > 0 ? ` + ${looseUnits} sueltas` : ''}
+                                  {pt.name}: {formatCurrency(pt.price, tenant.currencySymbol)}
                                 </span>
-                              );
-                            })}
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }} className="badge">
+                            {p.taxClassification === 'EXENTO' ? '0%' : (p.taxClassification === 'GRAVADO_18' ? '18%' : '15%')}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          {p.tiers && p.tiers.length > 0 ? (
+                            <span className="badge badge-wholesale">{p.tiers.length} Escalas</span>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Normal</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
+                            <button
+                              title="Ver Kardex"
+                              className="btn btn-secondary"
+                              onClick={() => setSelectedKardexProduct(p)}
+                              style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem' }}
+                            >
+                              <History size={14} />
+                            </button>
+                            <button
+                              title="Registrar Merma / Ajuste"
+                              className="btn btn-secondary"
+                              onClick={() => {
+                                if (hasUserPermission(currentUser, 'canRegisterAdjustments')) {
+                                  openAdjustmentModal(p);
+                                } else {
+                                  setAdminPinConfig({
+                                    isOpen: true,
+                                    title: 'Autorización para Ajuste',
+                                    actionDescription: `Ingrese PIN de administrador para registrar una merma o ajuste en ${p.name}.`,
+                                    onSuccess: () => openAdjustmentModal(p)
+                                  });
+                                }
+                              }}
+                              style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#d97706' }}
+                            >
+                              <AlertTriangle size={14} />
+                            </button>
+                            <button
+                              title="Editar Producto"
+                              className="btn btn-secondary"
+                              onClick={() => {
+                                if (hasUserPermission(currentUser, 'canEditCatalog')) {
+                                  openEditModal(p);
+                                } else {
+                                  setAdminPinConfig({
+                                    isOpen: true,
+                                    title: 'Autorización para Editar Producto',
+                                    actionDescription: `Ingrese PIN de administrador para editar ${p.name}.`,
+                                    onSuccess: () => openEditModal(p)
+                                  });
+                                }
+                              }}
+                              style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#0284c7' }}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              title="Eliminar Producto"
+                              className="btn btn-secondary"
+                              onClick={() => {
+                                if (hasUserPermission(currentUser, 'canEditCatalog')) {
+                                  setDeletingProduct(p);
+                                } else {
+                                  setAdminPinConfig({
+                                    isOpen: true,
+                                    title: 'Autorización para Eliminar Producto',
+                                    actionDescription: `Ingrese PIN de administrador para eliminar ${p.name}.`,
+                                    onSuccess: () => setDeletingProduct(p)
+                                  });
+                                }
+                              }}
+                              style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#ef4444' }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
-                        )}
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
-                        {canSeeCosts ? formatCurrency(p.costPrice, tenant.currencySymbol) : '***'}
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
-                          {formatCurrency(p.salePrice, tenant.currencySymbol)}
-                        </div>
-                        {p.priceTypes && p.priceTypes.length > 0 && (
-                          <div style={{ marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                            {p.priceTypes.map(pt => (
-                              <span
-                                key={pt.id}
-                                style={{
+                        </td>
+                      </tr>
+
+                      {/* Filas Separadas para Cada Presentación / Empaque */}
+                      {p.presentations && p.presentations.map((pres, presIdx) => {
+                        const fullPacks = Math.floor(p.currentStock / pres.unitsCount);
+                        const looseUnits = p.currentStock % pres.unitsCount;
+                        const isPresLow = fullPacks <= 2;
+                        const isLastPres = presIdx === (p.presentations!.length - 1);
+                        const effectiveCost = pres.costPrice ? pres.costPrice : (p.costPrice * pres.unitsCount);
+
+                        return (
+                          <tr
+                            key={pres.id}
+                            style={{
+                              background: '#fdfbfe',
+                              borderBottom: isLastPres ? '1px solid #e2e8f0' : '1px dashed #ede9fe'
+                            }}
+                          >
+                            {/* SKU / Código de la Presentación */}
+                            <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', color: '#6b21a8' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <span style={{ color: '#c084fc', fontSize: '0.75rem', fontWeight: 700 }}>↳</span>
+                                <code>{pres.barcode || `${p.sku}-P${presIdx + 1}`}</code>
+                              </div>
+                            </td>
+
+                            {/* Nombre de la Presentación */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 600, color: '#581c87' }}>{p.name} - {pres.name}</span>
+                                <span style={{
                                   fontSize: '0.68rem',
-                                  fontWeight: 600,
-                                  color: '#0369a1',
-                                  background: '#f0f9ff',
-                                  padding: '0.08rem 0.3rem',
+                                  padding: '0.12rem 0.4rem',
                                   borderRadius: '4px',
-                                  border: '1px solid #bae6fd',
-                                  display: 'inline-block'
-                                }}
-                              >
-                                {pt.name}: {formatCurrency(pt.price, tenant.currencySymbol)}
+                                  background: '#f3e8ff',
+                                  color: '#7e22ce',
+                                  fontWeight: 700,
+                                  border: '1px solid #e9d5ff'
+                                }}>
+                                  Empaque x{pres.unitsCount} {p.unitOfMeasure || 'unids'}
+                                </span>
+                              </div>
+                              {pres.barcode ? (
+                                <div style={{ fontSize: '0.7rem', color: '#9333ea', fontWeight: 500, marginTop: '0.1rem' }}>
+                                  Bar: {pres.barcode}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: '0.7rem', color: '#a855f7', fontStyle: 'italic', marginTop: '0.1rem' }}>
+                                  Sin código propio (usa código base {p.barcode || p.sku})
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Categoría */}
+                            <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.category}</td>
+
+                            {/* Stock de la Presentación Unificado */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                <span className={`badge ${isPresLow ? 'badge-danger' : 'badge-success'}`} style={{ background: isPresLow ? '#fee2e2' : '#ede9fe', color: isPresLow ? '#991b1b' : '#6b21a8', border: isPresLow ? '1px solid #fecaca' : '1px solid #ddd6fe' }}>
+                                  {fullPacks} {pres.name}
+                                </span>
+                                <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500 }}>
+                                  Stock unificado: {p.currentStock} unids{looseUnits > 0 ? ` (${looseUnits} sueltas)` : ''}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Costo CPP */}
+                            <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
+                              {canSeeCosts ? formatCurrency(effectiveCost, tenant.currencySymbol) : '***'}
+                            </td>
+
+                            {/* Precio Venta del Empaque */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <div style={{ fontWeight: 800, color: '#7e22ce' }}>
+                                {formatCurrency(pres.salePrice, tenant.currencySymbol)}
+                              </div>
+                              {pres.priceTypes && pres.priceTypes.length > 0 && (
+                                <div style={{ marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                  {pres.priceTypes.map(pt => (
+                                    <span
+                                      key={pt.id}
+                                      style={{
+                                        fontSize: '0.68rem',
+                                        fontWeight: 600,
+                                        color: '#0369a1',
+                                        background: '#f0f9ff',
+                                        padding: '0.08rem 0.3rem',
+                                        borderRadius: '4px',
+                                        border: '1px solid #bae6fd',
+                                        display: 'inline-block'
+                                      }}
+                                    >
+                                      {pt.name}: {formatCurrency(pt.price, tenant.currencySymbol)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* ISV */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <span style={{ fontSize: '0.75rem', opacity: 0.8 }} className="badge">
+                                {p.taxClassification === 'EXENTO' ? '0%' : (p.taxClassification === 'GRAVADO_18' ? '18%' : '15%')}
                               </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }} className="badge">
-                          {p.taxClassification === 'EXENTO' ? '0%' : (p.taxClassification === 'GRAVADO_18' ? '18%' : '15%')}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        {p.tiers && p.tiers.length > 0 ? (
-                          <span className="badge badge-wholesale">{p.tiers.length} Escalas</span>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Normal</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
-                          <button
-                            title="Ver Kardex"
-                            className="btn btn-secondary"
-                            onClick={() => setSelectedKardexProduct(p)}
-                            style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem' }}
-                          >
-                            <History size={14} />
-                          </button>
-                          <button
-                            title="Registrar Merma / Ajuste"
-                            className="btn btn-secondary"
-                            onClick={() => {
-                              if (hasUserPermission(currentUser, 'canRegisterAdjustments')) {
-                                openAdjustmentModal(p);
-                              } else {
-                                setAdminPinConfig({
-                                  isOpen: true,
-                                  title: 'Autorización para Ajuste',
-                                  actionDescription: `Ingrese PIN de administrador para registrar una merma o ajuste en ${p.name}.`,
-                                  onSuccess: () => openAdjustmentModal(p)
-                                });
-                              }
-                            }}
-                            style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#d97706' }}
-                          >
-                            <AlertTriangle size={14} />
-                          </button>
-                          <button
-                            title="Editar Producto"
-                            className="btn btn-secondary"
-                            onClick={() => {
-                              if (hasUserPermission(currentUser, 'canEditCatalog')) {
-                                openEditModal(p);
-                              } else {
-                                setAdminPinConfig({
-                                  isOpen: true,
-                                  title: 'Autorización para Editar Producto',
-                                  actionDescription: `Ingrese PIN de administrador para editar ${p.name}.`,
-                                  onSuccess: () => openEditModal(p)
-                                });
-                              }
-                            }}
-                            style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#0284c7' }}
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            title="Eliminar Producto"
-                            className="btn btn-secondary"
-                            onClick={() => {
-                              if (hasUserPermission(currentUser, 'canEditCatalog')) {
-                                setDeletingProduct(p);
-                              } else {
-                                setAdminPinConfig({
-                                  isOpen: true,
-                                  title: 'Autorización para Eliminar Producto',
-                                  actionDescription: `Ingrese PIN de administrador para eliminar ${p.name}.`,
-                                  onSuccess: () => setDeletingProduct(p)
-                                });
-                              }
-                            }}
-                            style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#ef4444' }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                            </td>
+
+                            {/* Mayoreo */}
+                            <td style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontSize: '0.75rem' }}>
+                              -
+                            </td>
+
+                            {/* Acciones */}
+                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
+                                <button
+                                  title={`Editar presentación ${pres.name} de ${p.name}`}
+                                  className="btn btn-secondary"
+                                  onClick={() => {
+                                    if (hasUserPermission(currentUser, 'canEditCatalog')) {
+                                      openEditModal(p);
+                                    } else {
+                                      setAdminPinConfig({
+                                        isOpen: true,
+                                        title: 'Autorización para Editar Presentación',
+                                        actionDescription: `Ingrese PIN de administrador para editar ${pres.name}.`,
+                                        onSuccess: () => openEditModal(p)
+                                      });
+                                    }
+                                  }}
+                                  style={{ padding: '0.35rem 0.55rem', fontSize: '0.78rem', color: '#7e22ce' }}
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })
               )}

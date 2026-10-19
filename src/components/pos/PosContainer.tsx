@@ -69,6 +69,42 @@ export const PosContainer: React.FC = () => {
   const [selectedTicketCopy, setSelectedTicketCopy] = useState<'ORIGINAL' | 'COPIA'>('ORIGINAL');
   const [presentationModalProduct, setPresentationModalProduct] = useState<Product | null>(null);
 
+  // Atajos de teclado para selección rápida en modal de presentaciones (Teclas 1, 2, 3... y Escape)
+  useEffect(() => {
+    if (!presentationModalProduct) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignorar si el usuario está escribiendo en un input
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      if (e.key === 'Escape') {
+        setPresentationModalProduct(null);
+      } else if (e.key === '1') {
+        if (!tenant.allowNegativeStock && presentationModalProduct.currentStock <= 0) {
+          toast.error(`"${presentationModalProduct.name}" no tiene stock suficiente.`);
+          return;
+        }
+        addToCart({ product: presentationModalProduct });
+        toast.success(`+ ${presentationModalProduct.name}`);
+        setPresentationModalProduct(null);
+      } else if (presentationModalProduct.presentations && presentationModalProduct.presentations.length > 0) {
+        const presIndex = parseInt(e.key, 10) - 2;
+        if (presIndex >= 0 && presIndex < presentationModalProduct.presentations.length) {
+          const pres = presentationModalProduct.presentations[presIndex];
+          const isOutOfStock = !tenant.allowNegativeStock && presentationModalProduct.currentStock < pres.unitsCount;
+          if (isOutOfStock) {
+            toast.error(`Stock insuficiente para "${pres.name}"`);
+            return;
+          }
+          addToCart({ product: presentationModalProduct, presentation: pres });
+          toast.success(`+ ${presentationModalProduct.name} [${pres.name}]`);
+          setPresentationModalProduct(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [presentationModalProduct, tenant.allowNegativeStock]);
+
   // Admin PIN Authorization Modal State (Mechanism B)
   const [adminPinConfig, setAdminPinConfig] = useState<{
     isOpen: boolean;
@@ -278,11 +314,17 @@ export const PosContainer: React.FC = () => {
 
       const trimmedSearch = searchTerm.trim();
 
-      // 1. Coincidencia directa por código de barras de empaque
+      // 1. Coincidencia directa por código de barras de empaque único
       for (const p of tenantProducts) {
         if (p.isActive && p.presentations) {
           const matchedPres = p.presentations.find(pres => pres.barcode && pres.barcode.trim() === trimmedSearch);
           if (matchedPres) {
+            // Si el código coincide con la presentación pero también es el código base del producto (o si tiene varias presentaciones):
+            if (p.barcode && p.barcode.trim() === trimmedSearch) {
+              setPresentationModalProduct(p);
+              setSearchTerm('');
+              return;
+            }
             if (!tenant.allowNegativeStock && p.currentStock < matchedPres.unitsCount) {
               toast.error(`"${p.name} [${matchedPres.name}]" no tiene suficiente stock (Disponible: ${p.currentStock}, Requiere: ${matchedPres.unitsCount}).`);
               return;
@@ -298,6 +340,13 @@ export const PosContainer: React.FC = () => {
       // 2. Coincidencia directa por código de barras o SKU del producto base
       const match = tenantProducts.find((p: Product) => (p.barcode === trimmedSearch || p.sku.toLowerCase() === trimmedSearch.toLowerCase()) && p.isActive);
       if (match) {
+        // REGLA CLAVE: Si el producto tiene presentaciones (ej. churro con ristra), PREGUNTAR ANTES al cajero
+        if (match.presentations && match.presentations.length > 0) {
+          setPresentationModalProduct(match);
+          setSearchTerm('');
+          return;
+        }
+
         if (!tenant.allowNegativeStock && match.currentStock <= 0) {
           toast.error(`"${match.name}" está AGOTADO. No se puede agregar al carrito.`);
           return;
@@ -308,7 +357,7 @@ export const PosContainer: React.FC = () => {
         return;
       }
 
-      // 3. Coincidencia única en el catálogo visible posGridItems
+      // 3. Coincidencia en el catálogo visible posGridItems
       if (posGridItems.length === 1) {
         const item = posGridItems[0];
         if (!tenant.allowNegativeStock && item.isOutOfStock) {
@@ -318,6 +367,15 @@ export const PosContainer: React.FC = () => {
         addToCart({ product: item.product, presentation: item.presentation });
         toast.success(`+ ${item.displayName}`);
         setSearchTerm('');
+      } else if (posGridItems.length > 1) {
+        // Si todos los posGridItems visibles pertenecen al mismo producto base (ej. churro y churro [ristra]):
+        const firstProduct = posGridItems[0].product;
+        const allSameProduct = posGridItems.every(i => i.product.id === firstProduct.id);
+        if (allSameProduct && firstProduct.presentations && firstProduct.presentations.length > 0) {
+          setPresentationModalProduct(firstProduct);
+          setSearchTerm('');
+          return;
+        }
       } else if (trimmedSearch !== '') {
         toast.error('Producto o empaque no encontrado');
       }
@@ -2219,7 +2277,7 @@ export const PosContainer: React.FC = () => {
 
             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
-                Seleccione el formato o empaque a vender:
+                Seleccione el formato a vender (o presione el número en el teclado):
               </div>
 
               {/* Individual Base Unit */}
@@ -2247,12 +2305,17 @@ export const PosContainer: React.FC = () => {
                   transition: 'all 0.15s ease'
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
-                    1 Unidad Individual
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                    Venta por unidad suelta
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.5rem', borderRadius: '6px', background: '#e2e8f0', color: '#334155', fontFamily: 'monospace' }}>
+                    1
+                  </span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                      1 Unidad Individual
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      Venta por unidad suelta ({presentationModalProduct.unitOfMeasure || 'Unid.'})
+                    </div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -2266,7 +2329,7 @@ export const PosContainer: React.FC = () => {
               </button>
 
               {/* Packaging Presentations */}
-              {presentationModalProduct.presentations?.map((pres) => {
+              {presentationModalProduct.presentations?.map((pres, presIdx) => {
                 const isOutOfStock = !tenant.allowNegativeStock && presentationModalProduct.currentStock < pres.unitsCount;
                 return (
                   <button
@@ -2296,18 +2359,23 @@ export const PosContainer: React.FC = () => {
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span>{pres.name}</span>
-                        <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
-                          {pres.unitsCount} unidades
-                        </span>
-                      </div>
-                      {pres.barcode && (
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
-                          Barras: {pres.barcode}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.5rem', borderRadius: '6px', background: isOutOfStock ? '#f1f5f9' : '#ede9fe', color: isOutOfStock ? '#94a3b8' : '#6b21a8', fontFamily: 'monospace' }}>
+                        {presIdx + 2}
+                      </span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>{pres.name}</span>
+                          <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
+                            {pres.unitsCount} unidades
+                          </span>
                         </div>
-                      )}
+                        {pres.barcode && (
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
+                            Barras: {pres.barcode}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>
@@ -2329,7 +2397,7 @@ export const PosContainer: React.FC = () => {
                 onClick={() => setPresentationModalProduct(null)}
                 style={{ fontSize: '0.8rem' }}
               >
-                Cancelar
+                Cancelar [Esc]
               </button>
             </div>
           </div>
