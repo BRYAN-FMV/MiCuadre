@@ -17,7 +17,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase, saveServiceToSupabase, deleteServiceSupabase, saveStaffToSupabase, deleteStaffSupabase, saveAppointmentToSupabase, deleteAppointmentSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 /**
@@ -46,7 +46,7 @@ export interface HeldOrder {
 export interface OfflineQueueItem {
   id: string; // idempotencyKey / UUID
   tenantId: string;
-  type: 'SALE' | 'SHIFT' | 'MOVEMENT' | 'EXPENSE' | 'FOOD_ORDER';
+  type: 'SALE' | 'SHIFT' | 'MOVEMENT' | 'EXPENSE' | 'FOOD_ORDER' | 'SERVICE';
   payload: any;
   createdAt: string;
   retryCount?: number;
@@ -2141,42 +2141,60 @@ export const useAppStore = create<AppState>()(
   }),
 
 
-  addAppointment: (appData) => set((state) => {
+  addAppointment: (appData) => {
+    const state = get();
     const staffMember = state.staff.find(s => s.id === appData.staffId) || state.profiles.find(p => p.id === appData.staffId);
     const service = state.services.find(s => s.id === appData.serviceId);
     const newApp: Appointment = {
       ...appData,
-      id: `app-${Date.now()}`,
+      id: generateUUID(),
       tenantId: state.tenant.id,
       staffName: staffMember?.fullName,
       serviceName: service?.name
     };
-    return { appointments: [newApp, ...state.appointments] };
-  }),
+    set((s) => ({ appointments: [newApp, ...s.appointments] }));
+    if (isSupabaseConfigured() && isValidUUID(state.tenant.id)) {
+      saveAppointmentToSupabase(newApp).catch(err => console.warn('Supabase save appointment error:', err));
+    }
+    return newApp;
+  },
 
   updateAppointment: (id, appointmentData) => set((state) => {
-    return {
-      appointments: state.appointments.map(a => {
-        if (a.id !== id) return a;
-        const staffMember = appointmentData.staffId ? (state.staff.find(s => s.id === appointmentData.staffId) || state.profiles.find(p => p.id === appointmentData.staffId)) : undefined;
-        const service = appointmentData.serviceId ? state.services.find(s => s.id === appointmentData.serviceId) : undefined;
-        return {
-          ...a,
-          ...appointmentData,
-          staffName: staffMember ? staffMember.fullName : (appointmentData.staffId ? a.staffName : a.staffName),
-          serviceName: service ? service.name : (appointmentData.serviceId ? a.serviceName : a.serviceName)
-        };
-      })
-    };
+    const updatedAppointments = state.appointments.map(a => {
+      if (a.id !== id) return a;
+      const staffMember = appointmentData.staffId ? (state.staff.find(s => s.id === appointmentData.staffId) || state.profiles.find(p => p.id === appointmentData.staffId)) : undefined;
+      const service = appointmentData.serviceId ? state.services.find(s => s.id === appointmentData.serviceId) : undefined;
+      return {
+        ...a,
+        ...appointmentData,
+        staffName: staffMember ? staffMember.fullName : (appointmentData.staffId ? a.staffName : a.staffName),
+        serviceName: service ? service.name : (appointmentData.serviceId ? a.serviceName : a.serviceName)
+      };
+    });
+    const target = updatedAppointments.find(a => a.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveAppointmentToSupabase(target).catch(err => console.warn('Supabase update appointment error:', err));
+    }
+    return { appointments: updatedAppointments };
   }),
 
-  deleteAppointment: (id) => set((state) => ({
-    appointments: state.appointments.filter(a => a.id !== id)
-  })),
+  deleteAppointment: (id) => {
+    set((state) => ({
+      appointments: state.appointments.filter(a => a.id !== id)
+    }));
+    if (isSupabaseConfigured() && isValidUUID(id)) {
+      deleteAppointmentSupabase(id).catch(err => console.warn('Supabase delete appointment error:', err));
+    }
+  },
 
-  updateAppointmentStatus: (id, status) => set((state) => ({
-    appointments: state.appointments.map(a => a.id === id ? { ...a, status } : a)
-  })),
+  updateAppointmentStatus: (id, status) => set((state) => {
+    const updatedAppointments = state.appointments.map(a => a.id === id ? { ...a, status } : a);
+    const target = updatedAppointments.find(a => a.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveAppointmentToSupabase(target).catch(err => console.warn('Supabase update appointment status error:', err));
+    }
+    return { appointments: updatedAppointments };
+  }),
 
   sendAppointmentToPos: (app) => {
     const state = get();
@@ -2419,26 +2437,61 @@ export const useAppStore = create<AppState>()(
           payload: newSale
         });
       });
+      const completedApp = updatedAppointments.find(a => a.id === app.id);
+      if (completedApp) {
+        saveAppointmentToSupabase(completedApp).catch(() => {});
+      }
     }
 
     return newSale;
   },
 
-  addStaff: (staffData) => set((state) => ({
-    staff: [...state.staff, { ...staffData, id: `staff-${Date.now()}`, tenantId: state.tenant.id }]
-  })),
+  addStaff: (staffData) => {
+    const tenantId = get().tenant.id;
+    const newStaff: Staff = {
+      ...staffData,
+      id: generateUUID(),
+      tenantId
+    };
+    set((state) => ({ staff: [...state.staff, newStaff] }));
+    if (isSupabaseConfigured() && isValidUUID(tenantId)) {
+      saveStaffToSupabase(newStaff).catch(err => console.warn('Supabase save staff error:', err));
+    }
+    return newStaff;
+  },
 
-  addService: (serviceData) => set((state) => ({
-    services: [...state.services, { ...serviceData, id: `serv-${Date.now()}`, tenantId: state.tenant.id }]
-  })),
+  addService: (serviceData) => {
+    const tenantId = get().tenant.id;
+    const newService: Service = {
+      ...serviceData,
+      id: generateUUID(),
+      tenantId,
+      isActive: serviceData.isActive ?? true
+    };
+    set((state) => ({ services: [...state.services, newService] }));
+    if (isSupabaseConfigured() && isValidUUID(tenantId)) {
+      saveServiceToSupabase(newService).catch(err => console.warn('Supabase save service error:', err));
+    }
+    return newService;
+  },
 
-  updateService: (id, serviceData) => set((state) => ({
-    services: state.services.map(s => s.id === id ? { ...s, ...serviceData } : s)
-  })),
+  updateService: (id, serviceData) => set((state) => {
+    const updated = state.services.map(s => s.id === id ? { ...s, ...serviceData } : s);
+    const target = updated.find(s => s.id === id);
+    if (target && isSupabaseConfigured() && isValidUUID(target.tenantId)) {
+      saveServiceToSupabase(target).catch(err => console.warn('Supabase update service error:', err));
+    }
+    return { services: updated };
+  }),
 
-  deleteService: (id) => set((state) => ({
-    services: state.services.filter(s => s.id !== id)
-  })),
+  deleteService: (id) => {
+    set((state) => ({
+      services: state.services.filter(s => s.id !== id)
+    }));
+    if (isSupabaseConfigured() && isValidUUID(id)) {
+      deleteServiceSupabase(id).catch(err => console.warn('Supabase delete service error:', err));
+    }
+  },
 
   payStaffCommissions: (staffId, options) => set((state) => {
     const isShiftPayout = options?.payFromActiveShift === true;

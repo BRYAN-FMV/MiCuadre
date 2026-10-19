@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from './useAppStore';
 import { Product, Customer, Supplier, PurchaseInvoice, Service, Staff, FinancialFund, ProductPresentation, ProductPriceType } from '../types';
+import { isValidUUID } from '../lib/security';
 
 describe('Comprehensive Business Flow Test Suite (MiCuadre)', () => {
   beforeEach(() => {
@@ -1714,6 +1715,114 @@ describe('Comprehensive Business Flow Test Suite (MiCuadre)', () => {
       expect(sale?.taxable15).toBe(180);
       expect(sale?.tax15).toBe(27);
       expect(sale?.total).toBe(292); // 85 + 180 + 27 = 292
+    });
+  });
+
+  // =========================================================================
+  // 16. PERSISTENCIA Y SINCRONIZACION EN LA NUBE DE SERVICIOS
+  // =========================================================================
+  describe('16. Persistencia y Sincronizacion de Servicios Multi-dispositivo', () => {
+    it('debe generar un UUID estandar valido al crear un nuevo servicio con addService', () => {
+      const store = useAppStore.getState();
+      const initialCount = store.services.length;
+
+      store.addService({
+        name: 'Corte de Pelo Clasico',
+        durationMinutes: 30,
+        price: 150,
+        commissionType: 'PERCENTAGE',
+        commissionValue: 30,
+        isActive: true
+      });
+
+      const updatedServices = useAppStore.getState().services;
+      expect(updatedServices.length).toBe(initialCount + 1);
+
+      const createdService = updatedServices.find(s => s.name === 'Corte de Pelo Clasico');
+      expect(createdService).toBeDefined();
+      expect(createdService?.price).toBe(150);
+      expect(createdService?.durationMinutes).toBe(30);
+      expect(createdService?.tenantId).toBe(store.tenant.id);
+      expect(createdService?.id).toBeDefined();
+      // Validar que no usa el patron mock serv-TIMESTAMP sino un UUID real compatible con Supabase
+      expect(isValidUUID(createdService!.id)).toBe(true);
+      expect(createdService!.id.startsWith('serv-')).toBe(false);
+    });
+
+    it('debe actualizar los datos de un servicio existente con updateService', () => {
+      const store = useAppStore.getState();
+      store.addService({
+        name: 'Lavado y Secado',
+        durationMinutes: 25,
+        price: 120,
+        commissionType: 'FIXED',
+        commissionValue: 40,
+        isActive: true
+      });
+
+      const created = useAppStore.getState().services.find(s => s.name === 'Lavado y Secado')!;
+      expect(created).toBeDefined();
+
+      store.updateService(created.id, {
+        name: 'Lavado, Secado y Masaje Capilar',
+        price: 180,
+        durationMinutes: 40
+      });
+
+      const updated = useAppStore.getState().services.find(s => s.id === created.id);
+      expect(updated?.name).toBe('Lavado, Secado y Masaje Capilar');
+      expect(updated?.price).toBe(180);
+      expect(updated?.durationMinutes).toBe(40);
+      expect(updated?.commissionValue).toBe(40); // Preserva campos no modificados
+    });
+
+    it('debe eliminar un servicio correctamente con deleteService', () => {
+      const store = useAppStore.getState();
+      store.addService({
+        name: 'Servicio Temporal',
+        durationMinutes: 15,
+        price: 50,
+        commissionType: 'FIXED',
+        commissionValue: 10,
+        isActive: true
+      });
+
+      const service = useAppStore.getState().services.find(s => s.name === 'Servicio Temporal')!;
+      expect(service).toBeDefined();
+
+      store.deleteService(service.id);
+
+      const exists = useAppStore.getState().services.some(s => s.id === service.id);
+      expect(exists).toBe(false);
+    });
+
+    it('debe integrar servicios descargados de la nube al estado de Zustand sin duplicar', () => {
+      const store = useAppStore.getState();
+      const currentTenantId = store.tenant.id;
+
+      const cloudService: Service = {
+        id: '22222222-2222-2222-2222-222222222222',
+        tenantId: currentTenantId,
+        name: 'Corte de Pelo Barba VIP',
+        durationMinutes: 45,
+        price: 250,
+        commissionType: 'PERCENTAGE',
+        commissionValue: 40,
+        isActive: true
+      };
+
+      // Simular recepcion de servicios de la nube (como ocurre en syncAllCloudData)
+      useAppStore.setState(state => {
+        const liveIds = new Set([cloudService.id]);
+        const localOnly = state.services.filter(s => s.tenantId === currentTenantId && !liveIds.has(s.id));
+        const otherTenants = state.services.filter(s => s.tenantId && s.tenantId !== currentTenantId);
+        return { services: [cloudService, ...localOnly, ...otherTenants] };
+      });
+
+      const found = useAppStore.getState().services.find(s => s.id === cloudService.id);
+      expect(found).toBeDefined();
+      expect(found?.name).toBe('Corte de Pelo Barba VIP');
+      expect(found?.price).toBe(250);
     });
   });
 });

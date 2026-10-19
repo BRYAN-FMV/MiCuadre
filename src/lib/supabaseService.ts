@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Product, Sale, CartLine, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, ProductPriceType, UserPermissions, MenuItem, DeliveryDriver, FoodOrder } from '../types';
+import { Product, Sale, CartLine, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, ProductPriceType, UserPermissions, MenuItem, DeliveryDriver, FoodOrder, Staff, Appointment, ServiceSupply } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
 import { useAppStore } from '../store/useAppStore';
@@ -110,6 +110,32 @@ export function getStoredTenantFoodEnabled(tenantId: string): boolean | undefine
   }
 }
 
+export function backupServiceSupplies(tenantId: string, serviceId: string, supplies?: ServiceSupply[]) {
+  if (typeof localStorage === 'undefined' || !supplies) return;
+  try {
+    const key = `micuadre_service_supplies_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    const map = raw ? JSON.parse(raw) : {};
+    map[serviceId] = supplies;
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+export function getStoredServiceSupplies(tenantId: string, serviceId: string): ServiceSupply[] | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    const key = `micuadre_service_supplies_${tenantId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return undefined;
+    const map = JSON.parse(raw);
+    return map[serviceId] || undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
 let isPresentationsDbColumnAvailable: boolean | null = null;
 let isPriceTypesDbColumnAvailable: boolean | null = null;
 let isPermissionsDbColumnAvailable: boolean | null = null;
@@ -179,6 +205,12 @@ export const DEMO_PRODUCT_IDS = [
 
 export function isDemoProduct(p: { id?: string; sku?: string }): boolean {
   return (p.id ? DEMO_PRODUCT_IDS.includes(p.id) : false) || (p.sku ? DEMO_SKUS.includes(p.sku) : false);
+}
+
+export const DEMO_SERVICE_IDS = ['serv-1', 'serv-2'];
+
+export function isDemoService(s: { id?: string }): boolean {
+  return Boolean(s.id && DEMO_SERVICE_IDS.includes(s.id));
 }
 
 
@@ -1715,6 +1747,22 @@ export async function pushLocalDataToCloud(tenantId: string) {
       await saveProductToSupabase(prod);
     }
 
+    // 3. Push local services if creating tenant from scratch or migrating
+    const localServices = (state.services || []).map(s => {
+      const isThisTenant = s.tenantId ? s.tenantId === tenantId : tenantId === DEMO_TENANT_ID;
+      if (!isThisTenant) return s;
+      return {
+        ...s,
+        id: isValidUUID(s.id) ? s.id : generateUUID(),
+        tenantId
+      };
+    });
+    useAppStore.setState({ services: localServices });
+    const tenantServices = localServices.filter(s => s.tenantId === tenantId && (tenantId === DEMO_TENANT_ID || !isDemoService(s)));
+    for (const service of tenantServices) {
+      await saveServiceToSupabase(service);
+    }
+
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(pushFlagKey, 'true');
     }
@@ -1752,11 +1800,14 @@ export async function syncAllCloudData(tenantId: string) {
       fetchProfilesFromSupabase(tenantId).catch(() => null)
     ]);
 
-    // Batch 2: Commercial & Operational Data (Suppliers, Cash Movements, Expenses)
-    const [liveSuppliers, liveMovements, liveExpenses] = await Promise.all([
+    // Batch 2: Commercial & Operational Data (Suppliers, Movements, Expenses, Services, Staff, Appointments)
+    const [liveSuppliers, liveMovements, liveExpenses, liveServices, liveStaff, liveAppointments] = await Promise.all([
       fetchSuppliersFromSupabase(tenantId).catch(() => null),
       fetchCashMovementsFromSupabase(tenantId).catch(() => null),
-      fetchExpensesFromSupabase(tenantId).catch(() => null)
+      fetchExpensesFromSupabase(tenantId).catch(() => null),
+      fetchServicesFromSupabase(tenantId).catch(() => null),
+      fetchStaffFromSupabase(tenantId).catch(() => null),
+      fetchAppointmentsFromSupabase(tenantId).catch(() => null)
     ]);
 
     // Batch 3: Food & Restaurant Module (Menu Items, Drivers, Food Orders)
@@ -1971,6 +2022,70 @@ export async function syncAllCloudData(tenantId: string) {
         foodOrders = [...mergedLiveOrders, ...localOnly, ...otherTenantOrders];
       }
 
+      // 12. Services
+      let services = state.services;
+      if (liveServices !== null) {
+        const cleanLiveServices = (tenantId === DEMO_TENANT_ID 
+          ? liveServices 
+          : liveServices.filter(s => !isDemoService(s)));
+        const liveIds = new Set(cleanLiveServices.map(s => s.id));
+        const localOnly = (state.services || []).filter(s => s.tenantId === tenantId && !liveIds.has(s.id) && (tenantId === DEMO_TENANT_ID || !isDemoService(s)));
+        const otherTenantServices = (state.services || []).filter(s => s.tenantId && s.tenantId !== tenantId);
+        services = [...cleanLiveServices, ...localOnly, ...otherTenantServices];
+
+        // Background migration: push local services not in Supabase yet (e.g. created on this device previously)
+        if (tenantId !== DEMO_TENANT_ID && localOnly.length > 0) {
+          setTimeout(async () => {
+            for (const localS of localOnly) {
+              const validUuid = isValidUUID(localS.id) ? localS.id : generateUUID();
+              const toSave: Service = { ...localS, id: validUuid, tenantId };
+              await saveServiceToSupabase(toSave);
+              if (validUuid !== localS.id) {
+                useAppStore.setState(s => ({
+                  services: s.services.map(srv => srv.id === localS.id ? toSave : srv),
+                  appointments: s.appointments.map(app => app.serviceId === localS.id ? { ...app, serviceId: validUuid } : app)
+                }));
+              }
+            }
+          }, 300);
+        }
+      }
+
+      // 13. Staff
+      let staff = state.staff;
+      if (liveStaff !== null) {
+        const cleanLiveStaff = (tenantId === DEMO_TENANT_ID ? liveStaff : liveStaff.filter(st => st.id !== 'staff-1'));
+        const liveIds = new Set(cleanLiveStaff.map(st => st.id));
+        const localOnly = (state.staff || []).filter(st => st.tenantId === tenantId && !liveIds.has(st.id) && (tenantId === DEMO_TENANT_ID || st.id !== 'staff-1'));
+        const otherTenantStaff = (state.staff || []).filter(st => st.tenantId && st.tenantId !== tenantId);
+        staff = [...cleanLiveStaff, ...localOnly, ...otherTenantStaff];
+
+        if (tenantId !== DEMO_TENANT_ID && localOnly.length > 0) {
+          setTimeout(async () => {
+            for (const localSt of localOnly) {
+              const validUuid = isValidUUID(localSt.id) ? localSt.id : generateUUID();
+              const toSave: Staff = { ...localSt, id: validUuid, tenantId };
+              await saveStaffToSupabase(toSave);
+              if (validUuid !== localSt.id) {
+                useAppStore.setState(s => ({
+                  staff: s.staff.map(st => st.id === localSt.id ? toSave : st)
+                }));
+              }
+            }
+          }, 400);
+        }
+      }
+
+      // 14. Appointments
+      let appointments = state.appointments;
+      if (liveAppointments !== null) {
+        const cleanLiveApps = (tenantId === DEMO_TENANT_ID ? liveAppointments : liveAppointments.filter(a => a.id !== 'app-1'));
+        const liveIds = new Set(cleanLiveApps.map(a => a.id));
+        const localOnly = (state.appointments || []).filter(a => a.tenantId === tenantId && !liveIds.has(a.id) && (tenantId === DEMO_TENANT_ID || a.id !== 'app-1'));
+        const otherTenantApps = (state.appointments || []).filter(a => a.tenantId && a.tenantId !== tenantId);
+        appointments = [...cleanLiveApps, ...localOnly, ...otherTenantApps];
+      }
+
       return {
         products,
         suppliers,
@@ -1985,7 +2100,10 @@ export async function syncAllCloudData(tenantId: string) {
         expenses,
         menuItems,
         deliveryDrivers,
-        foodOrders
+        foodOrders,
+        services,
+        staff,
+        appointments
       };
     });
   } catch (err) {
@@ -2030,6 +2148,9 @@ export async function processOfflineQueue() {
           if (res) success = true;
         } else if (item.type === 'FOOD_ORDER') {
           const res = await saveFoodOrderToSupabase(item.payload);
+          if (res) success = true;
+        } else if (item.type === 'SERVICE') {
+          const res = await saveServiceToSupabase(item.payload);
           if (res) success = true;
         }
 
@@ -2347,5 +2468,256 @@ export async function syncFoodModuleData(tenantId: string): Promise<boolean> {
     isSyncingFoodData = false;
   }
 }
+
+/**
+ * =========================================================================
+ * SERVICES, STAFF & APPOINTMENTS SUPABASE INTEGRATION
+ * =========================================================================
+ */
+
+let isServicesExtraColsAvailable: boolean | null = null;
+
+export async function fetchServicesFromSupabase(tenantId: string): Promise<Service[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('services')
+      .select('*')
+      .eq('tenant_id', tenantId);
+
+    if (error) {
+      console.warn('Supabase fetch services warning:', error.message);
+      return null;
+    }
+
+    if (!data) return [];
+
+    return data.map((s: any) => ({
+      id: s.id,
+      tenantId: s.tenant_id,
+      name: s.name,
+      durationMinutes: Number(s.duration_minutes) || 30,
+      price: Number(s.price) || 0,
+      commissionType: (s.commission_type as 'PERCENTAGE' | 'FIXED') || 'PERCENTAGE',
+      commissionValue: Number(s.commission_value) || 0,
+      isActive: Boolean(s.is_active ?? true),
+      taxClassification: s.tax_classification || undefined,
+      supplies: Array.isArray(s.supplies) ? s.supplies : (getStoredServiceSupplies(tenantId, s.id) || [])
+    }));
+  } catch (err) {
+    console.warn('Error fetching services from Supabase:', err);
+    return null;
+  }
+}
+
+export async function saveServiceToSupabase(service: Service): Promise<Service | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(service.tenantId)) return null;
+  if (service.tenantId !== DEMO_TENANT_ID && isDemoService(service)) return null;
+
+  try {
+    const serviceUuid = isValidUUID(service.id) ? service.id : generateUUID();
+
+    if (service.supplies && service.supplies.length > 0) {
+      backupServiceSupplies(service.tenantId, serviceUuid, service.supplies);
+      if (service.id && service.id !== serviceUuid) {
+        backupServiceSupplies(service.tenantId, service.id, service.supplies);
+      }
+    }
+
+    const payload: any = {
+      id: serviceUuid,
+      tenant_id: service.tenantId,
+      name: service.name,
+      duration_minutes: Number(service.durationMinutes) || 30,
+      price: Number(service.price) || 0,
+      commission_type: service.commissionType || 'PERCENTAGE',
+      commission_value: Number(service.commissionValue) || 0,
+      is_active: service.isActive ?? true
+    };
+
+    if (isServicesExtraColsAvailable !== false) {
+      if (service.taxClassification) payload.tax_classification = service.taxClassification;
+      if (service.supplies) payload.supplies = service.supplies;
+    }
+
+    let { data, error } = await supabase.from('services').upsert(payload, { onConflict: 'id' }).select().single();
+    if (error && (error.message.includes('column') || error.code === 'PGRST204')) {
+      isServicesExtraColsAvailable = false;
+      delete payload.tax_classification;
+      delete payload.supplies;
+      const retry = await supabase.from('services').upsert(payload, { onConflict: 'id' }).select().single();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.warn('Supabase save service error:', error.message);
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        useAppStore.getState().enqueueOfflineItem({
+          id: generateUUID(),
+          tenantId: service.tenantId,
+          type: 'SERVICE' as any,
+          payload: { ...service, id: serviceUuid }
+        });
+      }
+      return null;
+    }
+
+    return {
+      ...service,
+      id: serviceUuid
+    };
+  } catch (err) {
+    console.warn('Exception saving service to Supabase:', err);
+    return null;
+  }
+}
+
+export async function deleteServiceSupabase(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(id)) return false;
+
+  try {
+    const { error } = await supabase.from('services').delete().eq('id', id);
+    if (error) {
+      console.warn('Error deleting service from Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Exception deleting service from Supabase:', err);
+    return false;
+  }
+}
+
+export async function fetchStaffFromSupabase(tenantId: string): Promise<Staff[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('staff')
+      .select('*')
+      .eq('tenant_id', tenantId);
+
+    if (error || !data) return null;
+
+    return data.map((st: any) => ({
+      id: st.id,
+      tenantId: st.tenant_id,
+      profileId: st.profile_id || undefined,
+      fullName: st.full_name,
+      phone: st.phone || undefined,
+      isActive: Boolean(st.is_active ?? true)
+    }));
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function saveStaffToSupabase(staff: Staff): Promise<Staff | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(staff.tenantId)) return null;
+
+  try {
+    const staffUuid = isValidUUID(staff.id) ? staff.id : generateUUID();
+    const payload: any = {
+      id: staffUuid,
+      tenant_id: staff.tenantId,
+      full_name: staff.fullName,
+      phone: staff.phone || null,
+      is_active: staff.isActive ?? true
+    };
+    if (staff.profileId && isValidUUID(staff.profileId)) {
+      payload.profile_id = staff.profileId;
+    }
+
+    const { error } = await supabase.from('staff').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('Supabase save staff warning:', error.message);
+      return null;
+    }
+    return { ...staff, id: staffUuid };
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function deleteStaffSupabase(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(id)) return false;
+
+  try {
+    const { error } = await supabase.from('staff').delete().eq('id', id);
+    return !error;
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function fetchAppointmentsFromSupabase(tenantId: string): Promise<Appointment[] | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(tenantId)) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('tenant_id', tenantId);
+
+    if (error || !data) return null;
+
+    return data.map((a: any) => ({
+      id: a.id,
+      tenantId: a.tenant_id,
+      customerName: a.customer_name,
+      customerPhone: a.customer_phone || undefined,
+      staffId: a.staff_id,
+      serviceId: a.service_id,
+      scheduledAt: a.scheduled_at,
+      status: a.status || 'SCHEDULED',
+      notes: a.notes || undefined
+    }));
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function saveAppointmentToSupabase(app: Appointment): Promise<Appointment | null> {
+  if (!isSupabaseConfigured() || !isValidUUID(app.tenantId)) return null;
+  if (!isValidUUID(app.staffId) || !isValidUUID(app.serviceId)) return null;
+
+  try {
+    const appUuid = isValidUUID(app.id) ? app.id : generateUUID();
+    const payload: any = {
+      id: appUuid,
+      tenant_id: app.tenantId,
+      customer_name: app.customerName,
+      customer_phone: app.customerPhone || null,
+      staff_id: app.staffId,
+      service_id: app.serviceId,
+      scheduled_at: app.scheduledAt,
+      status: app.status || 'SCHEDULED',
+      notes: app.notes || null
+    };
+
+    const { error } = await supabase.from('appointments').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('Supabase save appointment warning:', error.message);
+      return null;
+    }
+    return { ...app, id: appUuid };
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function deleteAppointmentSupabase(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !isValidUUID(id)) return false;
+
+  try {
+    const { error } = await supabase.from('appointments').delete().eq('id', id);
+    return !error;
+  } catch (err) {
+    return false;
+  }
+}
+
 
 
