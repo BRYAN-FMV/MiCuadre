@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAppStore, HeldOrder, hasUserPermission } from '../../store/useAppStore';
-import { formatCurrency, calculateCartTotals } from '../../lib/monetary';
+import { formatCurrency, calculateCartTotals, formatPaymentMethod } from '../../lib/monetary';
 import { printSaleReceipt } from '../../lib/thermalPrint';
 import { generateUUID } from '../../lib/security';
 import { toast } from 'sonner';
 import {
   Search, ShoppingCart, UserCheck, Trash2, Plus, Minus,
   CreditCard, Printer, CheckCircle, Package, PauseCircle, Play, X, Key, Star, UserPlus, Lock, Edit2, AlertTriangle,
-  Tag, Percent, Scissors, Clock
+  Tag, Percent, Scissors, Clock, FileText
 } from 'lucide-react';
 import {
-  Sale, Product, CartLine, Customer, Service, ProductPresentation, UserProfile
+  Sale, Product, CartLine, Customer, Service, ProductPresentation, UserProfile, PrintPaperFormat
 } from '../../types';
 import { AdminPinModal } from '../common/AdminPinModal';
 
@@ -636,10 +636,10 @@ export const PosContainer: React.FC = () => {
     toast.success('Orden retenida en espera');
   };
 
-  const handlePrintEscPos = (copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL') => {
+  const handlePrintEscPos = (copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL', overrideFormat?: PrintPaperFormat) => {
     if (!lastCompletedSale) return;
     try {
-      printSaleReceipt(lastCompletedSale, tenant, copyType);
+      printSaleReceipt(lastCompletedSale, tenant, copyType, overrideFormat);
     } catch (err) {
       toast.error('Error al imprimir ticket');
     }
@@ -1921,7 +1921,7 @@ export const PosContainer: React.FC = () => {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
                       <span>Forma de Pago:</span>
-                      <span>{lastCompletedSale.paymentMethod}</span>
+                      <span>{formatPaymentMethod(lastCompletedSale.paymentMethod, true)}</span>
                     </div>
                   </div>
 
@@ -1987,7 +1987,7 @@ export const PosContainer: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px' }}>
                     <span>Forma de Pago:</span>
-                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{lastCompletedSale.paymentMethod}</span>
+                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatPaymentMethod(lastCompletedSale.paymentMethod, true)}</span>
                   </div>
                   <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }}></div>
 
@@ -2024,6 +2024,30 @@ export const PosContainer: React.FC = () => {
                     <span>Imprimir Copia SAR</span>
                   </button>
                 )}
+              </div>
+
+              {/* Botones de impresion en papel estandar Carta / Media Carta */}
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handlePrintEscPos(selectedTicketCopy, 'CARTA')}
+                  style={{ flex: 1, fontSize: '0.74rem', padding: '0.4rem', borderColor: '#cbd5e1' }}
+                  title="Imprimir factura en hoja carta completa"
+                >
+                  <FileText size={13} style={{ color: 'var(--accent-primary)' }} />
+                  <span>Hoja Carta</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handlePrintEscPos(selectedTicketCopy, 'MEDIA_CARTA')}
+                  style={{ flex: 1, fontSize: '0.74rem', padding: '0.4rem', borderColor: '#cbd5e1' }}
+                  title="Imprimir factura en media carta"
+                >
+                  <FileText size={13} style={{ color: '#059669' }} />
+                  <span>Media Carta</span>
+                </button>
               </div>
 
               <button className="btn btn-secondary" onClick={() => setLastCompletedSale(null)} style={{ width: '100%', fontSize: '0.8rem', padding: '0.4rem' }}>

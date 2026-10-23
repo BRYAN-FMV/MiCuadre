@@ -7,9 +7,9 @@ import {
   Archive, Star, Layers, PackageX, TrendingDown, RefreshCw, Zap,
   RotateCcw, Ban, Wallet, Utensils
 } from 'lucide-react';
-import { Sale, Product, CartLine, Expense } from '../../types';
+import { Sale, Product, CartLine, Expense, PrintPaperFormat } from '../../types';
 import { printSaleReceipt, printZReport } from '../../lib/thermalPrint';
-import { formatCurrency } from '../../lib/monetary';
+import { formatCurrency, formatPaymentMethod } from '../../lib/monetary';
 import {
   fetchSalesFromSupabase,
   fetchShiftsFromSupabase,
@@ -742,14 +742,14 @@ export const ReportsView: React.FC = () => {
   const totalLoyaltyDiscountGiven = validSales.reduce((acc, s) => acc + (s.loyaltyDiscountAmount || 0), 0);
   const topLoyalCustomers = [...tenantCustomersList].sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0)).slice(0, 10);
 
-  // Thermal Print Handler
-  const handlePrintReceipt = (sale: Sale, copyType: 'ORIGINAL' | 'COPIA') => {
+  // Thermal & Sheet Print Handler
+  const handlePrintReceipt = (sale: Sale, copyType: 'ORIGINAL' | 'COPIA', overrideFormat?: PrintPaperFormat) => {
     try {
       const enrichedSale: Sale = {
         ...sale,
         items: getSaleDisplayItems(sale)
       };
-      printSaleReceipt(enrichedSale, tenant, copyType);
+      printSaleReceipt(enrichedSale, tenant, copyType, overrideFormat);
     } catch (err) {
       console.warn('Error al imprimir recibo:', err);
     }
@@ -805,16 +805,7 @@ export const ReportsView: React.FC = () => {
     }
   };
 
-  const getPaymentMethodLabel = (method: string) => {
-    switch (method) {
-      case 'CASH': return 'Efectivo';
-      case 'CARD': return 'Tarjeta';
-      case 'TRANSFER': return 'Transferencia';
-      case 'CREDIT': return 'Al Crédito';
-      case 'MIXED': return 'Pago Mixto';
-      default: return method;
-    }
-  };
+  const getPaymentMethodLabel = (method: string) => formatPaymentMethod(method);
 
   return (
     <div className="reports-view-container" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '1440px', margin: '0 auto' }}>
@@ -2241,11 +2232,20 @@ export const ReportsView: React.FC = () => {
                   </div>
                 )}
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.25rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handlePrintReceipt(selectedSaleDetail, 'ORIGINAL', 'CARTA')}
+                    style={{ padding: '0.6rem 0.85rem', fontSize: '0.82rem', borderColor: '#cbd5e1' }}
+                    title="Imprimir en hoja carta completa"
+                  >
+                    <FileText size={15} style={{ color: 'var(--accent-primary)' }} />
+                    <span>Hoja Carta</span>
+                  </button>
                   <button
                     className="btn btn-secondary"
                     onClick={() => handlePrintReceipt(selectedSaleDetail, 'COPIA')}
-                    style={{ padding: '0.6rem 1rem', fontSize: '0.82rem' }}
+                    style={{ padding: '0.6rem 0.85rem', fontSize: '0.82rem' }}
                   >
                     <Printer size={15} />
                     <span>Reimprimir Copia SAR</span>
@@ -2253,10 +2253,10 @@ export const ReportsView: React.FC = () => {
                   <button
                     className="btn btn-primary"
                     onClick={() => handlePrintReceipt(selectedSaleDetail, 'ORIGINAL')}
-                    style={{ padding: '0.6rem 1rem', fontSize: '0.82rem' }}
+                    style={{ padding: '0.6rem 0.85rem', fontSize: '0.82rem' }}
                   >
                     <Printer size={15} />
-                    <span>Imprimir Original Cliente</span>
+                    <span>Imprimir Original</span>
                   </button>
                 </div>
               </div>

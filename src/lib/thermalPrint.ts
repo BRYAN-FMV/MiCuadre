@@ -1,5 +1,5 @@
-import { Sale, Tenant } from '../types';
-import { formatCurrency } from './monetary';
+import { Sale, Tenant, PrintPaperFormat } from '../types';
+import { formatCurrency, numberToSpanishWords, formatPaymentMethod } from './monetary';
 import { KitchenTicketData } from './escPos';
 
 export interface PaymentReceiptData {
@@ -39,7 +39,7 @@ export interface ZReportPrintData {
  */
 export function printHtmlThermal(
   htmlContent: string,
-  paperWidth: '58mm' | '80mm' = '58mm'
+  paperWidth: PrintPaperFormat = '58mm'
 ): void {
   const iframe = document.createElement('iframe');
   iframe.setAttribute(
@@ -55,31 +55,48 @@ export function printHtmlThermal(
     return;
   }
 
+  const isLetter = paperWidth === 'CARTA';
+  const isHalfLetter = paperWidth === 'MEDIA_CARTA';
+  const isStandardSheet = isLetter || isHalfLetter;
   const is80mm = paperWidth === '80mm';
-  // 58mm roll: total width 58mm. 5.5mm left padding avoids cutting off letters due to printer head offset.
-  // 80mm roll: total width 80mm, printable width 72mm.
-  // 50mm (5cm) bottom margin ensures paper feeds completely past the cutter / tear bar.
-  const ticketWidth = is80mm ? '72mm' : '52mm';
-  const padding = is80mm ? '2mm 3mm 50mm 5.5mm' : '2mm 2mm 50mm 5.5mm';
-  const fontSize = is80mm ? '12px' : '11px';
 
-  doc.open();
-  doc.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Ticket MiCuadre</title>
-  <style>
-    @page {
-      margin: 0mm !important;
-      size: auto;
-    }
-    * {
+  let pageCss = '';
+  let bodyCss = '';
+
+  if (isLetter) {
+    pageCss = '@page { size: letter portrait; margin: 20mm 20mm 15mm 20mm; }';
+    bodyCss = `
+      margin: 0 auto;
+      padding: 4mm 4mm 0 4mm;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.35;
+      color: #0f172a;
+      background: #ffffff;
+      width: 100%;
+      max-width: 100%;
       box-sizing: border-box;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    body {
+    `;
+  } else if (isHalfLetter) {
+    pageCss = '@page { size: 5.5in 8.5in portrait; margin: 15mm 15mm 10mm 15mm; }';
+    bodyCss = `
+      margin: 0 auto;
+      padding: 3mm 3mm 0 3mm;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 10px;
+      line-height: 1.3;
+      color: #0f172a;
+      background: #ffffff;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    `;
+  } else {
+    const ticketWidth = is80mm ? '72mm' : '49mm';
+    const padding = is80mm ? '5mm 4mm 50mm 4mm' : '5mm 3.5mm 50mm 3.5mm';
+    const fontSize = is80mm ? '12px' : '11px';
+    pageCss = '@page { margin: 0mm !important; size: auto; }';
+    bodyCss = `
       margin: 0;
       padding: ${padding};
       font-family: Arial, Helvetica, sans-serif;
@@ -90,8 +107,27 @@ export function printHtmlThermal(
       background: #ffffff;
       width: ${ticketWidth};
       max-width: ${ticketWidth};
+      box-sizing: border-box;
       word-wrap: break-word;
       overflow-wrap: break-word;
+    `;
+  }
+
+  doc.open();
+  doc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Factura / Comprobante</title>
+  <style>
+    ${pageCss}
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    body {
+      ${bodyCss}
     }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
@@ -110,7 +146,7 @@ export function printHtmlThermal(
 </head>
 <body>
   ${htmlContent}
-  <div class="feed-spacer" style="height: 50mm; min-height: 50mm; font-size: 1px; color: transparent; user-select: none;">.</div>
+  ${!isStandardSheet ? '<div class="feed-spacer" style="height: 50mm; min-height: 50mm; font-size: 1px; color: transparent; user-select: none;">.</div>' : ''}
 </body>
 </html>`);
   doc.close();
@@ -220,7 +256,7 @@ export function generateSaleReceiptHtml(
 
       <div class="row small" style="margin-top: 3px;">
         <span>FORMA DE PAGO:</span>
-        <span class="bold">${sale.paymentMethod}</span>
+        <span class="bold">${formatPaymentMethod(sale.paymentMethod, true)}</span>
       </div>
 
       <div class="divider"></div>
@@ -274,7 +310,7 @@ export function generateSaleReceiptHtml(
       </div>
       <div class="row">
         <span>PAGO:</span>
-        <span>${sale.paymentMethod}</span>
+        <span>${formatPaymentMethod(sale.paymentMethod, true)}</span>
       </div>
     </div>
 
@@ -382,7 +418,7 @@ export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
       <div><strong>FECHA:</strong> ${dateStr} ${timeStr}</div>
       <div><strong>CLIENTE:</strong> ${payment.customerName}</div>
       <div><strong>ATENDIDO POR:</strong> ${payment.createdBy}</div>
-      <div><strong>FORMA PAGO:</strong> ${payment.paymentMethod}</div>
+      <div><strong>FORMA PAGO:</strong> ${formatPaymentMethod(payment.paymentMethod, true)}</div>
     </div>
 
     <div class="double-divider"></div>
@@ -505,15 +541,248 @@ export function generateZReportHtml(data: ZReportPrintData): string {
 }
 
 /**
+ * Generates full Carta (Letter) or Media Carta (Statement / Half-Letter) invoice HTML,
+ * fully compliant with SAR Honduras (Acuerdo 481-2017) and executive commercial invoices.
+ */
+export function generateInvoiceLetterHtml(
+  sale: Sale,
+  tenant: Tenant,
+  copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL',
+  isHalfLetter = false
+): string {
+  const saleDate = new Date(sale.createdAt);
+  const dateStr = saleDate.toLocaleDateString('es-HN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+  const timeStr = saleDate.toLocaleTimeString('es-HN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const currency = tenant.currencySymbol || 'L';
+  const currencyWord = currency === '$' ? 'DOLARES' : 'LEMPIRAS';
+  const amountInWords = numberToSpanishWords(sale.total, currencyWord);
+
+  const copyLabel = copyType === 'ORIGINAL'
+    ? 'ORIGINAL: CLIENTE'
+    : 'COPIA: OBLIGADO TRIBUTARIO EMISOR / SAR';
+
+  const docTitle = sale.isFiscal ? 'FACTURA' : 'COMPROBANTE DE VENTA';
+
+  const itemsRows = (sale.items || []).map((item) => {
+    const unitPrice = item.unitPrice ?? item.originalUnitPrice ?? 0;
+    const discount = item.discountAmount ? formatCurrency(item.discountAmount, '') : '-';
+    return `
+      <tr>
+        <td style="text-align: center; width: 45px; border-bottom: 1px solid #e2e8f0; padding: 6px 8px;">${item.quantity}</td>
+        <td style="text-align: left; border-bottom: 1px solid #e2e8f0; padding: 6px 8px;">
+          <div style="font-weight: 600; color: #0f172a;">${item.name}</div>
+          ${item.sku ? `<div style="font-size: 8.5px; color: #64748b;">CÓD: ${item.sku}</div>` : ''}
+        </td>
+        <td style="text-align: right; width: 95px; border-bottom: 1px solid #e2e8f0; padding: 6px 8px;">${formatCurrency(unitPrice, '')}</td>
+        <td style="text-align: right; width: 85px; border-bottom: 1px solid #e2e8f0; padding: 6px 8px;">${discount}</td>
+        <td style="text-align: right; width: 105px; border-bottom: 1px solid #e2e8f0; padding: 6px 8px; font-weight: 700;">${formatCurrency(item.total, '')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const scaleFactorClass = isHalfLetter ? 'half-letter' : 'full-letter';
+
+  return `
+    <div class="invoice-letter-container ${scaleFactorClass}" style="width: 100%; box-sizing: border-box; padding: 4px 4px 0 4px; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: ${isHalfLetter ? '10px' : '11px'}; line-height: 1.35;">
+      
+      <!-- HEADER -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px;">
+        <!-- Left: Business Info -->
+        <div style="flex: 1;">
+          <div style="font-size: ${isHalfLetter ? '16px' : '20px'}; font-weight: 900; text-transform: uppercase; color: #0f172a; letter-spacing: -0.5px;">
+            ${tenant.name}
+          </div>
+          <div style="margin-top: 3px; font-size: ${isHalfLetter ? '9.5px' : '10.5px'}; color: #334155;">
+            <div><strong>RTN:</strong> ${tenant.rtn || 'N/A'}</div>
+            ${tenant.address ? `<div><strong>Dirección:</strong> ${tenant.address}</div>` : ''}
+            ${tenant.phone ? `<div><strong>Teléfono:</strong> ${tenant.phone}</div>` : ''}
+            ${tenant.email ? `<div><strong>Correo:</strong> ${tenant.email}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- Right: Invoice Metadata Box -->
+        <div style="min-width: ${isHalfLetter ? '240px' : '280px'}; border: 1.5px solid #0f172a; border-radius: 6px; padding: 8px 12px; background: #f8fafc; text-align: center;">
+          <div style="font-size: ${isHalfLetter ? '13px' : '15px'}; font-weight: 900; color: #0f172a; text-transform: uppercase;">
+            ${docTitle}
+          </div>
+          <div style="font-size: 8.5px; font-weight: 700; color: #475569; margin-top: 1px;">
+            ${sale.isFiscal ? copyLabel : 'DOCUMENTO NO FISCAL'}
+          </div>
+          <div style="font-size: ${isHalfLetter ? '12px' : '14px'}; font-weight: 800; color: #0f172a; margin-top: 4px; letter-spacing: 0.5px;">
+            N° ${sale.documentNumber}
+          </div>
+
+          ${sale.isFiscal ? `
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1; font-size: 8px; text-align: left; line-height: 1.25; color: #1e293b;">
+              <div style="word-break: break-all;"><strong>CAI:</strong> ${sale.cai || 'N/A'}</div>
+              <div><strong>Fecha Límite Emisión:</strong> ${sale.caiDeadline || 'N/A'}</div>
+              ${sale.caiRangeStart && sale.caiRangeEnd ? `<div><strong>Rango Autorizado:</strong> ${sale.caiRangeStart} AL ${sale.caiRangeEnd}</div>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- CUSTOMER & SALE INFO GRID -->
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: ${isHalfLetter ? '9.5px' : '10.5px'};">
+        <div>
+          <div><strong>Cliente / Razón Social:</strong> ${sale.customerName || 'Consumidor Final'}</div>
+          <div><strong>RTN / Identificación:</strong> ${sale.customerRtn || 'Consumidor Final'}</div>
+          <div><strong>Caja / Sucursal:</strong> ${sale.cajaName || 'Caja Principal'}</div>
+        </div>
+        <div>
+          <div><strong>Fecha Emisión:</strong> ${dateStr}</div>
+          <div><strong>Hora:</strong> ${timeStr}</div>
+          <div><strong>Forma de Pago:</strong> <span style="font-weight: 700;">${formatPaymentMethod(sale.paymentMethod, true)}</span></div>
+        </div>
+      </div>
+
+      <!-- ITEMS TABLE -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: ${isHalfLetter ? '9px' : '10.5px'};">
+        <thead>
+          <tr style="background: #0f172a; color: #ffffff;">
+            <th style="padding: 6px 8px; text-align: center; border-radius: 4px 0 0 0;">CANT</th>
+            <th style="padding: 6px 8px; text-align: left;">DESCRIPCIÓN</th>
+            <th style="padding: 6px 8px; text-align: right;">PRECIO UNIT.</th>
+            <th style="padding: 6px 8px; text-align: right;">DESCUENTO</th>
+            <th style="padding: 6px 8px; text-align: right; border-radius: 0 4px 0 0;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+        </tbody>
+      </table>
+
+      <!-- TOTALS & EXONERATION DETAILS -->
+      <div style="display: flex; gap: 15px; align-items: flex-start; margin-bottom: 14px;">
+        <!-- Left: In Words & Exemptions Box -->
+        <div style="flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; background: #ffffff;">
+          <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px; font-size: ${isHalfLetter ? '9.5px' : '10.5px'};">
+            ${amountInWords}
+          </div>
+
+          ${sale.isFiscal ? `
+            <div style="font-size: 8px; color: #475569; border-top: 1px dashed #cbd5e1; padding-top: 5px; margin-top: 5px; line-height: 1.4;">
+              <div>N° Constancia Registro Exonerado: ______________________________</div>
+              <div>N° Identificativo Registro SAG: __________________________________</div>
+              <div>N° Correlativo Orden Compra Exenta: _____________________________</div>
+            </div>
+            <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #0f172a; font-weight: 800; font-size: 9px; text-align: center; color: #0f172a;">
+              "LA FACTURA ES BENEFICIO DE TODOS, EXÍJALA"
+            </div>
+          ` : `
+            <div style="font-size: 8.5px; color: #64748b; margin-top: 6px;">
+              Gracias por su preferencia. Este comprobante acredita la venta de los productos o servicios detallados.
+            </div>
+          `}
+        </div>
+
+        <!-- Right: Tax Breakdown & Total -->
+        <div style="width: ${isHalfLetter ? '240px' : '270px'}; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc; font-size: ${isHalfLetter ? '9px' : '10px'};">
+          <div style="display: flex; justify-content: space-between; padding: 1.5px 0;">
+            <span>Subtotal:</span>
+            <span>${formatCurrency(sale.subtotal, currency)}</span>
+          </div>
+          ${sale.discountAmount > 0 ? `
+            <div style="display: flex; justify-content: space-between; padding: 1.5px 0; color: #b91c1c;">
+              <span>Descuentos y Rebajas:</span>
+              <span>-${formatCurrency(sale.discountAmount, currency)}</span>
+            </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; padding: 1.5px 0;">
+            <span>Importe Exonerado:</span>
+            <span>${formatCurrency(sale.exoneratedAmount || 0, currency)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 1.5px 0;">
+            <span>Importe Exento:</span>
+            <span>${formatCurrency(sale.exemptAmount || 0, currency)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 1.5px 0;">
+            <span>Importe Gravado 15%:</span>
+            <span>${formatCurrency(sale.taxable15 || 0, currency)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 1.5px 0;">
+            <span>ISV 15%:</span>
+            <span>${formatCurrency(sale.tax15 || 0, currency)}</span>
+          </div>
+          ${sale.taxable18 > 0 || sale.tax18 > 0 ? `
+            <div style="display: flex; justify-content: space-between; padding: 1.5px 0;">
+              <span>Importe Gravado 18%:</span>
+              <span>${formatCurrency(sale.taxable18 || 0, currency)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 1.5px 0;">
+              <span>ISV 18%:</span>
+              <span>${formatCurrency(sale.tax18 || 0, currency)}</span>
+            </div>
+          ` : ''}
+
+          <div style="display: flex; justify-content: space-between; border-top: 1.5px solid #0f172a; margin-top: 5px; padding-top: 5px; font-weight: 900; font-size: ${isHalfLetter ? '12px' : '13px'}; color: #0f172a;">
+            <span>TOTAL A PAGAR:</span>
+            <span>${formatCurrency(sale.total, currency)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SIGNATURES BLOCK -->
+      <div style="display: flex; justify-content: space-around; gap: 20px; margin-top: 20px; padding-top: 10px; font-size: 8.5px; text-align: center; color: #475569;">
+        <div style="flex: 1; max-width: 200px;">
+          <div style="border-bottom: 1px solid #94a3b8; height: 26px; margin-bottom: 3px;"></div>
+          <div style="font-weight: 700; color: #1e293b;">Entregado Conforme</div>
+          <div>Firma Vendedor / Despacho</div>
+        </div>
+        <div style="flex: 1; max-width: 200px;">
+          <div style="border-bottom: 1px solid #94a3b8; height: 26px; margin-bottom: 3px;"></div>
+          <div style="font-weight: 700; color: #1e293b;">Recibido Conforme</div>
+          <div>Firma y Nombre del Cliente</div>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div style="margin-top: 12px; text-align: center; font-size: 7.5px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 4px;">
+        Documento generado y respaldado por MiCuadre.app
+      </div>
+
+    </div>
+  `;
+}
+
+/**
  * Convenient high-level helper to print a Sale receipt.
+ * Automatically chooses between Thermal Ticket and Full/Half Letter based on configuration or override.
  */
 export function printSaleReceipt(
   sale: Sale,
   tenant: Tenant,
-  copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL'
+  copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL',
+  overrideFormat?: PrintPaperFormat
 ): void {
-  const html = generateSaleReceiptHtml(sale, tenant, copyType);
-  printHtmlThermal(html, tenant.ticketPaperWidth || '58mm');
+  const format: PrintPaperFormat = overrideFormat || tenant.ticketPaperWidth || '58mm';
+  if (format === 'CARTA' || format === 'MEDIA_CARTA') {
+    const html = generateInvoiceLetterHtml(sale, tenant, copyType, format === 'MEDIA_CARTA');
+    printHtmlThermal(html, format);
+  } else {
+    const html = generateSaleReceiptHtml(sale, tenant, copyType);
+    printHtmlThermal(html, format);
+  }
+}
+
+/**
+ * High-level helper explicitly for printing full or half-letter invoices.
+ */
+export function printSaleInvoiceLetter(
+  sale: Sale,
+  tenant: Tenant,
+  copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL',
+  format: 'CARTA' | 'MEDIA_CARTA' = 'CARTA'
+): void {
+  printSaleReceipt(sale, tenant, copyType, format);
 }
 
 /**

@@ -85,7 +85,7 @@ describe('ESC/POS Receipt Generator (escPos.ts)', () => {
     expect(text).toContain('Leche Sula 1L');
     expect(text).toContain('Refresco Coca Col');
     expect(text).toContain('TOTAL: L 50.00');
-    expect(text).toContain('PAGO: CASH');
+    expect(text).toContain('PAGO: EFECTIVO');
     expect(text).toContain('Gracias por su compra');
 
     // NO debe contener datos extensos del SAR

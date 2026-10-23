@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors, FileText, Shield, AlertCircle } from 'lucide-react';
-import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions } from '../../types';
+import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions, PrintPaperFormat } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
 import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
@@ -48,7 +48,7 @@ export const SettingsView: React.FC = () => {
   const [address, setAddress] = useState(tenant.address || '');
   const [businessType, setBusinessType] = useState<BusinessType>(tenant.businessType || 'RETAIL');
   const [accessPassword, setAccessPassword] = useState(tenant.accessPassword || '');
-  const [ticketPaperWidth, setTicketPaperWidth] = useState<'58mm' | '80mm'>(tenant.ticketPaperWidth || '58mm');
+  const [ticketPaperWidth, setTicketPaperWidth] = useState<PrintPaperFormat>(tenant.ticketPaperWidth || '58mm');
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | 'beta' | 'cookies'>('terms');
 
@@ -843,15 +843,17 @@ export const SettingsView: React.FC = () => {
           <div className="form-group" style={{ gridColumn: 'span 2' }}>
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Printer size={15} style={{ color: 'var(--accent-primary)' }} />
-              Ancho de Papel Térmico para Impresión de Recibos
+              Formato y Tamaño de Papel de Facturación
             </label>
             <select
               className="input-control"
               value={ticketPaperWidth}
-              onChange={(e) => setTicketPaperWidth(e.target.value as '58mm' | '80mm')}
+              onChange={(e) => setTicketPaperWidth(e.target.value as PrintPaperFormat)}
             >
-              <option value="58mm">58 mm (Impresoras Portátiles Bluetooth/USB tipo Goojprt PT-210, MTP-II)</option>
-              <option value="80mm">80 mm (Impresoras Térmicas de Escritorio tipo Epson, Bixolon, Xprinter)</option>
+              <option value="58mm">58 mm - Rollo Térmico Compacto (Portátil Bluetooth / USB)</option>
+              <option value="80mm">80 mm - Rollo Térmico Estándar (Epson, Nenotech, Bixolon, Xprinter)</option>
+              <option value="CARTA">Tamaño Carta (Letter / Hoja Completa - Impresora Estándar de Oficina)</option>
+              <option value="MEDIA_CARTA">Media Carta (Statement / Media Hoja - Impresora Estándar Ahorro de Papel)</option>
             </select>
           </div>
 

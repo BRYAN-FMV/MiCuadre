@@ -1,5 +1,5 @@
 import { Sale, Tenant } from '../types';
-import { formatCurrency } from './monetary';
+import { formatCurrency, formatPaymentMethod } from './monetary';
 
 /**
  * Encodes a Sale receipt into raw ESC/POS Uint8Array bytes for thermal printers (58mm / 80mm).
@@ -88,7 +88,7 @@ export function generateEscPosReceipt(
     buffer.push(...encoder.encode(`TOTAL A PAGAR: ${formatCurrency(sale.total, tenant.currencySymbol)}\n`));
     buffer.push(0x1B, 0x45, 0x00); // Emphasized mode OFF
 
-    buffer.push(...encoder.encode(`FORMA DE PAGO: ${sale.paymentMethod}\n`));
+    buffer.push(...encoder.encode(`FORMA DE PAGO: ${formatPaymentMethod(sale.paymentMethod, true)}\n`));
     buffer.push(...encoder.encode('--------------------------------\n'));
 
     // Center align footer
@@ -151,7 +151,7 @@ export function generateEscPosReceipt(
     buffer.push(...encoder.encode(`TOTAL: ${formatCurrency(sale.total, tenant.currencySymbol)}\n`));
     buffer.push(0x1B, 0x45, 0x00); // Emphasized mode OFF
 
-    buffer.push(...encoder.encode(`PAGO: ${sale.paymentMethod}\n`));
+    buffer.push(...encoder.encode(`PAGO: ${formatPaymentMethod(sale.paymentMethod, true)}\n`));
     buffer.push(...encoder.encode('--------------------------------\n'));
 
     // Center align footer

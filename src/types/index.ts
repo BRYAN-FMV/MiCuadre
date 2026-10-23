@@ -2,6 +2,8 @@ export type TaxClassification = 'EXENTO' | 'EXONERADO' | 'GRAVADO_15' | 'GRAVADO
 
 export type UserRole = 'ADMIN' | 'CAJERO' | 'BODEGUERO' | 'STAFF';
 
+export type PrintPaperFormat = '58mm' | '80mm' | 'CARTA' | 'MEDIA_CARTA';
+
 export type BusinessType = 'RETAIL' | 'SERVICES' | 'WHOLESALE' | 'FOOD' | 'MIXED';
 
 export interface Tenant {
@@ -28,7 +30,7 @@ export interface Tenant {
   subscriptionExpiresAt?: string; // ISO date string e.g. "2026-12-31"
   monthlyPrice?: number;
   accessPassword?: string; // Master store entrance password for access modal
-  ticketPaperWidth?: '58mm' | '80mm'; // Receipt thermal paper width selector (58mm e.g. PT-210 vs 80mm desktop)
+  ticketPaperWidth?: PrintPaperFormat; // Receipt paper format selector ('58mm' | '80mm' | 'CARTA' | 'MEDIA_CARTA')
 }
 
 export interface UserPermissions {

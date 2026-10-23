@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCurrency, calculateCPP, calculateLineTotals, calculateCartTotals, formatSARDocumentNumber } from './monetary';
+import { formatCurrency, calculateCPP, calculateLineTotals, calculateCartTotals, formatSARDocumentNumber, numberToSpanishWords, formatPaymentMethod } from './monetary';
 import { CartLine, PriceTier } from '../types';
 
 describe('Monetary & Financial Utility Functions', () => {
@@ -92,5 +92,57 @@ describe('Monetary & Financial Utility Functions', () => {
     expect(cartTotals.tax15).toBe(15);
     expect(cartTotals.exemptAmount).toBe(50);
     expect(cartTotals.total).toBe(165);
+  });
+
+  describe('numberToSpanishWords', () => {
+    it('should convert zero correctly', () => {
+      expect(numberToSpanishWords(0)).toBe('SON: CERO LEMPIRAS CON 00/100');
+    });
+
+    it('should convert singular amount (1 lempira)', () => {
+      expect(numberToSpanishWords(1)).toBe('SON: UN LEMPIRA CON 00/100');
+    });
+
+    it('should convert numbers ending in 21 (veintiun)', () => {
+      expect(numberToSpanishWords(21)).toBe('SON: VEINTIUN LEMPIRAS CON 00/100');
+    });
+
+    it('should convert hundreds and compounds correctly', () => {
+      expect(numberToSpanishWords(100)).toBe('SON: CIEN LEMPIRAS CON 00/100');
+      expect(numberToSpanishWords(105.75)).toBe('SON: CIENTO CINCO LEMPIRAS CON 75/100');
+      expect(numberToSpanishWords(1520.5)).toBe('SON: UN MIL QUINIENTOS VEINTE LEMPIRAS CON 50/100');
+    });
+
+    it('should convert millions correctly', () => {
+      expect(numberToSpanishWords(2000000.25)).toBe('SON: DOS MILLONES LEMPIRAS CON 25/100');
+    });
+
+    it('should support custom currency names and optional cents', () => {
+      expect(numberToSpanishWords(50, 'DOLARES', false)).toBe('SON: CINCUENTA DOLARES');
+    });
+  });
+
+  describe('formatPaymentMethod', () => {
+    it('should format payment methods to Spanish uppercase', () => {
+      expect(formatPaymentMethod('CASH', true)).toBe('EFECTIVO');
+      expect(formatPaymentMethod('TRANSFER', true)).toBe('TRANSFERENCIA');
+      expect(formatPaymentMethod('CARD', true)).toBe('TARJETA');
+      expect(formatPaymentMethod('CREDIT', true)).toBe('CRÉDITO');
+      expect(formatPaymentMethod('MIXED', true)).toBe('PAGO MIXTO');
+    });
+
+    it('should format payment methods to Spanish standard casing', () => {
+      expect(formatPaymentMethod('CASH')).toBe('Efectivo');
+      expect(formatPaymentMethod('TRANSFER')).toBe('Transferencia');
+      expect(formatPaymentMethod('CARD')).toBe('Tarjeta');
+      expect(formatPaymentMethod('CREDIT')).toBe('Al Crédito');
+      expect(formatPaymentMethod('MIXED')).toBe('Pago Mixto');
+    });
+
+    it('should fallback gracefully for undefined or unknown methods', () => {
+      expect(formatPaymentMethod(undefined, true)).toBe('EFECTIVO');
+      expect(formatPaymentMethod(undefined)).toBe('Efectivo');
+      expect(formatPaymentMethod('BITCOIN')).toBe('BITCOIN');
+    });
   });
 });

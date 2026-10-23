@@ -3,7 +3,10 @@ import {
   generateSaleReceiptHtml,
   generateKitchenTicketHtml,
   generatePaymentReceiptHtml,
-  generateZReportHtml
+  generateZReportHtml,
+  generateInvoiceLetterHtml,
+  printSaleReceipt,
+  printSaleInvoiceLetter
 } from './thermalPrint';
 import { Sale, Tenant } from '../types';
 
@@ -62,7 +65,7 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
     expect(html).toContain('Cliente Domicilio');
     expect(html).toContain('4x desayuno');
     expect(html).toContain('480.00');
-    expect(html).toContain('CASH');
+    expect(html).toContain('EFECTIVO');
     expect(html).toContain('Gracias por su compra');
 
     // Never contain raw ESC/POS command chars
@@ -165,5 +168,95 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
     expect(zHtml).toContain('Ventas Efectivo:');
     expect(zHtml).toContain('DIFERENCIA DE CAJA:');
     expect(zHtml).toContain('CIERRE DE CAJA EXITOSO');
+  });
+
+  describe('Letter & Half-Letter Format Generation (generateInvoiceLetterHtml)', () => {
+    const fiscalSale: Sale = {
+      ...sampleSimpleSale,
+      isFiscal: true,
+      documentNumber: '000-001-01-00000045',
+      cai: 'ABCDEF-123456-7890AB-CDEF12-345678-90',
+      caiDeadline: '2027-01-01',
+      caiRangeStart: '000-001-01-00000001',
+      caiRangeEnd: '000-001-01-00050000',
+      subtotal: 1000.0,
+      discountAmount: 100.0,
+      taxable15: 900.0,
+      tax15: 135.0,
+      total: 1035.0,
+      items: [
+        {
+          sku: 'SERV-01',
+          name: 'Consultoria Profesional',
+          quantity: 1,
+          unitPrice: 1000.0,
+          originalUnitPrice: 1000.0,
+          discountAmount: 100.0,
+          taxClassification: 'GRAVADO_15',
+          subtotal: 900.0,
+          taxAmount: 135.0,
+          total: 1035.0
+        }
+      ]
+    };
+
+    it('should generate complete SAR-compliant Letter format invoice', () => {
+      const letterHtml = generateInvoiceLetterHtml(fiscalSale, sampleTenant, 'ORIGINAL', false);
+
+      // Header & Fiscal Identifiers
+      expect(letterHtml).toContain('FACTURA');
+      expect(letterHtml).toContain('ORIGINAL: CLIENTE');
+      expect(letterHtml).toContain('Pulperia Camila');
+      expect(letterHtml).toContain('08011990123456');
+      expect(letterHtml).toContain('ABCDEF-123456-7890AB-CDEF12-345678-90');
+      expect(letterHtml).toContain('000-001-01-00000045');
+      expect(letterHtml).toContain('2027-01-01');
+      expect(letterHtml).toContain('000-001-01-00000001');
+      expect(letterHtml).toContain('000-001-01-00050000');
+
+      // Product Table
+      expect(letterHtml).toContain('Consultoria Profesional');
+      expect(letterHtml).toContain('1,035.00');
+
+      // Amount in words
+      expect(letterHtml).toContain('SON: UN MIL TREINTA Y CINCO LEMPIRAS CON 00/100');
+
+      // SAR required legal text and signatures
+      expect(letterHtml).toContain('LA FACTURA ES BENEFICIO DE TODOS, EXÍJALA');
+      expect(letterHtml).toContain('Entregado Conforme');
+      expect(letterHtml).toContain('Recibido Conforme');
+    });
+
+    it('should generate Half-Letter format with proper CSS flag', () => {
+      const halfHtml = generateInvoiceLetterHtml(fiscalSale, sampleTenant, 'COPIA', true);
+
+      expect(halfHtml).toContain('COPIA: OBLIGADO TRIBUTARIO EMISOR / SAR');
+      expect(halfHtml).toContain('half-letter');
+      expect(halfHtml).toContain('LA FACTURA ES BENEFICIO DE TODOS, EXÍJALA');
+    });
+
+    it('should handle non-fiscal sale in Letter format as formal receipt/remission note', () => {
+      const nonFiscalHtml = generateInvoiceLetterHtml(sampleSimpleSale, sampleTenant, 'ORIGINAL', false);
+
+      expect(nonFiscalHtml).toContain('COMPROBANTE DE VENTA');
+      expect(nonFiscalHtml).toContain('TICK-952617');
+      expect(nonFiscalHtml).toContain('desayuno');
+      expect(nonFiscalHtml).toContain('SON: CUATROCIENTOS OCHENTA LEMPIRAS CON 00/100');
+      expect(nonFiscalHtml).toContain('Recibido Conforme');
+    });
+
+    it('should dispatch printSaleReceipt with CARTA and MEDIA_CARTA without throwing', () => {
+      expect(() => {
+        printSaleReceipt(fiscalSale, sampleTenant, 'ORIGINAL', 'CARTA');
+      }).not.toThrow();
+
+      expect(() => {
+        printSaleReceipt(fiscalSale, sampleTenant, 'COPIA', 'MEDIA_CARTA');
+      }).not.toThrow();
+
+      expect(() => {
+        printSaleInvoiceLetter(fiscalSale, sampleTenant, 'ORIGINAL', 'CARTA');
+      }).not.toThrow();
+    });
   });
 });
