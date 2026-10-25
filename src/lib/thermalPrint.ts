@@ -154,8 +154,8 @@ export function printHtmlThermal(
     table { width: 100%; border-collapse: collapse; font-size: ${is80mm ? '12px' : '10px'}; }
     th, td { padding: 1px 0; vertical-align: top; }
     .feed-spacer {
-      height: 20mm;
-      min-height: 20mm;
+      height: 42mm;
+      min-height: 42mm;
       width: 100%;
       display: block;
       font-size: 1px;
@@ -177,6 +177,13 @@ export function printHtmlThermal(
   setTimeout(() => {
     try {
       iframe.contentWindow?.focus();
+      if (iframe.contentWindow) {
+        iframe.contentWindow.onafterprint = () => {
+          setTimeout(() => {
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+          }, 1000);
+        };
+      }
       iframe.contentWindow?.print();
     } catch (e) {
       console.warn('Error al activar impresion en iframe:', e);
@@ -185,9 +192,9 @@ export function printHtmlThermal(
         if (iframe.parentNode) {
           iframe.parentNode.removeChild(iframe);
         }
-      }, 1500);
+      }, 60000);
     }
-  }, 250);
+  }, 300);
 }
 
 /**
