@@ -222,7 +222,7 @@ export function printHtmlThermal(
     <div class="feed-container">
       ${Boolean(options?.prePrintLogo && options?.logoUrl) ? `
         <div class="feed-preprint-logo" style="margin-top: ${is80mm ? '25mm' : '18mm'}; margin-bottom: ${is80mm ? '5mm' : '3mm'}; text-align: center;">
-          <img src="${options?.logoUrl}" alt="Logo Pre-impreso" style="max-height: ${is80mm ? '70px' : '50px'}; max-width: ${is80mm ? '180px' : '120px'}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+          <img src="${options?.logoUrl}" alt="Logo Pre-impreso" style="max-height: ${is80mm ? '110px' : '75px'}; max-width: ${is80mm ? '240px' : '160px'}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
       ` : `
         <div class="feed-cut-line">${is80mm ? '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -' : '- - - - - - - - - - - - - - - - - - - -'}</div>
@@ -256,8 +256,8 @@ export function generateSaleReceiptHtml(
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
   const showTopLogo = Boolean(logoUrl && !isPrePrint);
   const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
-  const logoMaxHeight = is80mm ? '75px' : '52px';
-  const logoMaxWidth = is80mm ? '180px' : '120px';
+  const logoMaxHeight = is80mm ? '110px' : '75px';
+  const logoMaxWidth = is80mm ? '240px' : '160px';
   const saleDate = new Date(sale.createdAt);
   const dateStr = saleDate.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const timeStr = saleDate.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
@@ -493,8 +493,8 @@ export function generatePaymentReceiptHtml(
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
   const showTopLogo = Boolean(logoUrl && !isPrePrint);
   const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
-  const logoMaxHeight = is80mm ? '75px' : '52px';
-  const logoMaxWidth = is80mm ? '180px' : '120px';
+  const logoMaxHeight = is80mm ? '110px' : '75px';
+  const logoMaxWidth = is80mm ? '240px' : '160px';
   const payDate = new Date(payment.createdAt);
   const dateStr = payDate.toLocaleDateString('es-HN');
   const timeStr = payDate.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
@@ -568,8 +568,8 @@ export function generateZReportHtml(
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
   const showTopLogo = Boolean(logoUrl && !isPrePrint);
   const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
-  const logoMaxHeight = is80mm ? '75px' : '52px';
-  const logoMaxWidth = is80mm ? '180px' : '120px';
+  const logoMaxHeight = is80mm ? '110px' : '75px';
+  const logoMaxWidth = is80mm ? '240px' : '160px';
   const now = new Date();
   const dateStr = now.toLocaleDateString('es-HN');
   const timeStr = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
@@ -720,7 +720,7 @@ export function generateInvoiceLetterHtml(
         <!-- Left: Business Info & Logo -->
         <div style="flex: 1; display: flex; align-items: center; gap: 14px;">
           ${logoUrl ? `
-            <img src="${logoUrl}" alt="Logo" style="max-height: ${isHalfLetter ? '50px' : '65px'}; max-width: ${isHalfLetter ? '110px' : '140px'}; object-fit: contain; border-radius: 4px;" />
+            <img src="${logoUrl}" alt="Logo" style="max-height: ${isHalfLetter ? '65px' : '85px'}; max-width: ${isHalfLetter ? '160px' : '200px'}; object-fit: contain; border-radius: 4px;" />
           ` : ''}
           <div>
             <div style="font-size: ${isHalfLetter ? '16px' : '20px'}; font-weight: 900; text-transform: uppercase; color: #0f172a; letter-spacing: -0.5px;">
