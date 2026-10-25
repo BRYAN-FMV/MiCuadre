@@ -17,7 +17,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase, saveServiceToSupabase, deleteServiceSupabase, saveStaffToSupabase, deleteStaffSupabase, saveAppointmentToSupabase, deleteAppointmentSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, backupTenantTicketPaperWidth, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase, saveServiceToSupabase, deleteServiceSupabase, saveStaffToSupabase, deleteStaffSupabase, saveAppointmentToSupabase, deleteAppointmentSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 /**
@@ -435,6 +435,10 @@ export const useAppStore = create<AppState>()(
           backupTenantFoodEnabled(updatedTenant.id, updatedTenant.isFoodEnabled);
         }
 
+        if (updatedTenant.ticketPaperWidth) {
+          backupTenantTicketPaperWidth(updatedTenant.id, updatedTenant.ticketPaperWidth);
+        }
+
         if (isSupabaseConfigured()) {
           supabase.from('tenants').update({
             name: updatedTenant.name,
@@ -484,6 +488,10 @@ export const useAppStore = create<AppState>()(
 
         if (typeof updatedActiveTenant.isFoodEnabled === 'boolean') {
           backupTenantFoodEnabled(id, updatedActiveTenant.isFoodEnabled);
+        }
+
+        if (updatedActiveTenant.ticketPaperWidth) {
+          backupTenantTicketPaperWidth(id, updatedActiveTenant.ticketPaperWidth);
         }
 
         return { tenants: updatedTenants, tenant: updatedActiveTenant };

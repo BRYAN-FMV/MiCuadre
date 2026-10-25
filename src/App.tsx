@@ -32,7 +32,8 @@ import {
   pushLocalDataToCloud,
   syncAllCloudData,
   processOfflineQueue,
-  getStoredTenantFoodEnabled
+  getStoredTenantFoodEnabled,
+  getStoredTenantTicketPaperWidth
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -143,10 +144,17 @@ export const App: React.FC = () => {
               || storedFood
               || false;
 
+            const storedPaperWidth = getStoredTenantTicketPaperWidth(matched.id);
+            const resolvedPaperWidth = localMatched?.ticketPaperWidth
+              || matched.ticketPaperWidth
+              || storedPaperWidth
+              || '58mm';
+
             const mergedMatched: Tenant = {
               ...localMatched,
               ...matched,
-              isFoodEnabled: resolvedFoodEnabled
+              isFoodEnabled: resolvedFoodEnabled,
+              ticketPaperWidth: resolvedPaperWidth
             };
 
             setRememberedStore(rawSlug, mergedMatched.id);

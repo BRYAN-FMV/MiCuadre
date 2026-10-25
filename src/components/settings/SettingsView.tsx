@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors, FileText, Shield, AlertCircle } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions, PrintPaperFormat } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
-import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable } from '../../lib/supabaseService';
+import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantTicketPaperWidth, getStoredTenantTicketPaperWidth } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
 import { compressImageToWebP } from '../../lib/imageUtils';
@@ -48,8 +48,15 @@ export const SettingsView: React.FC = () => {
   const [address, setAddress] = useState(tenant.address || '');
   const [businessType, setBusinessType] = useState<BusinessType>(tenant.businessType || 'RETAIL');
   const [accessPassword, setAccessPassword] = useState(tenant.accessPassword || '');
-  const [ticketPaperWidth, setTicketPaperWidth] = useState<PrintPaperFormat>(tenant.ticketPaperWidth || '58mm');
+  const [ticketPaperWidth, setTicketPaperWidth] = useState<PrintPaperFormat>(tenant.ticketPaperWidth || getStoredTenantTicketPaperWidth(tenant.id) || '58mm');
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+
+  useEffect(() => {
+    const activeFormat = tenant.ticketPaperWidth || getStoredTenantTicketPaperWidth(tenant.id);
+    if (activeFormat) {
+      setTicketPaperWidth(activeFormat);
+    }
+  }, [tenant.id, tenant.ticketPaperWidth]);
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | 'beta' | 'cookies'>('terms');
 
   // Loyalty Settings State
@@ -848,7 +855,13 @@ export const SettingsView: React.FC = () => {
             <select
               className="input-control"
               value={ticketPaperWidth}
-              onChange={(e) => setTicketPaperWidth(e.target.value as PrintPaperFormat)}
+              onChange={(e) => {
+                const newWidth = e.target.value as PrintPaperFormat;
+                setTicketPaperWidth(newWidth);
+                updateTenantSettings({ ticketPaperWidth: newWidth });
+                backupTenantTicketPaperWidth(tenant.id, newWidth);
+                toast.success(`Formato de papel configurado en ${newWidth}`);
+              }}
             >
               <option value="58mm">58 mm - Rollo Térmico Compacto (Portátil Bluetooth / USB)</option>
               <option value="80mm">80 mm - Rollo Térmico Estándar (Epson, Nenotech, Bixolon, Xprinter)</option>

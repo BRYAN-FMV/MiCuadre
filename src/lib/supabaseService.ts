@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Product, Sale, CartLine, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, ProductPriceType, UserPermissions, MenuItem, DeliveryDriver, FoodOrder, Staff, Appointment, ServiceSupply } from '../types';
+import { Product, Sale, CartLine, PurchaseInvoice, Supplier, Service, Tenant, FiscalRange, UserProfile, CashShift, CashMovement, Expense, ProductPresentation, ProductPriceType, UserPermissions, MenuItem, DeliveryDriver, FoodOrder, Staff, Appointment, ServiceSupply, PrintPaperFormat } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SUPPLIERS } from './mockData';
 import { isValidUUID, normalizeSlug, generateUUID } from './security';
 import { useAppStore } from '../store/useAppStore';
@@ -104,6 +104,32 @@ export function getStoredTenantFoodEnabled(tenantId: string): boolean | undefine
     const val = localStorage.getItem(key);
     if (val === 'true') return true;
     if (val === 'false') return false;
+    return undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
+export function backupTenantTicketPaperWidth(tenantId: string, paperWidth: PrintPaperFormat): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(`micuadre_paper_width_${tenantId}`, paperWidth);
+    localStorage.setItem('micuadre_paper_width_global', paperWidth);
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+export function getStoredTenantTicketPaperWidth(tenantId?: string): PrintPaperFormat | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    if (tenantId) {
+      const key = `micuadre_paper_width_${tenantId}`;
+      const val = localStorage.getItem(key) as PrintPaperFormat;
+      if (val === '58mm' || val === '80mm' || val === 'CARTA' || val === 'MEDIA_CARTA') return val;
+    }
+    const globalVal = localStorage.getItem('micuadre_paper_width_global') as PrintPaperFormat;
+    if (globalVal === '58mm' || globalVal === '80mm' || globalVal === 'CARTA' || globalVal === 'MEDIA_CARTA') return globalVal;
     return undefined;
   } catch (e) {
     return undefined;
@@ -323,7 +349,8 @@ export async function fetchTenantFromSupabase(tenantId: string): Promise<Tenant 
     isFoodEnabled: isFoodEnabled ?? false,
     allowNegativeStock: data.allow_negative_stock,
     currencySymbol: data.currency_symbol || 'L.',
-    accessPassword: data.access_password || undefined
+    accessPassword: data.access_password || undefined,
+    ticketPaperWidth: (data.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(data.id) || '58mm'
   };
 }
 
@@ -359,7 +386,8 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       isFoodEnabled: isFoodEnabled ?? false,
       allowNegativeStock: t.allow_negative_stock,
       currencySymbol: t.currency_symbol || 'L.',
-      accessPassword: t.access_password || undefined
+      accessPassword: t.access_password || undefined,
+      ticketPaperWidth: (t.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(t.id) || '58mm'
     };
   });
 }
@@ -372,6 +400,10 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
 
   if (typeof tenant.isFoodEnabled === 'boolean') {
     backupTenantFoodEnabled(tenant.id, tenant.isFoodEnabled);
+  }
+
+  if (tenant.ticketPaperWidth) {
+    backupTenantTicketPaperWidth(tenant.id, tenant.ticketPaperWidth);
   }
 
   try {

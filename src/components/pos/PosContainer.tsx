@@ -3,6 +3,7 @@ import { useAppStore, HeldOrder, hasUserPermission } from '../../store/useAppSto
 import { formatCurrency, calculateCartTotals, formatPaymentMethod } from '../../lib/monetary';
 import { printSaleReceipt } from '../../lib/thermalPrint';
 import { generateUUID } from '../../lib/security';
+import { getStoredTenantTicketPaperWidth } from '../../lib/supabaseService';
 import { toast } from 'sonner';
 import {
   Search, ShoppingCart, UserCheck, Trash2, Plus, Minus,
@@ -636,10 +637,14 @@ export const PosContainer: React.FC = () => {
     toast.success('Orden retenida en espera');
   };
 
+  const effectivePaperFormat: PrintPaperFormat =
+    tenant.ticketPaperWidth || getStoredTenantTicketPaperWidth(tenant.id) || '58mm';
+
   const handlePrintEscPos = (copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL', overrideFormat?: PrintPaperFormat) => {
     if (!lastCompletedSale) return;
     try {
-      printSaleReceipt(lastCompletedSale, tenant, copyType, overrideFormat);
+      const formatToUse = overrideFormat || effectivePaperFormat;
+      printSaleReceipt(lastCompletedSale, { ...tenant, ticketPaperWidth: formatToUse }, copyType, formatToUse);
     } catch (err) {
       toast.error('Error al imprimir ticket');
     }
@@ -2011,7 +2016,7 @@ export const PosContainer: React.FC = () => {
                   style={{ flex: 1, fontSize: '0.78rem', padding: '0.45rem' }}
                 >
                   <Printer size={14} />
-                  <span>Imprimir Original</span>
+                  <span>Imprimir Original ({effectivePaperFormat})</span>
                 </button>
 
                 {lastCompletedSale.isFiscal && (
@@ -2032,7 +2037,7 @@ export const PosContainer: React.FC = () => {
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => handlePrintEscPos(selectedTicketCopy, '80mm')}
-                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#93c5fd', background: tenant.ticketPaperWidth === '80mm' ? '#eff6ff' : undefined }}
+                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#93c5fd', background: effectivePaperFormat === '80mm' ? '#eff6ff' : undefined, fontWeight: effectivePaperFormat === '80mm' ? 700 : 400 }}
                   title="Imprimir ticket en rollo térmico de 80 mm"
                 >
                   <Printer size={12} style={{ color: '#2563eb' }} />
@@ -2042,7 +2047,7 @@ export const PosContainer: React.FC = () => {
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => handlePrintEscPos(selectedTicketCopy, '58mm')}
-                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#cbd5e1', background: (!tenant.ticketPaperWidth || tenant.ticketPaperWidth === '58mm') ? '#f8fafc' : undefined }}
+                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#cbd5e1', background: effectivePaperFormat === '58mm' ? '#f1f5f9' : undefined, fontWeight: effectivePaperFormat === '58mm' ? 700 : 400 }}
                   title="Imprimir ticket en rollo térmico de 58 mm"
                 >
                   <Printer size={12} style={{ color: '#64748b' }} />

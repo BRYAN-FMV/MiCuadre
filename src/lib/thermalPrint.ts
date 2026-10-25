@@ -1,6 +1,7 @@
 import { Sale, Tenant, PrintPaperFormat } from '../types';
 import { formatCurrency, numberToSpanishWords, formatPaymentMethod } from './monetary';
 import { KitchenTicketData } from './escPos';
+import { getStoredTenantTicketPaperWidth } from './supabaseService';
 
 export interface PaymentReceiptData {
   tenant: Tenant;
@@ -92,8 +93,8 @@ export function printHtmlThermal(
       box-sizing: border-box;
     `;
   } else {
-    const ticketWidth = is80mm ? '74mm' : '49mm';
-    const padding = is80mm ? '4mm 3mm 8mm 3mm' : '4mm 2.5mm 8mm 2.5mm';
+    const ticketWidth = is80mm ? '72mm' : '48mm';
+    const padding = is80mm ? '4mm 4mm 8mm 6.5mm' : '4mm 3mm 8mm 6mm';
     const fontSize = is80mm ? '13px' : '11px';
     pageCss = `
       @page {
@@ -772,7 +773,11 @@ export function printSaleReceipt(
   copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL',
   overrideFormat?: PrintPaperFormat
 ): void {
-  const format: PrintPaperFormat = overrideFormat || tenant.ticketPaperWidth || '58mm';
+  const format: PrintPaperFormat =
+    overrideFormat ||
+    tenant.ticketPaperWidth ||
+    getStoredTenantTicketPaperWidth(tenant?.id) ||
+    '58mm';
   if (format === 'CARTA' || format === 'MEDIA_CARTA') {
     const html = generateInvoiceLetterHtml(sale, tenant, copyType, format === 'MEDIA_CARTA');
     printHtmlThermal(html, format);
@@ -810,7 +815,8 @@ export function printKitchenTicket(
  */
 export function printPaymentReceipt(data: PaymentReceiptData): void {
   const html = generatePaymentReceiptHtml(data);
-  printHtmlThermal(html, data.tenant?.ticketPaperWidth || '58mm');
+  const width = data.tenant?.ticketPaperWidth || getStoredTenantTicketPaperWidth(data.tenant?.id) || '58mm';
+  printHtmlThermal(html, width);
 }
 
 /**
@@ -818,5 +824,6 @@ export function printPaymentReceipt(data: PaymentReceiptData): void {
  */
 export function printZReport(data: ZReportPrintData): void {
   const html = generateZReportHtml(data);
-  printHtmlThermal(html, data.tenant?.ticketPaperWidth || '58mm');
+  const width = data.tenant?.ticketPaperWidth || getStoredTenantTicketPaperWidth(data.tenant?.id) || '58mm';
+  printHtmlThermal(html, width);
 }
