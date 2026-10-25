@@ -12,6 +12,7 @@ import {
   shouldPrePrintLogo,
   printFeedLogoPrime
 } from './thermalPrint';
+import { backupTenantLogo, getStoredTenantLogo } from './supabaseService';
 import { Sale, Tenant } from '../types';
 
 describe('Thermal Print Engine (thermalPrint.ts)', () => {
@@ -406,6 +407,39 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
       expect(() => {
         printFeedLogoPrime(tenantWithPrePrint);
       }).not.toThrow();
+    });
+
+    it('should strictly respect multi-tenant isolation for logos without cross-tenant leakage', () => {
+      const tenantAId = 'tenant-aaa-111';
+      const tenantBId = 'tenant-bbb-222';
+      const logoA = 'data:image/webp;base64,AAAALogoForTenantA';
+
+      // Save logo for Tenant A
+      backupTenantLogo(tenantAId, logoA);
+
+      // Verify Tenant A retrieves its own logo
+      expect(getStoredTenantLogo(tenantAId)).toBe(logoA);
+
+      // Verify Tenant B without logo returns undefined (never leaks Tenant A logo)
+      expect(getStoredTenantLogo(tenantBId)).toBeUndefined();
+      expect(getStoredTenantLogo(undefined)).toBeUndefined();
+
+      // Tenant B receipts should not contain Tenant A logo
+      const tenantB: Tenant = {
+        ...sampleTenant,
+        id: tenantBId,
+        name: 'Comercio B Sin Logo',
+        logoUrl: undefined,
+        prePrintLogoOnFeed: false
+      };
+
+      const receiptB = generateSaleReceiptHtml(sampleSimpleSale, tenantB);
+      expect(receiptB).not.toContain('<img');
+      expect(receiptB).not.toContain(logoA);
+
+      // Clean up
+      backupTenantLogo(tenantAId, undefined);
+      expect(getStoredTenantLogo(tenantAId)).toBeUndefined();
     });
   });
 });

@@ -352,7 +352,7 @@ export const SettingsView: React.FC = () => {
       setLogoUrl(tenant.logoUrl);
     } else {
       const stored = getStoredTenantLogo(tenant.id);
-      if (stored) setLogoUrl(stored);
+      setLogoUrl(stored || '');
     }
   }, [tenant.logoUrl, tenant.id]);
 

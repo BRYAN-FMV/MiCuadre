@@ -136,30 +136,34 @@ export function getStoredTenantTicketPaperWidth(tenantId?: string): PrintPaperFo
   }
 }
 
+// Purge deprecated legacy global keys on module load to guarantee multi-tenant brand isolation
+if (typeof localStorage !== 'undefined') {
+  try {
+    localStorage.removeItem('micuadre_logo_global');
+    localStorage.removeItem('micuadre_preprint_logo_global');
+  } catch (_) {}
+}
+
 export function backupTenantLogo(tenantId: string, logoUrl?: string): void {
   if (typeof localStorage === 'undefined' || !tenantId) return;
   try {
     if (logoUrl) {
       localStorage.setItem(`micuadre_logo_${tenantId}`, logoUrl);
-      localStorage.setItem('micuadre_logo_global', logoUrl);
     } else {
       localStorage.removeItem(`micuadre_logo_${tenantId}`);
-      localStorage.removeItem('micuadre_logo_global');
     }
+    // Clean up deprecated global key to ensure strict multi-tenant isolation
+    localStorage.removeItem('micuadre_logo_global');
   } catch (e) {
     // Ignore storage quota errors
   }
 }
 
 export function getStoredTenantLogo(tenantId?: string): string | undefined {
-  if (typeof localStorage === 'undefined') return undefined;
+  if (typeof localStorage === 'undefined' || !tenantId) return undefined;
   try {
-    if (tenantId) {
-      const val = localStorage.getItem(`micuadre_logo_${tenantId}`);
-      if (val) return val;
-    }
-    const globalVal = localStorage.getItem('micuadre_logo_global');
-    return globalVal || undefined;
+    const val = localStorage.getItem(`micuadre_logo_${tenantId}`);
+    return val || undefined;
   } catch (e) {
     return undefined;
   }
@@ -169,19 +173,16 @@ export function backupTenantPrePrintLogo(tenantId: string, enabled: boolean): vo
   if (typeof localStorage === 'undefined' || !tenantId) return;
   try {
     localStorage.setItem(`micuadre_preprint_logo_${tenantId}`, enabled ? '1' : '0');
-    localStorage.setItem('micuadre_preprint_logo_global', enabled ? '1' : '0');
+    // Clean up deprecated global key to ensure strict multi-tenant isolation
+    localStorage.removeItem('micuadre_preprint_logo_global');
   } catch (e) {}
 }
 
 export function getStoredTenantPrePrintLogo(tenantId?: string): boolean | undefined {
-  if (typeof localStorage === 'undefined') return undefined;
+  if (typeof localStorage === 'undefined' || !tenantId) return undefined;
   try {
-    if (tenantId) {
-      const val = localStorage.getItem(`micuadre_preprint_logo_${tenantId}`);
-      if (val !== null) return val === '1';
-    }
-    const globalVal = localStorage.getItem('micuadre_preprint_logo_global');
-    if (globalVal !== null) return globalVal === '1';
+    const val = localStorage.getItem(`micuadre_preprint_logo_${tenantId}`);
+    if (val !== null) return val === '1';
     return undefined;
   } catch (e) {
     return undefined;
