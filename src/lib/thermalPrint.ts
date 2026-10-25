@@ -208,9 +208,11 @@ export function printHtmlThermal(
       width: 100%;
     }
     .feed-preprint-logo {
-      margin-top: 4mm;
-      margin-bottom: 6mm;
+      margin-top: ${is80mm ? '25mm' : '18mm'};
+      margin-bottom: ${is80mm ? '5mm' : '3mm'};
       text-align: center;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
   </style>
 </head>
@@ -219,7 +221,7 @@ export function printHtmlThermal(
   ${!isStandardSheet ? `
     <div class="feed-container">
       ${Boolean(options?.prePrintLogo && options?.logoUrl) ? `
-        <div class="feed-preprint-logo">
+        <div class="feed-preprint-logo" style="margin-top: ${is80mm ? '25mm' : '18mm'}; margin-bottom: ${is80mm ? '5mm' : '3mm'}; text-align: center;">
           <img src="${options?.logoUrl}" alt="Logo Pre-impreso" style="max-height: ${is80mm ? '70px' : '50px'}; max-width: ${is80mm ? '180px' : '120px'}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
       ` : `
