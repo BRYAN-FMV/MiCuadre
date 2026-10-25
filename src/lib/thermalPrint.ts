@@ -128,8 +128,8 @@ export function printHtmlThermal(
       box-sizing: border-box;
     `;
   } else {
-    const ticketWidth = is80mm ? '74mm' : '48mm';
-    const padding = is80mm ? '2mm 4.5mm 0mm 4.5mm' : '2mm 3mm 0mm 4.5mm';
+    const ticketWidth = is80mm ? '74mm' : '52mm';
+    const padding = is80mm ? '2mm 3mm 0mm 3mm' : '2mm 1.5mm 0mm 1.5mm';
     const fontSize = is80mm ? '13px' : '11px';
     pageCss = `
       @page {
@@ -208,8 +208,8 @@ export function printHtmlThermal(
       width: 100%;
     }
     .feed-preprint-logo {
-      margin-top: ${is80mm ? '25mm' : '18mm'};
-      margin-bottom: ${is80mm ? '5mm' : '3mm'};
+      margin-top: ${is80mm ? '25mm' : '24mm'};
+      margin-bottom: ${is80mm ? '5mm' : '4mm'};
       text-align: center;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
@@ -221,7 +221,7 @@ export function printHtmlThermal(
   ${!isStandardSheet ? `
     <div class="feed-container">
       ${Boolean(options?.prePrintLogo && options?.logoUrl) ? `
-        <div class="feed-preprint-logo" style="margin-top: ${is80mm ? '25mm' : '18mm'}; margin-bottom: ${is80mm ? '5mm' : '3mm'}; text-align: center;">
+        <div class="feed-preprint-logo" style="margin-top: ${is80mm ? '25mm' : '24mm'}; margin-bottom: ${is80mm ? '5mm' : '4mm'}; text-align: center;">
           <img src="${options?.logoUrl}" alt="Logo Pre-impreso" style="max-height: ${is80mm ? '110px' : '75px'}; max-width: ${is80mm ? '240px' : '160px'}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
       ` : `
