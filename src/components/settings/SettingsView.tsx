@@ -556,13 +556,13 @@ export const SettingsView: React.FC = () => {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
-                  Esquema de Base de Datos (Empaques y Permisos)
+                  Esquema de Base de Datos (Logotipo, Impresora, Empaques y Permisos)
                 </span>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
-                    const sql = `-- Copiar y ejecutar en Supabase -> SQL Editor\nALTER TABLE products ADD COLUMN IF NOT EXISTS presentations JSONB DEFAULT '[]'::jsonb;\nALTER TABLE profiles ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{}'::jsonb;\nNOTIFY pgrst, 'reload schema';`;
+                    const sql = `-- Copiar y ejecutar en Supabase -> SQL Editor\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS ticket_paper_width VARCHAR(20) DEFAULT '58mm';\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_food_enabled BOOLEAN DEFAULT FALSE;\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_services_enabled BOOLEAN DEFAULT TRUE;\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_wholesale_enabled BOOLEAN DEFAULT TRUE;\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_loyalty_enabled BOOLEAN DEFAULT TRUE;\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS access_password VARCHAR(100);\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS allow_negative_stock BOOLEAN DEFAULT FALSE;\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS currency_symbol VARCHAR(5) DEFAULT 'L.';\nALTER TABLE products ADD COLUMN IF NOT EXISTS presentations JSONB DEFAULT '[]'::jsonb;\nALTER TABLE profiles ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{}'::jsonb;\nNOTIFY pgrst, 'reload schema';`;
                     navigator.clipboard.writeText(sql);
                     toast.success('Script SQL copiado al portapapeles. Pégalo en Supabase SQL Editor.');
                   }}
@@ -573,7 +573,7 @@ export const SettingsView: React.FC = () => {
                 </button>
               </div>
               <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0, lineHeight: 1.45 }}>
-                Si agregas productos por empaque o permisos granulares para cajeros, ejecuta este script SQL en Supabase para sincronizar dichas columnas en la nube. Mientras tanto, el sistema preserva tus datos automáticamente en almacenamiento local sin interrumpir tus ventas ni mostrar errores.
+                Si subes el logo de tu negocio, configuras el papel de ticket o permisos de cajeros, ejecuta este script SQL en Supabase para sincronizar dichas columnas en la nube. Mientras tanto, el sistema preserva tus datos automáticamente en almacenamiento local sin interrumpir tus ventas ni mostrar errores.
               </p>
             </div>
           </form>

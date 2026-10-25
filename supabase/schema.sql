@@ -24,6 +24,7 @@ CREATE TABLE tenants (
     allow_negative_stock BOOLEAN DEFAULT FALSE,
     currency_symbol VARCHAR(5) DEFAULT 'L.',
     access_password VARCHAR(100),                -- Store master access password
+    ticket_paper_width VARCHAR(20) DEFAULT '58mm',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

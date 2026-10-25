@@ -7,10 +7,12 @@
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_loyalty_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_services_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_wholesale_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_food_enabled BOOLEAN DEFAULT FALSE;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS access_password VARCHAR(100);
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS allow_negative_stock BOOLEAN DEFAULT FALSE;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS currency_symbol VARCHAR(5) DEFAULT 'L.';
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ticket_paper_width VARCHAR(20) DEFAULT '58mm';
 
 -- 2. Asegurar politicas RLS completas en 'tenants' (lectura, insercion, actualizacion y eliminacion)
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
