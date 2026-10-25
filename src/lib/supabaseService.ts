@@ -165,6 +165,30 @@ export function getStoredTenantLogo(tenantId?: string): string | undefined {
   }
 }
 
+export function backupTenantPrePrintLogo(tenantId: string, enabled: boolean): void {
+  if (typeof localStorage === 'undefined' || !tenantId) return;
+  try {
+    localStorage.setItem(`micuadre_preprint_logo_${tenantId}`, enabled ? '1' : '0');
+    localStorage.setItem('micuadre_preprint_logo_global', enabled ? '1' : '0');
+  } catch (e) {}
+}
+
+export function getStoredTenantPrePrintLogo(tenantId?: string): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    if (tenantId) {
+      const val = localStorage.getItem(`micuadre_preprint_logo_${tenantId}`);
+      if (val !== null) return val === '1';
+    }
+    const globalVal = localStorage.getItem('micuadre_preprint_logo_global');
+    if (globalVal !== null) return globalVal === '1';
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+
 export function backupServiceSupplies(tenantId: string, serviceId: string, supplies?: ServiceSupply[]) {
   if (typeof localStorage === 'undefined' || !supplies) return;
   try {
@@ -379,7 +403,10 @@ export async function fetchTenantFromSupabase(tenantId: string): Promise<Tenant 
     allowNegativeStock: data.allow_negative_stock,
     currencySymbol: data.currency_symbol || 'L.',
     accessPassword: data.access_password || undefined,
-    ticketPaperWidth: (data.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(data.id) || '58mm'
+    ticketPaperWidth: (data.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(data.id) || '58mm',
+    prePrintLogoOnFeed: typeof data.pre_print_logo_on_feed === 'boolean'
+      ? data.pre_print_logo_on_feed
+      : getStoredTenantPrePrintLogo(data.id)
   };
 }
 
@@ -401,6 +428,9 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       : getStoredTenantFoodEnabled(t.id);
 
     const logoUrl = t.logo_url || getStoredTenantLogo(t.id);
+    const prePrintLogo = typeof t.pre_print_logo_on_feed === 'boolean'
+      ? t.pre_print_logo_on_feed
+      : getStoredTenantPrePrintLogo(t.id);
 
     return {
       id: t.id,
@@ -419,7 +449,8 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       currencySymbol: t.currency_symbol || 'L.',
       accessPassword: t.access_password || undefined,
       ticketPaperWidth: (t.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(t.id) || '58mm',
-      logoUrl: logoUrl || undefined
+      logoUrl: logoUrl || undefined,
+      prePrintLogoOnFeed: prePrintLogo
     };
   });
 }
@@ -442,6 +473,10 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
     backupTenantLogo(tenant.id, tenant.logoUrl);
   }
 
+  if (typeof tenant.prePrintLogoOnFeed === 'boolean') {
+    backupTenantPrePrintLogo(tenant.id, tenant.prePrintLogoOnFeed);
+  }
+
   try {
     let { error } = await supabase.from('tenants').upsert({
       id: tenant.id,
@@ -460,7 +495,8 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
       currency_symbol: tenant.currencySymbol || 'L.',
       access_password: tenant.accessPassword || null,
       logo_url: tenant.logoUrl || null,
-      ticket_paper_width: tenant.ticketPaperWidth || '58mm'
+      ticket_paper_width: tenant.ticketPaperWidth || '58mm',
+      pre_print_logo_on_feed: tenant.prePrintLogoOnFeed ?? false
     }, { onConflict: 'id' });
 
     // Fallback: If older database schema lacks newer columns, retry with base columns

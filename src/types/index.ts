@@ -31,6 +31,7 @@ export interface Tenant {
   monthlyPrice?: number;
   accessPassword?: string; // Master store entrance password for access modal
   ticketPaperWidth?: PrintPaperFormat; // Receipt paper format selector ('58mm' | '80mm' | 'CARTA' | 'MEDIA_CARTA')
+  prePrintLogoOnFeed?: boolean; // Pre-print logo at bottom feed to save paper on next ticket
 }
 
 export interface UserPermissions {

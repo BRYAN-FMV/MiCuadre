@@ -34,7 +34,8 @@ import {
   processOfflineQueue,
   getStoredTenantFoodEnabled,
   getStoredTenantTicketPaperWidth,
-  getStoredTenantLogo
+  getStoredTenantLogo,
+  getStoredTenantPrePrintLogo
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -157,12 +158,20 @@ export const App: React.FC = () => {
               || storedLogo
               || undefined;
 
+            const storedPrePrintLogo = getStoredTenantPrePrintLogo(matched.id);
+            const resolvedPrePrintLogo = typeof matched.prePrintLogoOnFeed === 'boolean'
+              ? matched.prePrintLogoOnFeed
+              : (typeof localMatched?.prePrintLogoOnFeed === 'boolean'
+                ? localMatched.prePrintLogoOnFeed
+                : storedPrePrintLogo);
+
             const mergedMatched: Tenant = {
               ...localMatched,
               ...matched,
               logoUrl: resolvedLogoUrl,
               isFoodEnabled: resolvedFoodEnabled,
-              ticketPaperWidth: resolvedPaperWidth
+              ticketPaperWidth: resolvedPaperWidth,
+              prePrintLogoOnFeed: resolvedPrePrintLogo
             };
 
             setRememberedStore(rawSlug, mergedMatched.id);

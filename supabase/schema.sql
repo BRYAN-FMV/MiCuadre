@@ -25,6 +25,7 @@ CREATE TABLE tenants (
     currency_symbol VARCHAR(5) DEFAULT 'L.',
     access_password VARCHAR(100),                -- Store master access password
     ticket_paper_width VARCHAR(20) DEFAULT '58mm',
+    pre_print_logo_on_feed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

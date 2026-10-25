@@ -1,7 +1,7 @@
 import { Sale, Tenant, PrintPaperFormat } from '../types';
 import { formatCurrency, numberToSpanishWords, formatPaymentMethod } from './monetary';
 import { KitchenTicketData } from './escPos';
-import { getStoredTenantTicketPaperWidth, getStoredTenantLogo } from './supabaseService';
+import { getStoredTenantTicketPaperWidth, getStoredTenantLogo, getStoredTenantPrePrintLogo } from './supabaseService';
 
 export interface PaymentReceiptData {
   tenant: Tenant;
@@ -49,13 +49,33 @@ function getOrCreatePrintIframe(): HTMLIFrameElement {
   return printIframeInstance;
 }
 
+export interface PrintHtmlThermalOptions {
+  prePrintLogo?: boolean;
+  logoUrl?: string;
+}
+
+/**
+ * Determines whether thermal printing should pre-print the logo at the cut feed.
+ * Enables zero-paper-waste by printing the header logo on the tear margin for the subsequent ticket.
+ */
+export function shouldPrePrintLogo(tenant?: Tenant): boolean {
+  if (!tenant) return false;
+  const isContinuous = tenant.ticketPaperWidth !== 'CARTA' && tenant.ticketPaperWidth !== 'MEDIA_CARTA';
+  const hasLogo = Boolean(tenant.logoUrl || getStoredTenantLogo(tenant.id));
+  const isEnabled = typeof tenant.prePrintLogoOnFeed === 'boolean'
+    ? tenant.prePrintLogoOnFeed
+    : getStoredTenantPrePrintLogo(tenant.id);
+  return Boolean(isContinuous && hasLogo && isEnabled);
+}
+
 /**
  * Sends clean HTML content directly to the browser print engine using a hidden iframe.
  * Avoids raw binary ESC/POS corruption and blank screen issues.
  */
 export function printHtmlThermal(
   htmlContent: string,
-  paperWidth: PrintPaperFormat = '58mm'
+  paperWidth: PrintPaperFormat = '58mm',
+  options?: PrintHtmlThermalOptions
 ): void {
   const iframe = getOrCreatePrintIframe();
 
@@ -181,13 +201,27 @@ export function printHtmlThermal(
       overflow: hidden;
       width: 100%;
     }
+    .feed-cut-line.feed-cut-line-preprint {
+      margin-top: 3mm !important;
+      margin-bottom: 2mm !important;
+    }
+    .feed-preprint-logo {
+      margin-top: 2mm;
+      margin-bottom: 6mm;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   ${htmlContent}
   ${!isStandardSheet ? `
     <div class="feed-container">
-      <div class="feed-cut-line">${is80mm ? '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -' : '- - - - - - - - - - - - - - - - - - - -'}</div>
+      <div class="feed-cut-line ${Boolean(options?.prePrintLogo && options?.logoUrl) ? 'feed-cut-line-preprint' : ''}">${is80mm ? '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -' : '- - - - - - - - - - - - - - - - - - - -'}</div>
+      ${Boolean(options?.prePrintLogo && options?.logoUrl) ? `
+        <div class="feed-preprint-logo">
+          <img src="${options?.logoUrl}" alt="Logo Pre-impreso" style="max-height: ${is80mm ? '70px' : '50px'}; max-width: ${is80mm ? '180px' : '120px'}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        </div>
+      ` : ''}
     </div>
   ` : ''}
 </body>
@@ -210,9 +244,12 @@ export function printHtmlThermal(
 export function generateSaleReceiptHtml(
   sale: Sale,
   tenant: Tenant,
-  copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL'
+  copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL',
+  options?: { prePrintLogo?: boolean }
 ): string {
+  const isPrePrint = options?.prePrintLogo !== undefined ? options.prePrintLogo : shouldPrePrintLogo(tenant);
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+  const showTopLogo = Boolean(logoUrl && !isPrePrint);
   const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
   const logoMaxHeight = is80mm ? '75px' : '52px';
   const logoMaxWidth = is80mm ? '180px' : '120px';
@@ -235,7 +272,7 @@ export function generateSaleReceiptHtml(
 
     return `
       <div class="text-center">
-        ${logoUrl ? `
+        ${showTopLogo ? `
           <div style="margin-bottom: 6px; text-align: center;">
             <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
           </div>
@@ -326,7 +363,7 @@ export function generateSaleReceiptHtml(
 
   return `
     <div class="text-center">
-      ${logoUrl ? `
+      ${showTopLogo ? `
         <div style="margin-bottom: 6px; text-align: center;">
           <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
@@ -442,9 +479,14 @@ export function generateKitchenTicketHtml(data: KitchenTicketData): string {
 /**
  * Generates thermal receipt HTML for Credit Payment (Abono a Fiado).
  */
-export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
+export function generatePaymentReceiptHtml(
+  data: PaymentReceiptData,
+  options?: { prePrintLogo?: boolean }
+): string {
   const { tenant, payment, prevBalance, newBalance } = data;
+  const isPrePrint = options?.prePrintLogo !== undefined ? options.prePrintLogo : shouldPrePrintLogo(tenant);
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+  const showTopLogo = Boolean(logoUrl && !isPrePrint);
   const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
   const logoMaxHeight = is80mm ? '75px' : '52px';
   const logoMaxWidth = is80mm ? '180px' : '120px';
@@ -454,7 +496,7 @@ export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
 
   return `
     <div class="text-center">
-      ${logoUrl ? `
+      ${showTopLogo ? `
         <div style="margin-bottom: 6px; text-align: center;">
           <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
@@ -512,9 +554,14 @@ export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
 /**
  * Generates thermal receipt HTML for Z-Report (Cierre de Caja).
  */
-export function generateZReportHtml(data: ZReportPrintData): string {
+export function generateZReportHtml(
+  data: ZReportPrintData,
+  options?: { prePrintLogo?: boolean }
+): string {
   const { tenant, zReport, cajaName } = data;
+  const isPrePrint = options?.prePrintLogo !== undefined ? options.prePrintLogo : shouldPrePrintLogo(tenant);
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+  const showTopLogo = Boolean(logoUrl && !isPrePrint);
   const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
   const logoMaxHeight = is80mm ? '75px' : '52px';
   const logoMaxWidth = is80mm ? '180px' : '120px';
@@ -524,7 +571,7 @@ export function generateZReportHtml(data: ZReportPrintData): string {
 
   return `
     <div class="text-center">
-      ${logoUrl ? `
+      ${showTopLogo ? `
         <div style="margin-bottom: 6px; text-align: center;">
           <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
@@ -847,8 +894,10 @@ export function printSaleReceipt(
     const html = generateInvoiceLetterHtml(sale, tenant, copyType, format === 'MEDIA_CARTA');
     printHtmlThermal(html, format);
   } else {
-    const html = generateSaleReceiptHtml(sale, tenant, copyType);
-    printHtmlThermal(html, format);
+    const prePrint = shouldPrePrintLogo(tenant);
+    const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+    const html = generateSaleReceiptHtml(sale, tenant, copyType, { prePrintLogo: prePrint });
+    printHtmlThermal(html, format, { prePrintLogo: prePrint, logoUrl });
   }
 }
 
@@ -879,16 +928,20 @@ export function printKitchenTicket(
  * Convenient high-level helper to print a Credit Payment receipt.
  */
 export function printPaymentReceipt(data: PaymentReceiptData): void {
-  const html = generatePaymentReceiptHtml(data);
   const width = data.tenant?.ticketPaperWidth || getStoredTenantTicketPaperWidth(data.tenant?.id) || '58mm';
-  printHtmlThermal(html, width);
+  const prePrint = shouldPrePrintLogo(data.tenant);
+  const logoUrl = data.tenant?.logoUrl || getStoredTenantLogo(data.tenant?.id);
+  const html = generatePaymentReceiptHtml(data, { prePrintLogo: prePrint });
+  printHtmlThermal(html, width, { prePrintLogo: prePrint, logoUrl });
 }
 
 /**
  * Convenient high-level helper to print a Z-Report.
  */
 export function printZReport(data: ZReportPrintData): void {
-  const html = generateZReportHtml(data);
   const width = data.tenant?.ticketPaperWidth || getStoredTenantTicketPaperWidth(data.tenant?.id) || '58mm';
-  printHtmlThermal(html, width);
+  const prePrint = shouldPrePrintLogo(data.tenant);
+  const logoUrl = data.tenant?.logoUrl || getStoredTenantLogo(data.tenant?.id);
+  const html = generateZReportHtml(data, { prePrintLogo: prePrint });
+  printHtmlThermal(html, width, { prePrintLogo: prePrint, logoUrl });
 }

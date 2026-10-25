@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors, FileText, Shield, AlertCircle } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions, PrintPaperFormat } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
-import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantTicketPaperWidth, getStoredTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo } from '../../lib/supabaseService';
+import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantTicketPaperWidth, getStoredTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo, backupTenantPrePrintLogo, getStoredTenantPrePrintLogo } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
 import { compressImageToWebP, getDataUrlSizeKb } from '../../lib/imageUtils';
@@ -49,6 +49,11 @@ export const SettingsView: React.FC = () => {
   const [businessType, setBusinessType] = useState<BusinessType>(tenant.businessType || 'RETAIL');
   const [accessPassword, setAccessPassword] = useState(tenant.accessPassword || '');
   const [ticketPaperWidth, setTicketPaperWidth] = useState<PrintPaperFormat>(tenant.ticketPaperWidth || getStoredTenantTicketPaperWidth(tenant.id) || '58mm');
+  const [prePrintLogoOnFeed, setPrePrintLogoOnFeed] = useState<boolean>(
+    typeof tenant.prePrintLogoOnFeed === 'boolean'
+      ? tenant.prePrintLogoOnFeed
+      : getStoredTenantPrePrintLogo(tenant.id)
+  );
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
 
   useEffect(() => {
@@ -57,6 +62,13 @@ export const SettingsView: React.FC = () => {
       setTicketPaperWidth(activeFormat);
     }
   }, [tenant.id, tenant.ticketPaperWidth]);
+
+  useEffect(() => {
+    const activePrePrint = typeof tenant.prePrintLogoOnFeed === 'boolean'
+      ? tenant.prePrintLogoOnFeed
+      : getStoredTenantPrePrintLogo(tenant.id);
+    setPrePrintLogoOnFeed(activePrePrint);
+  }, [tenant.id, tenant.prePrintLogoOnFeed]);
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | 'beta' | 'cookies'>('terms');
 
   // Loyalty Settings State
@@ -371,6 +383,7 @@ export const SettingsView: React.FC = () => {
   const handleSaveTenant = (e: React.FormEvent) => {
     e.preventDefault();
     backupTenantLogo(tenant.id, logoUrl || undefined);
+    backupTenantPrePrintLogo(tenant.id, prePrintLogoOnFeed);
     updateTenantSettings({
       name: tenantName,
       rtn,
@@ -379,7 +392,8 @@ export const SettingsView: React.FC = () => {
       businessType,
       accessPassword: accessPassword.trim() || undefined,
       logoUrl: logoUrl || undefined,
-      ticketPaperWidth
+      ticketPaperWidth,
+      prePrintLogoOnFeed
     });
     toast.success('Datos del comercio, logotipo e impresora guardados.');
   };
@@ -881,6 +895,66 @@ export const SettingsView: React.FC = () => {
               <option value="CARTA">Tamaño Carta (Letter / Hoja Completa - Impresora Estándar de Oficina)</option>
               <option value="MEDIA_CARTA">Media Carta (Statement / Media Hoja - Impresora Estándar Ahorro de Papel)</option>
             </select>
+          </div>
+
+          {/* Pre-impresión de Logotipo en Avance (Ahorro de Papel Térmico) */}
+          <div style={{
+            background: prePrintLogoOnFeed ? '#f0fdf4' : '#f8fafc',
+            border: `1px solid ${prePrintLogoOnFeed ? '#bbf7d0' : '#e2e8f0'}`,
+            borderRadius: '10px',
+            padding: '0.9rem 1rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gridColumn: 'span 2',
+            gap: '1rem',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ flex: 1, minWidth: '260px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <Scissors size={16} style={{ color: prePrintLogoOnFeed ? '#16a34a' : 'var(--accent-primary)' }} />
+                <h4 style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: 700, margin: 0 }}>
+                  Ahorro de Papel Térmico: Pre-imprimir Logotipo en Avance
+                </h4>
+                {prePrintLogoOnFeed && (
+                  <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '0.15rem 0.5rem', borderRadius: '9999px' }}>
+                    AHORRO ACTIVO
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: '0.78rem', color: '#475569', marginTop: '0.3rem', marginBottom: 0, lineHeight: 1.35 }}>
+                Imprime el logotipo en el avance de corte para que quede listo en el encabezado del siguiente ticket. Aprovecha la distancia física (~3 cm) entre el cabezal térmico y la cuchilla de corte, eliminando el papel en blanco superior y ahorrando papel en cada venta.
+              </p>
+              {ticketPaperWidth === 'CARTA' || ticketPaperWidth === 'MEDIA_CARTA' ? (
+                <div style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '0.35rem', fontWeight: 600 }}>
+                  Nota: Esta optimización aplica cuando uses rollos térmicos continuos (58 mm u 80 mm).
+                </div>
+              ) : !logoUrl ? (
+                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.35rem', fontStyle: 'italic' }}>
+                  Nota: Sube el logotipo del comercio abajo para que se imprima en el avance.
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              className={`btn ${prePrintLogoOnFeed ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => {
+                const nextVal = !prePrintLogoOnFeed;
+                setPrePrintLogoOnFeed(nextVal);
+                updateTenantSettings({ prePrintLogoOnFeed: nextVal });
+                backupTenantPrePrintLogo(tenant.id, nextVal);
+                toast.success(
+                  nextVal
+                    ? 'Ahorro de papel activado: El logotipo se pre-imprimirá en el avance de corte.'
+                    : 'Modo estándar activado: El logotipo se imprimirá en la cabecera habitual.'
+                );
+              }}
+              style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', minWidth: '140px', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}
+            >
+              {prePrintLogoOnFeed ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+              <span>{prePrintLogoOnFeed ? 'ACTIVADO' : 'DESACTIVADO'}</span>
+            </button>
           </div>
 
           <div className="form-group" style={{ gridColumn: 'span 2' }}>

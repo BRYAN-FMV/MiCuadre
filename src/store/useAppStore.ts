@@ -17,7 +17,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, backupTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase, saveServiceToSupabase, deleteServiceSupabase, saveStaffToSupabase, deleteStaffSupabase, saveAppointmentToSupabase, deleteAppointmentSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, backupTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo, backupTenantPrePrintLogo, getStoredTenantPrePrintLogo, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase, saveServiceToSupabase, deleteServiceSupabase, saveStaffToSupabase, deleteStaffSupabase, saveAppointmentToSupabase, deleteAppointmentSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 /**
@@ -443,6 +443,10 @@ export const useAppStore = create<AppState>()(
           backupTenantLogo(updatedTenant.id, updatedTenant.logoUrl);
         }
 
+        if (typeof updatedTenant.prePrintLogoOnFeed === 'boolean') {
+          backupTenantPrePrintLogo(updatedTenant.id, updatedTenant.prePrintLogoOnFeed);
+        }
+
         if (isSupabaseConfigured()) {
           supabase.from('tenants').update({
             name: updatedTenant.name,
@@ -458,7 +462,8 @@ export const useAppStore = create<AppState>()(
             is_food_enabled: updatedTenant.isFoodEnabled ?? false,
             access_password: updatedTenant.accessPassword || null,
             logo_url: updatedTenant.logoUrl || null,
-            ticket_paper_width: updatedTenant.ticketPaperWidth || '58mm'
+            ticket_paper_width: updatedTenant.ticketPaperWidth || '58mm',
+            pre_print_logo_on_feed: updatedTenant.prePrintLogoOnFeed ?? false
           }).eq('id', updatedTenant.id).then(async ({ error }) => {
             if (error && error.message.includes('column')) {
               await supabase.from('tenants').update({
@@ -502,6 +507,10 @@ export const useAppStore = create<AppState>()(
 
         if (id) {
           backupTenantLogo(id, updatedActiveTenant.logoUrl);
+        }
+
+        if (typeof updatedActiveTenant.prePrintLogoOnFeed === 'boolean') {
+          backupTenantPrePrintLogo(id, updatedActiveTenant.prePrintLogoOnFeed);
         }
 
         return { tenants: updatedTenants, tenant: updatedActiveTenant };

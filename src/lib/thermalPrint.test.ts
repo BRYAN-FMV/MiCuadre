@@ -6,7 +6,10 @@ import {
   generateZReportHtml,
   generateInvoiceLetterHtml,
   printSaleReceipt,
-  printSaleInvoiceLetter
+  printSaleInvoiceLetter,
+  printPaymentReceipt,
+  printZReport,
+  shouldPrePrintLogo
 } from './thermalPrint';
 import { Sale, Tenant } from '../types';
 
@@ -300,6 +303,100 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
 
       const letterHtml = generateInvoiceLetterHtml(fiscalSale, tenantWithoutLogo, 'ORIGINAL');
       expect(letterHtml).not.toContain('<img');
+    });
+
+    it('should correctly evaluate shouldPrePrintLogo based on paper width, logo existence, and configuration', () => {
+      const tenantWithLogo: Tenant = {
+        ...sampleTenant,
+        ticketPaperWidth: '80mm',
+        logoUrl: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA',
+        prePrintLogoOnFeed: true
+      };
+
+      // Valid thermal roll with logo and enabled: true
+      expect(shouldPrePrintLogo(tenantWithLogo)).toBe(true);
+
+      // Disabled explicitly: false
+      expect(shouldPrePrintLogo({ ...tenantWithLogo, prePrintLogoOnFeed: false })).toBe(false);
+
+      // Missing logo: false
+      expect(shouldPrePrintLogo({ ...tenantWithLogo, logoUrl: undefined })).toBe(false);
+
+      // Sheet paper (CARTA / MEDIA_CARTA): false even if prePrint is true
+      expect(shouldPrePrintLogo({ ...tenantWithLogo, ticketPaperWidth: 'CARTA' })).toBe(false);
+      expect(shouldPrePrintLogo({ ...tenantWithLogo, ticketPaperWidth: 'MEDIA_CARTA' })).toBe(false);
+
+      // Undefined tenant: false
+      expect(shouldPrePrintLogo(undefined)).toBe(false);
+    });
+
+    it('should omit top logo from receipt HTML when prePrintLogo is enabled, to use pre-printed feed logo', () => {
+      const tenantWithPrePrint: Tenant = {
+        ...sampleTenant,
+        ticketPaperWidth: '80mm',
+        logoUrl: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA',
+        prePrintLogoOnFeed: true
+      };
+
+      // In pre-print mode, top header has NO img tag (paper already has it pre-printed at mouth)
+      const simplePrePrintHtml = generateSaleReceiptHtml(sampleSimpleSale, tenantWithPrePrint);
+      expect(simplePrePrintHtml).not.toContain('<img');
+      expect(simplePrePrintHtml).toContain('Pulperia Camila');
+
+      const fiscalPrePrintHtml = generateSaleReceiptHtml(fiscalSale, tenantWithPrePrint, 'ORIGINAL');
+      expect(fiscalPrePrintHtml).not.toContain('<img');
+      expect(fiscalPrePrintHtml).toContain('FACTURA FISCAL');
+
+      // When pre-print is disabled, top header DOES have img tag
+      const normalTenant = { ...tenantWithPrePrint, prePrintLogoOnFeed: false };
+      const normalHtml = generateSaleReceiptHtml(sampleSimpleSale, normalTenant);
+      expect(normalHtml).toContain('<img src="data:image/webp;base64,');
+    });
+
+    it('should dispatch printSaleReceipt, printPaymentReceipt, and printZReport with prePrintLogo enabled without throwing', () => {
+      const tenantWithPrePrint: Tenant = {
+        ...sampleTenant,
+        ticketPaperWidth: '80mm',
+        logoUrl: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA',
+        prePrintLogoOnFeed: true
+      };
+
+      expect(() => {
+        printSaleReceipt(fiscalSale, tenantWithPrePrint, 'ORIGINAL');
+      }).not.toThrow();
+
+      expect(() => {
+        printPaymentReceipt({
+          tenant: tenantWithPrePrint,
+          payment: {
+            id: 'REC-001',
+            customerName: 'Juan Perez',
+            amount: 500,
+            paymentMethod: 'CASH',
+            createdAt: new Date().toISOString(),
+            createdBy: 'Cajero'
+          },
+          prevBalance: 1200,
+          newBalance: 700
+        });
+      }).not.toThrow();
+
+      expect(() => {
+        printZReport({
+          tenant: tenantWithPrePrint,
+          zReport: {
+            openingAmount: 1000,
+            totalCashSales: 5000,
+            totalCardSales: 2000,
+            totalTransferSales: 1000,
+            totalIngresos: 0,
+            totalEgresos: 500,
+            closingSystem: 5500,
+            closingDeclared: 5500,
+            difference: 0
+          }
+        });
+      }).not.toThrow();
     });
   });
 });

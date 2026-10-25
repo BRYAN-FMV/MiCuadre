@@ -13,6 +13,7 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS allow_negative_stock BOOLEAN DEFAUL
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS currency_symbol VARCHAR(5) DEFAULT 'L.';
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ticket_paper_width VARCHAR(20) DEFAULT '58mm';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS pre_print_logo_on_feed BOOLEAN DEFAULT FALSE;
 
 -- 2. Asegurar politicas RLS completas en 'tenants' (lectura, insercion, actualizacion y eliminacion)
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
