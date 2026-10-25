@@ -94,7 +94,7 @@ export function printHtmlThermal(
     `;
   } else {
     const ticketWidth = is80mm ? '72mm' : '48mm';
-    const padding = is80mm ? '4mm 4mm 8mm 6.5mm' : '4mm 3mm 8mm 6mm';
+    const padding = is80mm ? '4mm 4mm 4mm 6.5mm' : '4mm 3mm 4mm 6mm';
     const fontSize = is80mm ? '13px' : '11px';
     pageCss = `
       @page {
@@ -153,10 +153,23 @@ export function printHtmlThermal(
     .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
     table { width: 100%; border-collapse: collapse; font-size: ${is80mm ? '12px' : '10px'}; }
     th, td { padding: 1px 0; vertical-align: top; }
+    .feed-spacer {
+      height: 20mm;
+      min-height: 20mm;
+      width: 100%;
+      display: block;
+      font-size: 1px;
+      line-height: 1px;
+      color: transparent;
+      user-select: none;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
   </style>
 </head>
 <body>
   ${htmlContent}
+  ${!isStandardSheet ? '<div class="feed-spacer">.</div>' : ''}
 </body>
 </html>`);
   doc.close();
