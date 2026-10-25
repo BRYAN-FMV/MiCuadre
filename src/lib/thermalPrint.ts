@@ -153,23 +153,45 @@ export function printHtmlThermal(
     .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; width: 100%; }
     table { width: 100%; border-collapse: collapse; font-size: ${is80mm ? '12px' : '10px'}; }
     th, td { padding: 1px 0; vertical-align: top; }
-    .feed-spacer {
-      height: 70mm;
-      min-height: 70mm;
+    .feed-container {
       width: 100%;
-      display: block;
-      font-size: 1px;
-      line-height: 1px;
-      color: transparent;
+      box-sizing: border-box;
       user-select: none;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
+    }
+    .feed-dots {
+      margin-top: 18mm;
+      text-align: center;
+      font-size: 10px;
+      line-height: 1;
+      font-weight: 700;
+      color: #000000;
+      letter-spacing: 5px;
+    }
+    .feed-cut-line {
+      margin-top: 22mm;
+      text-align: center;
+      font-size: 10px;
+      line-height: 1;
+      font-weight: 700;
+      color: #000000;
+      letter-spacing: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      width: 100%;
     }
   </style>
 </head>
 <body>
   ${htmlContent}
-  ${!isStandardSheet ? '<div class="feed-spacer">.</div>' : ''}
+  ${!isStandardSheet ? `
+    <div class="feed-container">
+      <div class="feed-dots">. . . . .</div>
+      <div class="feed-dots">. . . . .</div>
+      <div class="feed-cut-line">${is80mm ? '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -' : '- - - - - - - - - - - - - - - - - - - -'}</div>
+    </div>
+  ` : ''}
 </body>
 </html>`);
   doc.close();
