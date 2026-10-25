@@ -34,6 +34,21 @@ export interface ZReportPrintData {
   };
 }
 
+let printIframeInstance: HTMLIFrameElement | null = null;
+
+function getOrCreatePrintIframe(): HTMLIFrameElement {
+  if (!printIframeInstance || !document.body.contains(printIframeInstance)) {
+    printIframeInstance = document.createElement('iframe');
+    printIframeInstance.id = 'micuadre-print-frame';
+    printIframeInstance.setAttribute(
+      'style',
+      'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;'
+    );
+    document.body.appendChild(printIframeInstance);
+  }
+  return printIframeInstance;
+}
+
 /**
  * Sends clean HTML content directly to the browser print engine using a hidden iframe.
  * Avoids raw binary ESC/POS corruption and blank screen issues.
@@ -42,16 +57,10 @@ export function printHtmlThermal(
   htmlContent: string,
   paperWidth: PrintPaperFormat = '58mm'
 ): void {
-  const iframe = document.createElement('iframe');
-  iframe.setAttribute(
-    'style',
-    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;'
-  );
-  document.body.appendChild(iframe);
+  const iframe = getOrCreatePrintIframe();
 
   const doc = iframe.contentWindow?.document;
   if (!doc) {
-    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     window.print();
     return;
   }
@@ -199,24 +208,11 @@ export function printHtmlThermal(
   setTimeout(() => {
     try {
       iframe.contentWindow?.focus();
-      if (iframe.contentWindow) {
-        iframe.contentWindow.onafterprint = () => {
-          setTimeout(() => {
-            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-          }, 1000);
-        };
-      }
       iframe.contentWindow?.print();
     } catch (e) {
       console.warn('Error al activar impresion en iframe:', e);
-    } finally {
-      setTimeout(() => {
-        if (iframe.parentNode) {
-          iframe.parentNode.removeChild(iframe);
-        }
-      }, 60000);
     }
-  }, 300);
+  }, 250);
 }
 
 /**
