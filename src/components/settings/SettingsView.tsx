@@ -9,6 +9,7 @@ import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
 import { compressImageToWebP, getDataUrlSizeKb } from '../../lib/imageUtils';
 import { LegalModal } from '../legal/LegalModal';
+import { printFeedLogoPrime } from '../../lib/thermalPrint';
 
 export const PERMISSION_DEFINITIONS: { key: keyof UserPermissions; label: string; desc: string; category: string }[] = [
   { key: 'canApplyDiscounts', label: 'Aplicar Descuentos', desc: 'Permite aplicar descuentos en caja (manuales o tercera edad).', category: 'Ventas & Caja' },
@@ -52,7 +53,7 @@ export const SettingsView: React.FC = () => {
   const [prePrintLogoOnFeed, setPrePrintLogoOnFeed] = useState<boolean>(
     typeof tenant.prePrintLogoOnFeed === 'boolean'
       ? tenant.prePrintLogoOnFeed
-      : getStoredTenantPrePrintLogo(tenant.id)
+      : (getStoredTenantPrePrintLogo(tenant.id) ?? Boolean(tenant.logoUrl || getStoredTenantLogo(tenant.id)))
   );
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
 
@@ -64,11 +65,12 @@ export const SettingsView: React.FC = () => {
   }, [tenant.id, tenant.ticketPaperWidth]);
 
   useEffect(() => {
+    const stored = getStoredTenantPrePrintLogo(tenant.id);
     const activePrePrint = typeof tenant.prePrintLogoOnFeed === 'boolean'
       ? tenant.prePrintLogoOnFeed
-      : getStoredTenantPrePrintLogo(tenant.id);
+      : (stored ?? Boolean(tenant.logoUrl || getStoredTenantLogo(tenant.id)));
     setPrePrintLogoOnFeed(activePrePrint);
-  }, [tenant.id, tenant.prePrintLogoOnFeed]);
+  }, [tenant.id, tenant.prePrintLogoOnFeed, tenant.logoUrl]);
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | 'beta' | 'cookies'>('terms');
 
   // Loyalty Settings State
@@ -936,25 +938,43 @@ export const SettingsView: React.FC = () => {
               ) : null}
             </div>
 
-            <button
-              type="button"
-              className={`btn ${prePrintLogoOnFeed ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => {
-                const nextVal = !prePrintLogoOnFeed;
-                setPrePrintLogoOnFeed(nextVal);
-                updateTenantSettings({ prePrintLogoOnFeed: nextVal });
-                backupTenantPrePrintLogo(tenant.id, nextVal);
-                toast.success(
-                  nextVal
-                    ? 'Ahorro de papel activado: El logotipo se pre-imprimirá en el avance de corte.'
-                    : 'Modo estándar activado: El logotipo se imprimirá en la cabecera habitual.'
-                );
-              }}
-              style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', minWidth: '140px', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}
-            >
-              {prePrintLogoOnFeed ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-              <span>{prePrintLogoOnFeed ? 'ACTIVADO' : 'DESACTIVADO'}</span>
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', alignItems: 'flex-end' }}>
+              <button
+                type="button"
+                className={`btn ${prePrintLogoOnFeed ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => {
+                  const nextVal = !prePrintLogoOnFeed;
+                  setPrePrintLogoOnFeed(nextVal);
+                  updateTenantSettings({ prePrintLogoOnFeed: nextVal });
+                  backupTenantPrePrintLogo(tenant.id, nextVal);
+                  toast.success(
+                    nextVal
+                      ? 'Ahorro de papel activado: El logotipo se pre-imprimirá en el avance de corte.'
+                      : 'Modo estándar activado: El logotipo se imprimirá en la cabecera habitual.'
+                  );
+                }}
+                style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', minWidth: '140px', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}
+              >
+                {prePrintLogoOnFeed ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                <span>{prePrintLogoOnFeed ? 'ACTIVADO' : 'DESACTIVADO'}</span>
+              </button>
+
+              {logoUrl && prePrintLogoOnFeed && ticketPaperWidth !== 'CARTA' && ticketPaperWidth !== 'MEDIA_CARTA' && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    printFeedLogoPrime(tenant);
+                    toast.success('Logotipo impreso en boquilla. Corta el papel para dejar el rollo listo.');
+                  }}
+                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                  title="Avanza e imprime el logo en la boquilla para que el próximo ticket ya lo tenga listo arriba"
+                >
+                  <Printer size={13} />
+                  <span>Preparar Boquilla con Logo</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="form-group" style={{ gridColumn: 'span 2' }}>

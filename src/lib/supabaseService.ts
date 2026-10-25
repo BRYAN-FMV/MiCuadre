@@ -173,8 +173,8 @@ export function backupTenantPrePrintLogo(tenantId: string, enabled: boolean): vo
   } catch (e) {}
 }
 
-export function getStoredTenantPrePrintLogo(tenantId?: string): boolean {
-  if (typeof localStorage === 'undefined') return false;
+export function getStoredTenantPrePrintLogo(tenantId?: string): boolean | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
   try {
     if (tenantId) {
       const val = localStorage.getItem(`micuadre_preprint_logo_${tenantId}`);
@@ -182,9 +182,9 @@ export function getStoredTenantPrePrintLogo(tenantId?: string): boolean {
     }
     const globalVal = localStorage.getItem('micuadre_preprint_logo_global');
     if (globalVal !== null) return globalVal === '1';
-    return false;
+    return undefined;
   } catch (e) {
-    return false;
+    return undefined;
   }
 }
 
@@ -406,7 +406,7 @@ export async function fetchTenantFromSupabase(tenantId: string): Promise<Tenant 
     ticketPaperWidth: (data.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(data.id) || '58mm',
     prePrintLogoOnFeed: typeof data.pre_print_logo_on_feed === 'boolean'
       ? data.pre_print_logo_on_feed
-      : getStoredTenantPrePrintLogo(data.id)
+      : (getStoredTenantPrePrintLogo(data.id) ?? Boolean(data.logo_url || getStoredTenantLogo(data.id)))
   };
 }
 
@@ -428,9 +428,10 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       : getStoredTenantFoodEnabled(t.id);
 
     const logoUrl = t.logo_url || getStoredTenantLogo(t.id);
+    const storedPrePrint = getStoredTenantPrePrintLogo(t.id);
     const prePrintLogo = typeof t.pre_print_logo_on_feed === 'boolean'
       ? t.pre_print_logo_on_feed
-      : getStoredTenantPrePrintLogo(t.id);
+      : (storedPrePrint ?? Boolean(logoUrl));
 
     return {
       id: t.id,

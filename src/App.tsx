@@ -163,7 +163,7 @@ export const App: React.FC = () => {
               ? matched.prePrintLogoOnFeed
               : (typeof localMatched?.prePrintLogoOnFeed === 'boolean'
                 ? localMatched.prePrintLogoOnFeed
-                : storedPrePrintLogo);
+                : (storedPrePrintLogo ?? Boolean(resolvedLogoUrl)));
 
             const mergedMatched: Tenant = {
               ...localMatched,

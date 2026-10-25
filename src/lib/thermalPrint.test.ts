@@ -9,7 +9,8 @@ import {
   printSaleInvoiceLetter,
   printPaymentReceipt,
   printZReport,
-  shouldPrePrintLogo
+  shouldPrePrintLogo,
+  printFeedLogoPrime
 } from './thermalPrint';
 import { Sale, Tenant } from '../types';
 
@@ -279,7 +280,8 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
     it('should include business logo in ticket and letter invoice when tenant.logoUrl is present', () => {
       const tenantWithLogo: Tenant = {
         ...sampleTenant,
-        logoUrl: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA'
+        logoUrl: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA',
+        prePrintLogoOnFeed: false
       };
 
       const simpleHtml = generateSaleReceiptHtml(sampleSimpleSale, tenantWithLogo);
@@ -315,6 +317,9 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
 
       // Valid thermal roll with logo and enabled: true
       expect(shouldPrePrintLogo(tenantWithLogo)).toBe(true);
+
+      // Default when not explicitly specified: true if logo exists on continuous thermal roll
+      expect(shouldPrePrintLogo({ ...tenantWithLogo, prePrintLogoOnFeed: undefined })).toBe(true);
 
       // Disabled explicitly: false
       expect(shouldPrePrintLogo({ ...tenantWithLogo, prePrintLogoOnFeed: false })).toBe(false);
@@ -353,7 +358,7 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
       expect(normalHtml).toContain('<img src="data:image/webp;base64,');
     });
 
-    it('should dispatch printSaleReceipt, printPaymentReceipt, and printZReport with prePrintLogo enabled without throwing', () => {
+    it('should dispatch printSaleReceipt, printPaymentReceipt, printZReport, and printFeedLogoPrime without throwing', () => {
       const tenantWithPrePrint: Tenant = {
         ...sampleTenant,
         ticketPaperWidth: '80mm',
@@ -396,6 +401,10 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
             difference: 0
           }
         });
+      }).not.toThrow();
+
+      expect(() => {
+        printFeedLogoPrime(tenantWithPrePrint);
       }).not.toThrow();
     });
   });

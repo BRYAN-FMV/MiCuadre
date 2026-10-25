@@ -62,10 +62,16 @@ export function shouldPrePrintLogo(tenant?: Tenant): boolean {
   if (!tenant) return false;
   const isContinuous = tenant.ticketPaperWidth !== 'CARTA' && tenant.ticketPaperWidth !== 'MEDIA_CARTA';
   const hasLogo = Boolean(tenant.logoUrl || getStoredTenantLogo(tenant.id));
-  const isEnabled = typeof tenant.prePrintLogoOnFeed === 'boolean'
-    ? tenant.prePrintLogoOnFeed
-    : getStoredTenantPrePrintLogo(tenant.id);
-  return Boolean(isContinuous && hasLogo && isEnabled);
+  if (!isContinuous || !hasLogo) return false;
+
+  if (typeof tenant.prePrintLogoOnFeed === 'boolean') {
+    return tenant.prePrintLogoOnFeed;
+  }
+  const stored = getStoredTenantPrePrintLogo(tenant.id);
+  if (typeof stored === 'boolean') {
+    return stored;
+  }
+  return true;
 }
 
 /**
@@ -201,12 +207,8 @@ export function printHtmlThermal(
       overflow: hidden;
       width: 100%;
     }
-    .feed-cut-line.feed-cut-line-preprint {
-      margin-top: 3mm !important;
-      margin-bottom: 2mm !important;
-    }
     .feed-preprint-logo {
-      margin-top: 2mm;
+      margin-top: 4mm;
       margin-bottom: 6mm;
       text-align: center;
     }
@@ -216,12 +218,13 @@ export function printHtmlThermal(
   ${htmlContent}
   ${!isStandardSheet ? `
     <div class="feed-container">
-      <div class="feed-cut-line ${Boolean(options?.prePrintLogo && options?.logoUrl) ? 'feed-cut-line-preprint' : ''}">${is80mm ? '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -' : '- - - - - - - - - - - - - - - - - - - -'}</div>
       ${Boolean(options?.prePrintLogo && options?.logoUrl) ? `
         <div class="feed-preprint-logo">
           <img src="${options?.logoUrl}" alt="Logo Pre-impreso" style="max-height: ${is80mm ? '70px' : '50px'}; max-width: ${is80mm ? '180px' : '120px'}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
-      ` : ''}
+      ` : `
+        <div class="feed-cut-line">${is80mm ? '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -' : '- - - - - - - - - - - - - - - - - - - -'}</div>
+      `}
     </div>
   ` : ''}
 </body>
@@ -944,4 +947,16 @@ export function printZReport(data: ZReportPrintData): void {
   const logoUrl = data.tenant?.logoUrl || getStoredTenantLogo(data.tenant?.id);
   const html = generateZReportHtml(data, { prePrintLogo: prePrint });
   printHtmlThermal(html, width, { prePrintLogo: prePrint, logoUrl });
+}
+
+/**
+ * Prime the printer mouth with the logo for a new paper roll.
+ * Prints just the logo and advances past the cutter so the next sale ticket is ready.
+ */
+export function printFeedLogoPrime(tenant: Tenant): void {
+  const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+  if (!logoUrl) return;
+  const format = tenant.ticketPaperWidth || getStoredTenantTicketPaperWidth(tenant.id) || '58mm';
+  if (format === 'CARTA' || format === 'MEDIA_CARTA') return;
+  printHtmlThermal('', format, { prePrintLogo: true, logoUrl });
 }
