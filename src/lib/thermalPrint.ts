@@ -154,8 +154,8 @@ export function printHtmlThermal(
     table { width: 100%; border-collapse: collapse; font-size: ${is80mm ? '12px' : '10px'}; }
     th, td { padding: 1px 0; vertical-align: top; }
     .feed-spacer {
-      height: 55mm;
-      min-height: 55mm;
+      height: 70mm;
+      min-height: 70mm;
       width: 100%;
       display: block;
       font-size: 1px;
