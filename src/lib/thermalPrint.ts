@@ -103,7 +103,7 @@ export function printHtmlThermal(
     `;
   } else {
     const ticketWidth = is80mm ? '74mm' : '48mm';
-    const padding = is80mm ? '4mm 4.5mm 4mm 4.5mm' : '4mm 3mm 4mm 4.5mm';
+    const padding = is80mm ? '2mm 4.5mm 0mm 4.5mm' : '2mm 3mm 0mm 4.5mm';
     const fontSize = is80mm ? '13px' : '11px';
     pageCss = `
       @page {
@@ -169,17 +169,8 @@ export function printHtmlThermal(
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
-    .feed-dots {
-      margin-top: 18mm;
-      text-align: center;
-      font-size: 10px;
-      line-height: 1;
-      font-weight: 700;
-      color: #000000;
-      letter-spacing: 5px;
-    }
     .feed-cut-line {
-      margin-top: 22mm;
+      margin-top: 32mm;
       text-align: center;
       font-size: 10px;
       line-height: 1;
@@ -196,8 +187,6 @@ export function printHtmlThermal(
   ${htmlContent}
   ${!isStandardSheet ? `
     <div class="feed-container">
-      <div class="feed-dots">. . . . .</div>
-      <div class="feed-dots">. . . . .</div>
       <div class="feed-cut-line">${is80mm ? '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -' : '- - - - - - - - - - - - - - - - - - - -'}</div>
     </div>
   ` : ''}
@@ -224,6 +213,9 @@ export function generateSaleReceiptHtml(
   copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL'
 ): string {
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+  const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
+  const logoMaxHeight = is80mm ? '75px' : '52px';
+  const logoMaxWidth = is80mm ? '180px' : '120px';
   const saleDate = new Date(sale.createdAt);
   const dateStr = saleDate.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const timeStr = saleDate.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
@@ -244,8 +236,8 @@ export function generateSaleReceiptHtml(
     return `
       <div class="text-center">
         ${logoUrl ? `
-          <div style="margin-bottom: 5px; text-align: center;">
-            <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+          <div style="margin-bottom: 6px; text-align: center;">
+            <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
           </div>
         ` : ''}
         <div class="title">${tenant.name}</div>
@@ -335,8 +327,8 @@ export function generateSaleReceiptHtml(
   return `
     <div class="text-center">
       ${logoUrl ? `
-        <div style="margin-bottom: 5px; text-align: center;">
-          <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        <div style="margin-bottom: 6px; text-align: center;">
+          <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
       ` : ''}
       <div class="title">${tenant.name}</div>
@@ -453,6 +445,9 @@ export function generateKitchenTicketHtml(data: KitchenTicketData): string {
 export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
   const { tenant, payment, prevBalance, newBalance } = data;
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+  const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
+  const logoMaxHeight = is80mm ? '75px' : '52px';
+  const logoMaxWidth = is80mm ? '180px' : '120px';
   const payDate = new Date(payment.createdAt);
   const dateStr = payDate.toLocaleDateString('es-HN');
   const timeStr = payDate.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
@@ -460,8 +455,8 @@ export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
   return `
     <div class="text-center">
       ${logoUrl ? `
-        <div style="margin-bottom: 5px; text-align: center;">
-          <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        <div style="margin-bottom: 6px; text-align: center;">
+          <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
       ` : ''}
       <div class="title">${tenant.name}</div>
@@ -520,6 +515,9 @@ export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
 export function generateZReportHtml(data: ZReportPrintData): string {
   const { tenant, zReport, cajaName } = data;
   const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
+  const is80mm = tenant.ticketPaperWidth === '80mm' || getStoredTenantTicketPaperWidth(tenant.id) === '80mm';
+  const logoMaxHeight = is80mm ? '75px' : '52px';
+  const logoMaxWidth = is80mm ? '180px' : '120px';
   const now = new Date();
   const dateStr = now.toLocaleDateString('es-HN');
   const timeStr = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
@@ -527,8 +525,8 @@ export function generateZReportHtml(data: ZReportPrintData): string {
   return `
     <div class="text-center">
       ${logoUrl ? `
-        <div style="margin-bottom: 5px; text-align: center;">
-          <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        <div style="margin-bottom: 6px; text-align: center;">
+          <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
         </div>
       ` : ''}
       <div class="title">${tenant.name}</div>
