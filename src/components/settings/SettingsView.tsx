@@ -4,10 +4,10 @@ import { toast } from 'sonner';
 import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors, FileText, Shield, AlertCircle } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions, PrintPaperFormat } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
-import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantTicketPaperWidth, getStoredTenantTicketPaperWidth } from '../../lib/supabaseService';
+import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantTicketPaperWidth, getStoredTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
-import { compressImageToWebP } from '../../lib/imageUtils';
+import { compressImageToWebP, getDataUrlSizeKb } from '../../lib/imageUtils';
 import { LegalModal } from '../legal/LegalModal';
 
 export const PERMISSION_DEFINITIONS: { key: keyof UserPermissions; label: string; desc: string; category: string }[] = [
@@ -330,8 +330,17 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => window.location.reload(), 1000);
   };
 
-  const [logoUrl, setLogoUrl] = useState(tenant.logoUrl || '');
+  const [logoUrl, setLogoUrl] = useState(tenant.logoUrl || getStoredTenantLogo(tenant.id) || '');
   const [isCompressingLogo, setIsCompressingLogo] = useState(false);
+
+  useEffect(() => {
+    if (tenant.logoUrl) {
+      setLogoUrl(tenant.logoUrl);
+    } else {
+      const stored = getStoredTenantLogo(tenant.id);
+      if (stored) setLogoUrl(stored);
+    }
+  }, [tenant.logoUrl, tenant.id]);
 
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -339,10 +348,12 @@ export const SettingsView: React.FC = () => {
 
     try {
       setIsCompressingLogo(true);
-      const compressedWebPUrl = await compressImageToWebP(file, 256, 0.8);
+      const compressedWebPUrl = await compressImageToWebP(file, 240, 0.75);
+      const kb = getDataUrlSizeKb(compressedWebPUrl);
       setLogoUrl(compressedWebPUrl);
+      backupTenantLogo(tenant.id, compressedWebPUrl);
       updateTenantSettings({ logoUrl: compressedWebPUrl });
-      toast.success('¡Logo del comercio procesado y guardado exitosamente (< 25 KB WebP)!');
+      toast.success(`Logo guardado y optimizado con éxito (${kb} KB)`);
     } catch (err: any) {
       toast.error(err.message || 'Error al procesar la imagen del logo');
     } finally {
@@ -352,12 +363,14 @@ export const SettingsView: React.FC = () => {
 
   const handleRemoveLogo = () => {
     setLogoUrl('');
+    backupTenantLogo(tenant.id, undefined);
     updateTenantSettings({ logoUrl: undefined });
     toast.info('Logo del comercio eliminado.');
   };
 
   const handleSaveTenant = (e: React.FormEvent) => {
     e.preventDefault();
+    backupTenantLogo(tenant.id, logoUrl || undefined);
     updateTenantSettings({
       name: tenantName,
       rtn,
@@ -368,7 +381,7 @@ export const SettingsView: React.FC = () => {
       logoUrl: logoUrl || undefined,
       ticketPaperWidth
     });
-    toast.success('Datos del comercio, impresora e identidad de marca actualizados');
+    toast.success('Datos del comercio, logotipo e impresora guardados.');
   };
 
 
@@ -891,14 +904,14 @@ export const SettingsView: React.FC = () => {
               Logotipo e Identidad de Marca del Comercio
             </label>
             <p style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.85rem' }}>
-              El logo de tu comercio se comprime automáticamente en tu navegador a formato WebP ultraligero (&lt; 25 KB). Se mostrará en la barra superior de tu sistema y en los comprobantes de venta impresos.
+              El logo de tu comercio se comprime y optimiza automáticamente en tu navegador a formato WebP ultraligero (&lt; 10 KB con fondo blanco para impresoras térmicas). Se sincroniza con la base de datos y se mostrará en todas tus facturas y comprobantes.
             </p>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
               {/* Logo Preview Box */}
               <div style={{ width: '64px', height: '64px', borderRadius: '10px', border: '2px dashed #cbd5e1', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 {logoUrl ? (
-                  <img src={logoUrl} alt="Logo Previsto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={logoUrl} alt="Logo Previsto" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 ) : (
                   <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-primary)' }}>{(tenantName || 'M').charAt(0).toUpperCase()}</span>
                 )}
@@ -921,7 +934,13 @@ export const SettingsView: React.FC = () => {
                   )}
                 </div>
 
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Acepta cualquier formato (PNG, JPG, WebP). Redimensión automática ultra-rápida.</span>
+                {logoUrl ? (
+                  <span style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600 }}>
+                    Logo optimizado y activo: ~{getDataUrlSizeKb(logoUrl)} KB (Ultraligero)
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Acepta cualquier formato (PNG, JPG, WebP). Redimensión automática ultra-rápida.</span>
+                )}
               </div>
             </div>
           </div>

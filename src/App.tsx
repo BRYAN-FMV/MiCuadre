@@ -33,7 +33,8 @@ import {
   syncAllCloudData,
   processOfflineQueue,
   getStoredTenantFoodEnabled,
-  getStoredTenantTicketPaperWidth
+  getStoredTenantTicketPaperWidth,
+  getStoredTenantLogo
 } from './lib/supabaseService';
 
 import { LandingView } from './components/landing/LandingView';
@@ -150,9 +151,16 @@ export const App: React.FC = () => {
               || storedPaperWidth
               || '58mm';
 
+            const storedLogo = getStoredTenantLogo(matched.id);
+            const resolvedLogoUrl = matched.logoUrl
+              || localMatched?.logoUrl
+              || storedLogo
+              || undefined;
+
             const mergedMatched: Tenant = {
               ...localMatched,
               ...matched,
+              logoUrl: resolvedLogoUrl,
               isFoodEnabled: resolvedFoodEnabled,
               ticketPaperWidth: resolvedPaperWidth
             };

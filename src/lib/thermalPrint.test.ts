@@ -272,5 +272,34 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
         printSaleReceipt(sampleSimpleSale, sampleTenant, 'ORIGINAL', '58mm');
       }).not.toThrow();
     });
+
+    it('should include business logo in ticket and letter invoice when tenant.logoUrl is present', () => {
+      const tenantWithLogo: Tenant = {
+        ...sampleTenant,
+        logoUrl: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA'
+      };
+
+      const simpleHtml = generateSaleReceiptHtml(sampleSimpleSale, tenantWithLogo);
+      expect(simpleHtml).toContain('<img src="data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA"');
+
+      const fiscalHtml = generateSaleReceiptHtml(fiscalSale, tenantWithLogo, 'ORIGINAL');
+      expect(fiscalHtml).toContain('<img src="data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA"');
+
+      const letterHtml = generateInvoiceLetterHtml(fiscalSale, tenantWithLogo, 'ORIGINAL');
+      expect(letterHtml).toContain('<img src="data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoBAAEAAQAcJaACdLoAAP7/2QAA"');
+    });
+
+    it('should not render broken img tag when logo is undefined or missing', () => {
+      const tenantWithoutLogo: Tenant = {
+        ...sampleTenant,
+        logoUrl: undefined
+      };
+
+      const simpleHtml = generateSaleReceiptHtml(sampleSimpleSale, tenantWithoutLogo);
+      expect(simpleHtml).not.toContain('<img');
+
+      const letterHtml = generateInvoiceLetterHtml(fiscalSale, tenantWithoutLogo, 'ORIGINAL');
+      expect(letterHtml).not.toContain('<img');
+    });
   });
 });

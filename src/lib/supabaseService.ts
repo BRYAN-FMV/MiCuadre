@@ -136,6 +136,35 @@ export function getStoredTenantTicketPaperWidth(tenantId?: string): PrintPaperFo
   }
 }
 
+export function backupTenantLogo(tenantId: string, logoUrl?: string): void {
+  if (typeof localStorage === 'undefined' || !tenantId) return;
+  try {
+    if (logoUrl) {
+      localStorage.setItem(`micuadre_logo_${tenantId}`, logoUrl);
+      localStorage.setItem('micuadre_logo_global', logoUrl);
+    } else {
+      localStorage.removeItem(`micuadre_logo_${tenantId}`);
+      localStorage.removeItem('micuadre_logo_global');
+    }
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+export function getStoredTenantLogo(tenantId?: string): string | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    if (tenantId) {
+      const val = localStorage.getItem(`micuadre_logo_${tenantId}`);
+      if (val) return val;
+    }
+    const globalVal = localStorage.getItem('micuadre_logo_global');
+    return globalVal || undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
 export function backupServiceSupplies(tenantId: string, serviceId: string, supplies?: ServiceSupply[]) {
   if (typeof localStorage === 'undefined' || !supplies) return;
   try {
@@ -371,6 +400,8 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       ? t.is_food_enabled
       : getStoredTenantFoodEnabled(t.id);
 
+    const logoUrl = t.logo_url || getStoredTenantLogo(t.id);
+
     return {
       id: t.id,
       name: t.name,
@@ -387,7 +418,8 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       allowNegativeStock: t.allow_negative_stock,
       currencySymbol: t.currency_symbol || 'L.',
       accessPassword: t.access_password || undefined,
-      ticketPaperWidth: (t.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(t.id) || '58mm'
+      ticketPaperWidth: (t.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(t.id) || '58mm',
+      logoUrl: logoUrl || undefined
     };
   });
 }
@@ -406,6 +438,10 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
     backupTenantTicketPaperWidth(tenant.id, tenant.ticketPaperWidth);
   }
 
+  if (tenant.id) {
+    backupTenantLogo(tenant.id, tenant.logoUrl);
+  }
+
   try {
     let { error } = await supabase.from('tenants').upsert({
       id: tenant.id,
@@ -422,7 +458,9 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
       is_food_enabled: tenant.isFoodEnabled ?? false,
       allow_negative_stock: tenant.allowNegativeStock,
       currency_symbol: tenant.currencySymbol || 'L.',
-      access_password: tenant.accessPassword || null
+      access_password: tenant.accessPassword || null,
+      logo_url: tenant.logoUrl || null,
+      ticket_paper_width: tenant.ticketPaperWidth || '58mm'
     }, { onConflict: 'id' });
 
     // Fallback: If older database schema lacks newer columns, retry with base columns

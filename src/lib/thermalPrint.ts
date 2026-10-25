@@ -1,7 +1,7 @@
 import { Sale, Tenant, PrintPaperFormat } from '../types';
 import { formatCurrency, numberToSpanishWords, formatPaymentMethod } from './monetary';
 import { KitchenTicketData } from './escPos';
-import { getStoredTenantTicketPaperWidth } from './supabaseService';
+import { getStoredTenantTicketPaperWidth, getStoredTenantLogo } from './supabaseService';
 
 export interface PaymentReceiptData {
   tenant: Tenant;
@@ -227,6 +227,7 @@ export function generateSaleReceiptHtml(
   tenant: Tenant,
   copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL'
 ): string {
+  const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
   const saleDate = new Date(sale.createdAt);
   const dateStr = saleDate.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const timeStr = saleDate.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
@@ -246,6 +247,11 @@ export function generateSaleReceiptHtml(
 
     return `
       <div class="text-center">
+        ${logoUrl ? `
+          <div style="margin-bottom: 5px; text-align: center;">
+            <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+          </div>
+        ` : ''}
         <div class="title">${tenant.name}</div>
         ${tenant.rtn ? `<div class="small">RTN: ${tenant.rtn}</div>` : ''}
         ${tenant.address ? `<div class="small">${tenant.address}</div>` : ''}
@@ -332,6 +338,11 @@ export function generateSaleReceiptHtml(
 
   return `
     <div class="text-center">
+      ${logoUrl ? `
+        <div style="margin-bottom: 5px; text-align: center;">
+          <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        </div>
+      ` : ''}
       <div class="title">${tenant.name}</div>
       ${tenant.phone ? `<div class="small">TEL: ${tenant.phone}</div>` : ''}
     </div>
@@ -445,12 +456,18 @@ export function generateKitchenTicketHtml(data: KitchenTicketData): string {
  */
 export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
   const { tenant, payment, prevBalance, newBalance } = data;
+  const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
   const payDate = new Date(payment.createdAt);
   const dateStr = payDate.toLocaleDateString('es-HN');
   const timeStr = payDate.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
 
   return `
     <div class="text-center">
+      ${logoUrl ? `
+        <div style="margin-bottom: 5px; text-align: center;">
+          <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        </div>
+      ` : ''}
       <div class="title">${tenant.name}</div>
       ${tenant.rtn ? `<div class="small">RTN: ${tenant.rtn}</div>` : ''}
       ${tenant.address ? `<div class="small">${tenant.address}</div>` : ''}
@@ -506,12 +523,18 @@ export function generatePaymentReceiptHtml(data: PaymentReceiptData): string {
  */
 export function generateZReportHtml(data: ZReportPrintData): string {
   const { tenant, zReport, cajaName } = data;
+  const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
   const now = new Date();
   const dateStr = now.toLocaleDateString('es-HN');
   const timeStr = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
 
   return `
     <div class="text-center">
+      ${logoUrl ? `
+        <div style="margin-bottom: 5px; text-align: center;">
+          <img src="${logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        </div>
+      ` : ''}
       <div class="title">${tenant.name}</div>
       <div class="subtitle" style="margin-top: 2px;">REPORTE DE CIERRE Z</div>
       <div class="small">${cajaName || 'Caja Registradora Principal'}</div>
@@ -602,6 +625,7 @@ export function generateInvoiceLetterHtml(
   copyType: 'ORIGINAL' | 'COPIA' = 'ORIGINAL',
   isHalfLetter = false
 ): string {
+  const logoUrl = tenant.logoUrl || getStoredTenantLogo(tenant.id);
   const saleDate = new Date(sale.createdAt);
   const dateStr = saleDate.toLocaleDateString('es-HN', {
     day: '2-digit',
@@ -647,16 +671,21 @@ export function generateInvoiceLetterHtml(
       
       <!-- HEADER -->
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px;">
-        <!-- Left: Business Info -->
-        <div style="flex: 1;">
-          <div style="font-size: ${isHalfLetter ? '16px' : '20px'}; font-weight: 900; text-transform: uppercase; color: #0f172a; letter-spacing: -0.5px;">
-            ${tenant.name}
-          </div>
-          <div style="margin-top: 3px; font-size: ${isHalfLetter ? '9.5px' : '10.5px'}; color: #334155;">
-            <div><strong>RTN:</strong> ${tenant.rtn || 'N/A'}</div>
-            ${tenant.address ? `<div><strong>Dirección:</strong> ${tenant.address}</div>` : ''}
-            ${tenant.phone ? `<div><strong>Teléfono:</strong> ${tenant.phone}</div>` : ''}
-            ${tenant.email ? `<div><strong>Correo:</strong> ${tenant.email}</div>` : ''}
+        <!-- Left: Business Info & Logo -->
+        <div style="flex: 1; display: flex; align-items: center; gap: 14px;">
+          ${logoUrl ? `
+            <img src="${logoUrl}" alt="Logo" style="max-height: ${isHalfLetter ? '50px' : '65px'}; max-width: ${isHalfLetter ? '110px' : '140px'}; object-fit: contain; border-radius: 4px;" />
+          ` : ''}
+          <div>
+            <div style="font-size: ${isHalfLetter ? '16px' : '20px'}; font-weight: 900; text-transform: uppercase; color: #0f172a; letter-spacing: -0.5px;">
+              ${tenant.name}
+            </div>
+            <div style="margin-top: 3px; font-size: ${isHalfLetter ? '9.5px' : '10.5px'}; color: #334155;">
+              <div><strong>RTN:</strong> ${tenant.rtn || 'N/A'}</div>
+              ${tenant.address ? `<div><strong>Dirección:</strong> ${tenant.address}</div>` : ''}
+              ${tenant.phone ? `<div><strong>Teléfono:</strong> ${tenant.phone}</div>` : ''}
+              ${tenant.email ? `<div><strong>Correo:</strong> ${tenant.email}</div>` : ''}
+            </div>
           </div>
         </div>
 
