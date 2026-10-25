@@ -1997,8 +1997,8 @@ export const PosContainer: React.FC = () => {
                 </>
               )}
 
-              {/* Avance fisico de papel para superar la distancia entre cabezal termico y cuchilla de corte (28mm) */}
-              <div style={{ textAlign: 'center', fontSize: '8px', color: '#000', marginTop: '28mm', letterSpacing: '1px' }}>
+              {/* Separador de corte visual en la vista previa del modal */}
+              <div style={{ textAlign: 'center', fontSize: '8px', color: '#000', marginTop: '12px', letterSpacing: '1px' }}>
                 - - - - - - - - - - - - - - - - - - - -
               </div>
             </div>
@@ -2026,27 +2026,47 @@ export const PosContainer: React.FC = () => {
                 )}
               </div>
 
-              {/* Botones de impresion en papel estandar Carta / Media Carta */}
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
+              {/* Botones de formato directo: 80mm, 58mm, Carta y Media Carta */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handlePrintEscPos(selectedTicketCopy, '80mm')}
+                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#93c5fd', background: tenant.ticketPaperWidth === '80mm' ? '#eff6ff' : undefined }}
+                  title="Imprimir ticket en rollo térmico de 80 mm"
+                >
+                  <Printer size={12} style={{ color: '#2563eb' }} />
+                  <span>Ticket 80mm</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handlePrintEscPos(selectedTicketCopy, '58mm')}
+                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#cbd5e1', background: (!tenant.ticketPaperWidth || tenant.ticketPaperWidth === '58mm') ? '#f8fafc' : undefined }}
+                  title="Imprimir ticket en rollo térmico de 58 mm"
+                >
+                  <Printer size={12} style={{ color: '#64748b' }} />
+                  <span>Ticket 58mm</span>
+                </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => handlePrintEscPos(selectedTicketCopy, 'CARTA')}
-                  style={{ flex: 1, fontSize: '0.74rem', padding: '0.4rem', borderColor: '#cbd5e1' }}
+                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#cbd5e1' }}
                   title="Imprimir factura en hoja carta completa"
                 >
-                  <FileText size={13} style={{ color: 'var(--accent-primary)' }} />
-                  <span>Hoja Carta</span>
+                  <FileText size={12} style={{ color: 'var(--accent-primary)' }} />
+                  <span>Carta</span>
                 </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => handlePrintEscPos(selectedTicketCopy, 'MEDIA_CARTA')}
-                  style={{ flex: 1, fontSize: '0.74rem', padding: '0.4rem', borderColor: '#cbd5e1' }}
+                  style={{ fontSize: '0.72rem', padding: '0.4rem 0.2rem', borderColor: '#cbd5e1' }}
                   title="Imprimir factura en media carta"
                 >
-                  <FileText size={13} style={{ color: '#059669' }} />
-                  <span>Media Carta</span>
+                  <FileText size={12} style={{ color: '#059669' }} />
+                  <span>½ Carta</span>
                 </button>
               </div>
 

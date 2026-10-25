@@ -258,5 +258,19 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
         printSaleInvoiceLetter(fiscalSale, sampleTenant, 'ORIGINAL', 'CARTA');
       }).not.toThrow();
     });
+
+    it('should dispatch printSaleReceipt with 80mm and 58mm thermal rolls without throwing', () => {
+      expect(() => {
+        printSaleReceipt(fiscalSale, sampleTenant, 'ORIGINAL', '80mm');
+      }).not.toThrow();
+
+      expect(() => {
+        printSaleReceipt(fiscalSale, { ...sampleTenant, ticketPaperWidth: '80mm' }, 'COPIA');
+      }).not.toThrow();
+
+      expect(() => {
+        printSaleReceipt(sampleSimpleSale, sampleTenant, 'ORIGINAL', '58mm');
+      }).not.toThrow();
+    });
   });
 });

@@ -92,10 +92,19 @@ export function printHtmlThermal(
       box-sizing: border-box;
     `;
   } else {
-    const ticketWidth = is80mm ? '72mm' : '49mm';
-    const padding = is80mm ? '5mm 4mm 50mm 4mm' : '5mm 3.5mm 50mm 3.5mm';
-    const fontSize = is80mm ? '12px' : '11px';
-    pageCss = '@page { margin: 0mm !important; size: auto; }';
+    const ticketWidth = is80mm ? '74mm' : '49mm';
+    const padding = is80mm ? '4mm 3mm 8mm 3mm' : '4mm 2.5mm 8mm 2.5mm';
+    const fontSize = is80mm ? '13px' : '11px';
+    pageCss = `
+      @page {
+        margin: 0mm !important;
+        size: auto;
+      }
+      html, body {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+    `;
     bodyCss = `
       margin: 0;
       padding: ${padding};
@@ -110,6 +119,8 @@ export function printHtmlThermal(
       box-sizing: border-box;
       word-wrap: break-word;
       overflow-wrap: break-word;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     `;
   }
 
@@ -133,20 +144,18 @@ export function printHtmlThermal(
     .text-right { text-align: right; }
     .text-left { text-align: left; }
     .bold { font-weight: 800; }
-    .title { font-size: 13px; font-weight: 800; text-transform: uppercase; }
-    .subtitle { font-size: 11px; font-weight: 800; }
-    .small { font-size: 9.5px; line-height: 1.25; }
+    .title { font-size: ${is80mm ? '16px' : '13px'}; font-weight: 800; text-transform: uppercase; }
+    .subtitle { font-size: ${is80mm ? '13px' : '11px'}; font-weight: 800; }
+    .small { font-size: ${is80mm ? '11px' : '9.5px'}; line-height: 1.25; }
     .divider { border-bottom: 1px dashed #000000; margin: 4px 0; }
     .double-divider { border-bottom: 2px dashed #000000; margin: 5px 0; }
     .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
-    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: ${is80mm ? '12px' : '10px'}; }
     th, td { padding: 1px 0; vertical-align: top; }
-    .feed-spacer { height: 50mm; min-height: 50mm; width: 100%; display: block; }
   </style>
 </head>
 <body>
   ${htmlContent}
-  ${!isStandardSheet ? '<div class="feed-spacer" style="height: 50mm; min-height: 50mm; font-size: 1px; color: transparent; user-select: none;">.</div>' : ''}
 </body>
 </html>`);
   doc.close();
