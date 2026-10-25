@@ -93,8 +93,8 @@ export function printHtmlThermal(
       box-sizing: border-box;
     `;
   } else {
-    const ticketWidth = is80mm ? '72mm' : '48mm';
-    const padding = is80mm ? '4mm 4mm 4mm 6.5mm' : '4mm 3mm 4mm 6mm';
+    const ticketWidth = is80mm ? '74mm' : '48mm';
+    const padding = is80mm ? '4mm 4.5mm 4mm 4.5mm' : '4mm 3mm 4mm 4.5mm';
     const fontSize = is80mm ? '13px' : '11px';
     pageCss = `
       @page {
@@ -107,7 +107,7 @@ export function printHtmlThermal(
       }
     `;
     bodyCss = `
-      margin: 0;
+      margin: 0 auto;
       padding: ${padding};
       font-family: Arial, Helvetica, sans-serif;
       font-size: ${fontSize};
@@ -148,14 +148,14 @@ export function printHtmlThermal(
     .title { font-size: ${is80mm ? '16px' : '13px'}; font-weight: 800; text-transform: uppercase; }
     .subtitle { font-size: ${is80mm ? '13px' : '11px'}; font-weight: 800; }
     .small { font-size: ${is80mm ? '11px' : '9.5px'}; line-height: 1.25; }
-    .divider { border-bottom: 1px dashed #000000; margin: 4px 0; }
-    .double-divider { border-bottom: 2px dashed #000000; margin: 5px 0; }
-    .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
+    .divider { border-bottom: 1px dashed #000000; margin: 4px 0; width: 100%; }
+    .double-divider { border-bottom: 2px dashed #000000; margin: 5px 0; width: 100%; }
+    .row { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; width: 100%; }
     table { width: 100%; border-collapse: collapse; font-size: ${is80mm ? '12px' : '10px'}; }
     th, td { padding: 1px 0; vertical-align: top; }
     .feed-spacer {
-      height: 42mm;
-      min-height: 42mm;
+      height: 55mm;
+      min-height: 55mm;
       width: 100%;
       display: block;
       font-size: 1px;
