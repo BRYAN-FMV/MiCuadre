@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Settings, ShieldCheck, UserCheck, Lock, ToggleLeft, ToggleRight, Plus, Database, CheckCircle, AlertTriangle, Key, Users, Star, Search, Edit2, Trash2, X, Phone, Mail, Upload, Image as ImageIcon, Printer, Copy, UtensilsCrossed, Scissors, FileText, Shield, AlertCircle } from 'lucide-react';
 import { UserRole, BusinessType, UserProfile, Customer, FiscalRange, UserPermissions, PrintPaperFormat } from '../../types';
 import { isSupabaseConfigured, testSupabaseConnection, supabase } from '../../lib/supabase';
-import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantTicketPaperWidth, getStoredTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo, backupTenantPrePrintLogo, getStoredTenantPrePrintLogo } from '../../lib/supabaseService';
+import { seedInitialDataToSupabase, updateProfilePinInSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantTicketPaperWidth, getStoredTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo, backupTenantPrePrintLogo, getStoredTenantPrePrintLogo, backupTenantKitchenComandaEnabled } from '../../lib/supabaseService';
 import { hashPinCode } from '../../lib/security';
 import { formatCurrency } from '../../lib/monetary';
 import { compressImageToWebP, getDataUrlSizeKb } from '../../lib/imageUtils';
@@ -764,6 +764,36 @@ export const SettingsView: React.FC = () => {
               <span>{tenant.isFoodEnabled ? 'MÓDULO ACTIVO' : 'DESACTIVADO'}</span>
             </button>
           </div>
+
+          {/* Kitchen Comandas Printing Switch */}
+          {tenant.isFoodEnabled && (
+            <div style={{ background: (tenant.isKitchenComandaEnabled ?? false) ? '#fff7ed' : '#f8fafc', border: `1px solid ${(tenant.isKitchenComandaEnabled ?? false) ? '#fed7aa' : '#e2e8f0'}`, borderRadius: '8px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: 'span 2' }}>
+              <div>
+                <h4 style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Printer size={16} style={{ color: '#ea580c' }} />
+                  Uso e Impresión de Comandas para Cocina
+                </h4>
+                <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.15rem' }}>
+                  Imprime tickets de cocina al crear pedidos. En comedores o cafeterías donde cobras y despachas en caja, puedes desactivar esta opción para evitar imprimir dos veces y ahorrar papel térmico.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className={`btn ${(tenant.isKitchenComandaEnabled ?? false) ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => {
+                  const nextVal = !(tenant.isKitchenComandaEnabled ?? false);
+                  updateTenantSettings({ isKitchenComandaEnabled: nextVal });
+                  backupTenantKitchenComandaEnabled(tenant.id, nextVal);
+                  toast.success(nextVal ? 'Comandas de cocina ACTIVADAS' : 'Comandas de cocina DESACTIVADAS (Se emitirá solo la factura final)');
+                }}
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', background: (tenant.isKitchenComandaEnabled ?? false) ? '#ea580c' : undefined, borderColor: (tenant.isKitchenComandaEnabled ?? false) ? '#ea580c' : undefined }}
+              >
+                {(tenant.isKitchenComandaEnabled ?? false) ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                <span>{(tenant.isKitchenComandaEnabled ?? false) ? 'COMANDAS ACTIVAS' : 'DESACTIVADAS'}</span>
+              </button>
+            </div>
+          )}
 
           {/* Services & Appointments Module Switch */}
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: 'span 2' }}>

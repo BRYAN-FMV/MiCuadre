@@ -206,6 +206,24 @@ export function getStoredTenantPrePrintLogo(tenantId?: string): boolean | undefi
   }
 }
 
+export function backupTenantKitchenComandaEnabled(tenantId: string, enabled: boolean): void {
+  if (typeof localStorage === 'undefined' || !tenantId) return;
+  try {
+    localStorage.setItem(`micuadre_kitchen_comanda_${tenantId}`, enabled ? '1' : '0');
+  } catch (e) {}
+}
+
+export function getStoredTenantKitchenComandaEnabled(tenantId?: string): boolean | undefined {
+  if (typeof localStorage === 'undefined' || !tenantId) return undefined;
+  try {
+    const val = localStorage.getItem(`micuadre_kitchen_comanda_${tenantId}`);
+    if (val !== null) return val === '1';
+    return undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
 
 export function backupServiceSupplies(tenantId: string, serviceId: string, supplies?: ServiceSupply[]) {
   if (typeof localStorage === 'undefined' || !supplies) return;
@@ -454,6 +472,11 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       ? t.pre_print_logo_on_feed
       : (storedPrePrint ?? Boolean(logoUrl));
 
+    const storedComanda = getStoredTenantKitchenComandaEnabled(t.id);
+    const isKitchenComandaEnabled = typeof t.is_kitchen_comanda_enabled === 'boolean'
+      ? t.is_kitchen_comanda_enabled
+      : (storedComanda ?? false);
+
     return {
       id: t.id,
       name: t.name,
@@ -472,7 +495,8 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       accessPassword: t.access_password || undefined,
       ticketPaperWidth: (t.ticket_paper_width as PrintPaperFormat) || getStoredTenantTicketPaperWidth(t.id) || '58mm',
       logoUrl: logoUrl || undefined,
-      prePrintLogoOnFeed: prePrintLogo
+      prePrintLogoOnFeed: prePrintLogo,
+      isKitchenComandaEnabled: isKitchenComandaEnabled
     };
   });
 }
@@ -497,6 +521,10 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
 
   if (typeof tenant.prePrintLogoOnFeed === 'boolean') {
     backupTenantPrePrintLogo(tenant.id, tenant.prePrintLogoOnFeed);
+  }
+
+  if (typeof tenant.isKitchenComandaEnabled === 'boolean') {
+    backupTenantKitchenComandaEnabled(tenant.id, tenant.isKitchenComandaEnabled);
   }
 
   try {

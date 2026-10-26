@@ -17,7 +17,7 @@ import {
 import { calculateLineTotals, calculateCartTotals, calculateCPP, formatCurrency } from '../lib/monetary';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { isValidUUID, generateUUID } from '../lib/security';
-import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, backupTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo, backupTenantPrePrintLogo, getStoredTenantPrePrintLogo, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase, saveServiceToSupabase, deleteServiceSupabase, saveStaffToSupabase, deleteStaffSupabase, saveAppointmentToSupabase, deleteAppointmentSupabase } from '../lib/supabaseService';
+import { processPosSaleSupabase, saveSaleToSupabase, closeCashShiftSupabase, saveCashShiftToSupabase, saveCashMovementToSupabase, saveExpenseToSupabase, saveFiscalRangeToSupabase, deleteFiscalRangeSupabase, saveProductToSupabase, processPurchaseSupabase, backupProfilePermissions, getIsPermissionsDbColumnAvailable, setIsPermissionsDbColumnAvailable, backupTenantFoodEnabled, backupTenantTicketPaperWidth, backupTenantLogo, getStoredTenantLogo, backupTenantPrePrintLogo, getStoredTenantPrePrintLogo, backupTenantKitchenComandaEnabled, getStoredTenantKitchenComandaEnabled, saveMenuItemToSupabase, deleteMenuItemFromSupabase, saveDeliveryDriverToSupabase, deleteDeliveryDriverFromSupabase, saveFoodOrderToSupabase, saveServiceToSupabase, deleteServiceSupabase, saveStaffToSupabase, deleteStaffSupabase, saveAppointmentToSupabase, deleteAppointmentSupabase } from '../lib/supabaseService';
 import { toast } from 'sonner';
 
 /**
@@ -445,6 +445,10 @@ export const useAppStore = create<AppState>()(
 
         if (typeof updatedTenant.prePrintLogoOnFeed === 'boolean') {
           backupTenantPrePrintLogo(updatedTenant.id, updatedTenant.prePrintLogoOnFeed);
+        }
+
+        if (typeof updatedTenant.isKitchenComandaEnabled === 'boolean') {
+          backupTenantKitchenComandaEnabled(updatedTenant.id, updatedTenant.isKitchenComandaEnabled);
         }
 
         if (isSupabaseConfigured()) {

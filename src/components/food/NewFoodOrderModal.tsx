@@ -3,6 +3,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { FoodOrder, FoodOrderItem, FoodOrderDeliveryType, MenuItem, MenuItemExtra } from '../../types';
 import { formatCurrency } from '../../lib/monetary';
 import { printKitchenTicket } from '../../lib/thermalPrint';
+import { backupTenantKitchenComandaEnabled, getStoredTenantKitchenComandaEnabled } from '../../lib/supabaseService';
 import {
   X,
   Plus,
@@ -40,6 +41,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
   orderToEdit
 }) => {
   const tenant = useAppStore(state => state.tenant);
+  const updateTenantSettings = useAppStore(state => state.updateTenantSettings);
   const allMenuItems = useAppStore(state => state.menuItems) || [];
   const isDemo = tenant.id === '00000000-0000-0000-0000-000000000001';
   const menuItems = allMenuItems.filter(
@@ -59,6 +61,19 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
   const [deliveryAddress, setDeliveryAddress] = useState<string>('');
   const [deliveryFee, setDeliveryFee] = useState<string>('30');
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+
+  // Kitchen Comanda Printing Toggle (Avoids printing twice if not needed)
+  const defaultComandaSetting = typeof tenant.isKitchenComandaEnabled === 'boolean'
+    ? tenant.isKitchenComandaEnabled
+    : (getStoredTenantKitchenComandaEnabled(tenant.id) ?? false);
+  const [shouldPrintKitchen, setShouldPrintKitchen] = useState<boolean>(defaultComandaSetting);
+
+  useEffect(() => {
+    const pref = typeof tenant.isKitchenComandaEnabled === 'boolean'
+      ? tenant.isKitchenComandaEnabled
+      : (getStoredTenantKitchenComandaEnabled(tenant.id) ?? false);
+    setShouldPrintKitchen(pref);
+  }, [tenant.id, tenant.isKitchenComandaEnabled]);
 
   // Items in Comanda
   const [orderItems, setOrderItems] = useState<FoodOrderItem[]>([]);
@@ -903,11 +918,43 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                 </div>
               </div>
 
+              {/* Kitchen Comanda printing option */}
+              <div style={{
+                background: shouldPrintKitchen ? '#fff7ed' : '#f8fafc',
+                border: `1px solid ${shouldPrintKitchen ? '#fed7aa' : '#e2e8f0'}`,
+                borderRadius: '8px',
+                padding: '0.45rem 0.65rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem'
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', userSelect: 'none', flex: 1 }}>
+                  <input
+                    type="checkbox"
+                    checked={shouldPrintKitchen}
+                    onChange={(e) => {
+                      const nextVal = e.target.checked;
+                      setShouldPrintKitchen(nextVal);
+                      backupTenantKitchenComandaEnabled(tenant.id, nextVal);
+                      updateTenantSettings({ isKitchenComandaEnabled: nextVal });
+                    }}
+                    style={{ width: '16px', height: '16px', accentColor: '#ea580c', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: shouldPrintKitchen ? '#9a3412' : '#475569' }}>
+                    {shouldPrintKitchen ? 'Imprimir comanda de cocina' : 'Sin comanda (Ahorra papel térmico)'}
+                  </span>
+                </label>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                  {shouldPrintKitchen ? '2 impresiones' : '1 sola impresión'}
+                </span>
+              </div>
+
               {/* Action Buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <button
                   type="button"
-                  onClick={() => handleSaveOrder(true, false)}
+                  onClick={() => handleSaveOrder(shouldPrintKitchen, false)}
                   style={{
                     minHeight: '44px',
                     padding: '0.6rem 1rem',
@@ -915,39 +962,70 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
                     fontWeight: 800,
                     borderRadius: '8px',
                     border: 'none',
-                    background: '#ea580c',
+                    background: shouldPrintKitchen ? '#ea580c' : '#2563eb',
                     color: '#ffffff',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '0.4rem',
-                    boxShadow: '0 2px 8px rgba(234, 88, 12, 0.25)'
+                    boxShadow: shouldPrintKitchen ? '0 2px 8px rgba(234, 88, 12, 0.25)' : '0 2px 8px rgba(37, 99, 235, 0.25)'
                   }}
                 >
-                  <Printer size={16} />
-                  <span>{orderToEdit ? 'Guardar Cambios & Reimprimir Cocina' : 'Guardar Comanda & Imprimir Cocina'}</span>
+                  {shouldPrintKitchen ? <Printer size={16} /> : <Check size={16} />}
+                  <span>
+                    {orderToEdit
+                      ? (shouldPrintKitchen ? 'Guardar Cambios & Reimprimir Cocina' : 'Guardar Cambios')
+                      : (shouldPrintKitchen ? 'Guardar Comanda & Imprimir Cocina' : 'Guardar Pedido')}
+                  </span>
                 </button>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleSaveOrder(false, false)}
-                    style={{
-                      flex: '1 1 120px',
-                      minHeight: '42px',
-                      padding: '0.5rem',
-                      fontSize: '0.82rem',
-                      fontWeight: 700,
-                      borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
-                      background: '#ffffff',
-                      color: '#475569',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {orderToEdit ? 'Guardar Cambios' : 'Solo Guardar'}
-                  </button>
+                  {shouldPrintKitchen ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveOrder(false, false)}
+                      style={{
+                        flex: '1 1 120px',
+                        minHeight: '42px',
+                        padding: '0.5rem',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#475569',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {orderToEdit ? 'Guardar Cambios' : 'Solo Guardar'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveOrder(true, false)}
+                      style={{
+                        flex: '1 1 120px',
+                        minHeight: '42px',
+                        padding: '0.5rem',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#475569',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.25rem'
+                      }}
+                      title="Imprimir comanda para cocina excepcionalmente esta vez"
+                    >
+                      <Printer size={14} />
+                      <span>Imprimir Cocina</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"

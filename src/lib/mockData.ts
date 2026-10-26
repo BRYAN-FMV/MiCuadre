@@ -22,7 +22,8 @@ export const INITIAL_TENANT: Tenant = {
   subscriptionPlan: 'MONTHLY',
   subscriptionExpiresAt: '2026-12-31',
   monthlyPrice: 950,
-  ticketPaperWidth: '58mm'
+  ticketPaperWidth: '58mm',
+  isKitchenComandaEnabled: false
 };
 
 export const INITIAL_CUSTOMERS: Customer[] = [

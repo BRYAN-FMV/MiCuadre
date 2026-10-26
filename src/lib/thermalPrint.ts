@@ -434,74 +434,78 @@ export function generateKitchenTicketHtml(
   const logoUrl = tenant?.logoUrl || (tenant?.id ? getStoredTenantLogo(tenant.id) : undefined);
   const isPrePrint = options?.prePrintLogo !== undefined
     ? options.prePrintLogo
-    : (tenant ? shouldPrePrintLogo(tenant) : false);
-  const showTopLogo = Boolean(logoUrl && !isPrePrint);
-  const logoMaxHeight = is80mm ? '110px' : '75px';
-  const logoMaxWidth = is80mm ? '240px' : '160px';
+    : (tenant ? shouldPrePrintLogo(tenant) : Boolean(logoUrl));
+
+  // The logo is strictly printed at the bottom feed advance, avoiding top clutter in kitchen
+  const showTopLogo = false;
 
   const now = data.createdAt ? new Date(data.createdAt) : new Date();
   const timeStr = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
-  const dateStr = now.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit' });
+  const dateStr = now.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   let destinationHeader = '';
+  let destinationTypeLabel = '';
   if (data.deliveryType === 'DINE_IN') {
+    destinationTypeLabel = 'CONSUMO EN MESA';
     destinationHeader = data.tableNumber ? `MESA: ${data.tableNumber}` : 'COMEDOR / MESA';
   } else if (data.deliveryType === 'TAKE_OUT') {
+    destinationTypeLabel = 'PEDIDO PARA LLEVAR';
     destinationHeader = `PARA LLEVAR #${data.orderNumber}`;
   } else {
+    destinationTypeLabel = 'ORDEN A DOMICILIO';
     destinationHeader = `DOMICILIO #${data.orderNumber}`;
   }
 
   const itemsHtml = data.items.map(it => `
-    <div style="margin-bottom: 5px;">
-      <div class="bold" style="font-size: 13px;">[ ${it.quantity} ] ${it.name}</div>
+    <div style="margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px dashed #000000;">
+      <div class="bold" style="font-size: ${is80mm ? '15px' : '13.5px'}; line-height: 1.25; margin-bottom: 2px;">[ ${it.quantity} ] ${it.name}</div>
       ${(it.extras || []).map(e => `
-        <div class="small bold" style="padding-left: 10px;">+ EXTRA: ${e.name}</div>
+        <div class="small bold" style="padding-left: 10px; font-size: ${is80mm ? '12px' : '10.5px'};">+ EXTRA: ${e.name}</div>
       `).join('')}
       ${it.notes ? `
-        <div class="small" style="padding-left: 10px; font-style: italic;">>> NOTA: ${it.notes}</div>
+        <div class="small bold" style="padding: 2px 6px; margin: 2px 0 0 10px; border-left: 3px solid #000000; background: #f1f5f9; font-size: ${is80mm ? '12px' : '10.5px'}; font-style: italic;">>> NOTA: ${it.notes}</div>
       ` : ''}
     </div>
-    <div class="divider"></div>
   `).join('');
 
   return `
     <div class="text-center">
-      ${showTopLogo ? `
-        <div style="margin-bottom: 6px; text-align: center;">
-          <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
-        </div>
-      ` : ''}
-      ${tenant?.name ? `<div class="title" style="margin-bottom: 2px;">${tenant.name}</div>` : ''}
-      <div class="subtitle">*** ORDEN DE COCINA ***</div>
-      <div class="divider"></div>
-      <div class="bold" style="font-size: 14px; margin: 3px 0;">${destinationHeader}</div>
+      ${tenant?.name ? `<div class="title" style="margin-bottom: 1px; font-size: ${is80mm ? '14px' : '12px'};">${tenant.name}</div>` : ''}
+      <div class="subtitle" style="font-size: ${is80mm ? '15px' : '13px'}; font-weight: 900; letter-spacing: 1px;">*** ORDEN DE COCINA ***</div>
+      <div style="font-size: ${is80mm ? '11px' : '9.5px'}; font-weight: 800; margin-top: 1px;">${destinationTypeLabel}</div>
     </div>
 
-    <div class="divider"></div>
+    <!-- Prominent Destination & Order Box -->
+    <div style="border: 2px solid #000000; padding: 5px 4px; margin: 5px 0; text-align: center; border-radius: 4px;">
+      <div class="bold" style="font-size: ${is80mm ? '19px' : '16px'}; letter-spacing: 0.5px; text-transform: uppercase;">${destinationHeader}</div>
+      <div class="bold" style="font-size: ${is80mm ? '13px' : '11px'}; margin-top: 2px;">ORDEN #${data.orderNumber}</div>
+    </div>
 
-    <div class="small">
-      <div class="row">
+    <div class="small" style="font-size: ${is80mm ? '11px' : '9.5px'}; margin-bottom: 5px;">
+      <div class="row bold">
         <span>HORA: ${timeStr}</span>
         <span>FECHA: ${dateStr}</span>
       </div>
-      ${data.customerName && data.customerName !== 'Consumidor Final' ? `<div>CLIENTE: ${data.customerName}</div>` : ''}
-      ${data.serverName ? `<div>MESERO: ${data.serverName}</div>` : ''}
+      ${data.serverName ? `<div class="bold" style="margin-top: 1px;">MESERO: ${data.serverName}</div>` : ''}
+      ${data.customerName && data.customerName !== 'Consumidor Final' ? `<div class="bold" style="margin-top: 1px;">CLIENTE: ${data.customerName}</div>` : ''}
     </div>
 
     <div class="double-divider"></div>
 
-    <div>
+    <!-- Items List -->
+    <div style="margin-top: 4px;">
       ${itemsHtml}
     </div>
 
     ${data.notes ? `
-      <div class="small bold">NOTA GENERAL: ${data.notes}</div>
+      <div class="bold" style="border: 2px solid #000000; padding: 5px 6px; margin: 6px 0; font-size: ${is80mm ? '13px' : '11.5px'};">
+        NOTA GENERAL: ${data.notes}
+      </div>
       <div class="divider"></div>
     ` : ''}
 
-    <div class="text-center small bold" style="margin-top: 4px;">
-      FIN DE COMANDA
+    <div class="text-center small bold" style="margin-top: 6px; font-size: ${is80mm ? '12px' : '10.5px'};">
+      FIN DE COMANDA #${data.orderNumber}
     </div>
   `;
 }
@@ -958,11 +962,11 @@ export function printKitchenTicket(
     (effectiveTenant?.id ? getStoredTenantTicketPaperWidth(effectiveTenant.id) : undefined) ||
     '58mm';
 
+  const logoUrl = options?.logoUrl || effectiveTenant?.logoUrl || (effectiveTenant?.id ? getStoredTenantLogo(effectiveTenant.id) : undefined);
+
   const prePrint = options?.prePrintLogo !== undefined
     ? options.prePrintLogo
-    : (effectiveTenant ? shouldPrePrintLogo(effectiveTenant) : false);
-
-  const logoUrl = options?.logoUrl || effectiveTenant?.logoUrl || (effectiveTenant?.id ? getStoredTenantLogo(effectiveTenant.id) : undefined);
+    : (effectiveTenant ? shouldPrePrintLogo(effectiveTenant) : Boolean(logoUrl));
 
   const html = generateKitchenTicketHtml(data, effectiveTenant, { prePrintLogo: prePrint });
   printHtmlThermal(html, width, { prePrintLogo: prePrint, logoUrl });
