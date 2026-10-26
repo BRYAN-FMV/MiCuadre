@@ -3,7 +3,17 @@ import { useAppStore } from '../../store/useAppStore';
 import { toast } from 'sonner';
 import { ArrowRight, Store, ShieldAlert, Lock, User, Building2, Download, Monitor, CheckCircle, HelpCircle, X, Terminal } from 'lucide-react';
 import { UserProfile, Tenant } from '../../types';
-import { findTenantInSupabase, fetchProfilesFromSupabase, fetchFiscalRangesFromSupabase, fetchShiftsFromSupabase, getStoredTenantFoodEnabled } from '../../lib/supabaseService';
+import { 
+  findTenantInSupabase, 
+  fetchProfilesFromSupabase, 
+  fetchFiscalRangesFromSupabase, 
+  fetchShiftsFromSupabase, 
+  getStoredTenantFoodEnabled,
+  getStoredTenantLogo,
+  backupTenantLogo,
+  getStoredTenantTicketPaperWidth,
+  getStoredTenantPrePrintLogo
+} from '../../lib/supabaseService';
 import { verifyPinCode, normalizeSlug } from '../../lib/security';
 import { setRememberedStore, updateDynamicManifest, isPwaStandalone, promptPwaInstall, hasInstallPrompt } from '../../lib/pwa';
 import { LegalModal } from '../legal/LegalModal';
@@ -180,8 +190,42 @@ export const LoginView: React.FC<LoginViewProps> = ({ onBackToLanding }) => {
         || (localTenant?.id === matchedTenant.id ? localTenant.isFoodEnabled : undefined)
         || storedFood
         || false;
-      const finalMatchedTenant = { ...matchedTenant, isFoodEnabled: isFood };
-      useAppStore.setState({ tenant: finalMatchedTenant });
+
+      const storedPaperWidth = getStoredTenantTicketPaperWidth(matchedTenant.id);
+      const resolvedPaperWidth = (localTenant?.id === matchedTenant.id ? localTenant.ticketPaperWidth : undefined)
+        || matchedTenant.ticketPaperWidth
+        || storedPaperWidth
+        || '58mm';
+
+      const storedLogo = getStoredTenantLogo(matchedTenant.id);
+      const resolvedLogoUrl = matchedTenant.logoUrl
+        || (localTenant?.id === matchedTenant.id ? localTenant.logoUrl : undefined)
+        || storedLogo
+        || undefined;
+
+      const storedPrePrintLogo = getStoredTenantPrePrintLogo(matchedTenant.id);
+      const resolvedPrePrint = typeof matchedTenant.prePrintLogoOnFeed === 'boolean'
+        ? matchedTenant.prePrintLogoOnFeed
+        : (localTenant?.id === matchedTenant.id && typeof localTenant.prePrintLogoOnFeed === 'boolean'
+          ? localTenant.prePrintLogoOnFeed
+          : (storedPrePrintLogo ?? Boolean(resolvedLogoUrl)));
+
+      const finalMatchedTenant: Tenant = {
+        ...matchedTenant,
+        logoUrl: resolvedLogoUrl,
+        isFoodEnabled: isFood,
+        ticketPaperWidth: resolvedPaperWidth,
+        prePrintLogoOnFeed: resolvedPrePrint
+      };
+
+      if (resolvedLogoUrl) {
+        backupTenantLogo(finalMatchedTenant.id, resolvedLogoUrl);
+      }
+
+      useAppStore.setState({ 
+        tenant: finalMatchedTenant,
+        tenants: (useAppStore.getState().tenants || [finalMatchedTenant]).map(t => t.id === finalMatchedTenant.id ? finalMatchedTenant : t)
+      });
 
       // 2. Fetch profiles for this tenant
       const liveProfiles = await fetchProfilesFromSupabase(matchedTenant.id);

@@ -466,15 +466,36 @@ export const useAppStore = create<AppState>()(
             pre_print_logo_on_feed: updatedTenant.prePrintLogoOnFeed ?? false
           }).eq('id', updatedTenant.id).then(async ({ error }) => {
             if (error && error.message.includes('column')) {
-              await supabase.from('tenants').update({
+              const retryWithoutPreprint = await supabase.from('tenants').update({
                 name: updatedTenant.name,
                 rtn: updatedTenant.rtn || null,
                 phone: updatedTenant.phone || null,
                 email: updatedTenant.email || null,
                 address: updatedTenant.address || null,
                 business_type: updatedTenant.businessType,
-                is_fiscal_enabled: updatedTenant.isFiscalEnabled
+                is_fiscal_enabled: updatedTenant.isFiscalEnabled,
+                is_services_enabled: updatedTenant.isServicesEnabled ?? true,
+                is_wholesale_enabled: updatedTenant.isWholesaleEnabled ?? true,
+                is_loyalty_enabled: updatedTenant.isLoyaltyEnabled ?? true,
+                is_food_enabled: updatedTenant.isFoodEnabled ?? false,
+                access_password: updatedTenant.accessPassword || null,
+                logo_url: updatedTenant.logoUrl || null,
+                ticket_paper_width: updatedTenant.ticketPaperWidth || '58mm'
               }).eq('id', updatedTenant.id);
+
+              if (retryWithoutPreprint.error && retryWithoutPreprint.error.message.includes('column')) {
+                await supabase.from('tenants').update({
+                  name: updatedTenant.name,
+                  rtn: updatedTenant.rtn || null,
+                  phone: updatedTenant.phone || null,
+                  email: updatedTenant.email || null,
+                  address: updatedTenant.address || null,
+                  business_type: updatedTenant.businessType,
+                  is_fiscal_enabled: updatedTenant.isFiscalEnabled,
+                  logo_url: updatedTenant.logoUrl || null,
+                  ticket_paper_width: updatedTenant.ticketPaperWidth || '58mm'
+                }).eq('id', updatedTenant.id);
+              }
             } else if (error) {
               console.warn('Supabase update tenant info:', error.message);
             }

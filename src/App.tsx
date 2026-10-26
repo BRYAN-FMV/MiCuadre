@@ -35,6 +35,7 @@ import {
   getStoredTenantFoodEnabled,
   getStoredTenantTicketPaperWidth,
   getStoredTenantLogo,
+  backupTenantLogo,
   getStoredTenantPrePrintLogo
 } from './lib/supabaseService';
 
@@ -174,8 +175,16 @@ export const App: React.FC = () => {
               prePrintLogoOnFeed: resolvedPrePrintLogo
             };
 
+            if (resolvedLogoUrl) {
+              backupTenantLogo(mergedMatched.id, resolvedLogoUrl);
+            }
+
             setRememberedStore(rawSlug, mergedMatched.id);
-            useAppStore.setState({ tenant: mergedMatched, isAuthenticated: false });
+            useAppStore.setState({ 
+              tenant: mergedMatched, 
+              tenants: allTenants.map(t => t.id === mergedMatched.id ? mergedMatched : t),
+              isAuthenticated: false 
+            });
             updateDynamicManifest(mergedMatched.name, rawSlug);
           }
         }

@@ -163,7 +163,24 @@ export function getStoredTenantLogo(tenantId?: string): string | undefined {
   if (typeof localStorage === 'undefined' || !tenantId) return undefined;
   try {
     const val = localStorage.getItem(`micuadre_logo_${tenantId}`);
-    return val || undefined;
+    if (val) return val;
+
+    // Redundant backup check in persisted zustand store state
+    const rawState = localStorage.getItem('micuadre_app_state');
+    if (rawState) {
+      const parsed = JSON.parse(rawState);
+      const stateObj = parsed?.state;
+      if (stateObj) {
+        if (stateObj.tenant && (stateObj.tenant.id === tenantId || normalizeSlug(stateObj.tenant.name) === normalizeSlug(tenantId))) {
+          if (stateObj.tenant.logoUrl) return stateObj.tenant.logoUrl;
+        }
+        if (Array.isArray(stateObj.tenants)) {
+          const found = stateObj.tenants.find((t: any) => t.id === tenantId || normalizeSlug(t.name) === normalizeSlug(tenantId));
+          if (found?.logoUrl) return found.logoUrl;
+        }
+      }
+    }
+    return undefined;
   } catch (e) {
     return undefined;
   }
@@ -429,6 +446,9 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[]> {
       : getStoredTenantFoodEnabled(t.id);
 
     const logoUrl = t.logo_url || getStoredTenantLogo(t.id);
+    if (t.logo_url) {
+      backupTenantLogo(t.id, t.logo_url);
+    }
     const storedPrePrint = getStoredTenantPrePrintLogo(t.id);
     const prePrintLogo = typeof t.pre_print_logo_on_feed === 'boolean'
       ? t.pre_print_logo_on_feed
@@ -501,9 +521,9 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
       pre_print_logo_on_feed: tenant.prePrintLogoOnFeed ?? false
     }, { onConflict: 'id' });
 
-    // Fallback: If older database schema lacks newer columns, retry with base columns
+    // Fallback: If database lacks newer columns like pre_print_logo_on_feed, retry without it, ALWAYS PRESERVING logo_url
     if (error && error.message.includes('column')) {
-      console.warn('Reintentando guardar tenant con esquema base en Supabase:', error.message);
+      console.warn('Reintentando guardar tenant sin pre_print_logo_on_feed en Supabase:', error.message);
       const retry = await supabase.from('tenants').upsert({
         id: tenant.id,
         name: tenant.name,
@@ -512,9 +532,35 @@ export async function saveTenantToSupabase(tenant: Tenant): Promise<boolean> {
         email: tenant.email || null,
         address: tenant.address || null,
         business_type: tenant.businessType,
-        is_fiscal_enabled: tenant.isFiscalEnabled
+        is_fiscal_enabled: tenant.isFiscalEnabled,
+        is_services_enabled: tenant.isServicesEnabled ?? true,
+        is_wholesale_enabled: tenant.isWholesaleEnabled ?? true,
+        is_loyalty_enabled: tenant.isLoyaltyEnabled ?? true,
+        is_food_enabled: tenant.isFoodEnabled ?? false,
+        allow_negative_stock: tenant.allowNegativeStock,
+        currency_symbol: tenant.currencySymbol || 'L.',
+        access_password: tenant.accessPassword || null,
+        logo_url: tenant.logoUrl || null,
+        ticket_paper_width: tenant.ticketPaperWidth || '58mm'
       }, { onConflict: 'id' });
       error = retry.error;
+
+      if (error && error.message.includes('column')) {
+        console.warn('Reintentando guardar tenant con esquema base preservando logo_url en Supabase:', error.message);
+        const retryBase = await supabase.from('tenants').upsert({
+          id: tenant.id,
+          name: tenant.name,
+          rtn: tenant.rtn || null,
+          phone: tenant.phone || null,
+          email: tenant.email || null,
+          address: tenant.address || null,
+          business_type: tenant.businessType,
+          is_fiscal_enabled: tenant.isFiscalEnabled,
+          logo_url: tenant.logoUrl || null,
+          ticket_paper_width: tenant.ticketPaperWidth || '58mm'
+        }, { onConflict: 'id' });
+        error = retryBase.error;
+      }
     }
 
     if (error) {
@@ -590,7 +636,20 @@ export async function findTenantInSupabase(searchTerm: string): Promise<Tenant |
   if (!searchTerm || !searchTerm.trim()) return null;
 
   const cloudTenants = await fetchTenantsFromSupabase();
-  const localTenants = (window as any).__micuadre_local_tenants || [];
+  let localTenants: Tenant[] = (window as any).__micuadre_local_tenants || [];
+  if (localTenants.length === 0 && typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('micuadre_app_state');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed?.state?.tenants)) {
+          localTenants = parsed.state.tenants;
+        } else if (parsed?.state?.tenant) {
+          localTenants = [parsed.state.tenant];
+        }
+      }
+    } catch (_) {}
+  }
   const allTenants = [...cloudTenants];
 
   for (const lt of localTenants) {
@@ -607,6 +666,16 @@ export async function findTenantInSupabase(searchTerm: string): Promise<Tenant |
     normalizeSlug(t.name) === cleanSearch ||
     (t.rtn && normalizeSlug(t.rtn) === cleanSearch)
   );
+
+  if (matched) {
+    const localMatched = localTenants.find(lt => lt.id === matched.id);
+    const storedLogo = getStoredTenantLogo(matched.id);
+    const resolvedLogoUrl = matched.logoUrl || localMatched?.logoUrl || storedLogo || undefined;
+    if (resolvedLogoUrl) {
+      matched.logoUrl = resolvedLogoUrl;
+      backupTenantLogo(matched.id, resolvedLogoUrl);
+    }
+  }
 
   return matched || null;
 }
