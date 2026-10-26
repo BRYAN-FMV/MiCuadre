@@ -61,6 +61,18 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
     ]
   };
 
+  const fiscalSale: Sale = {
+    ...sampleSimpleSale,
+    isFiscal: true,
+    documentNumber: '000-001-01-00000045',
+    cai: 'ABCDEF-123456-7890AB-CDEF12-345678-90',
+    caiDeadline: '2027-01-01',
+    caiRangeStart: '000-001-01-00000001',
+    caiRangeEnd: '000-001-01-00050000',
+    taxable15: 100.0,
+    tax15: 15.0
+  };
+
   it('should generate clean, readable HTML for a simple ticket without raw binary control codes', () => {
     const html = generateSaleReceiptHtml(sampleSimpleSale, sampleTenant);
 
@@ -80,18 +92,6 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
   });
 
   it('should generate fiscal invoice HTML compliant with SAR Honduras when isFiscal is true', () => {
-    const fiscalSale: Sale = {
-      ...sampleSimpleSale,
-      isFiscal: true,
-      documentNumber: '000-001-01-00000045',
-      cai: 'ABCDEF-123456-7890AB-CDEF12-345678-90',
-      caiDeadline: '2027-01-01',
-      caiRangeStart: '000-001-01-00000001',
-      caiRangeEnd: '000-001-01-00050000',
-      taxable15: 100.0,
-      tax15: 15.0
-    };
-
     const htmlOriginal = generateSaleReceiptHtml(fiscalSale, sampleTenant, 'ORIGINAL');
     expect(htmlOriginal).toContain('FACTURA FISCAL');
     expect(htmlOriginal).toContain('ORIGINAL: CLIENTE');
@@ -126,6 +126,44 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
     expect(kitchenHtml).toContain('+ EXTRA: Extra Queso');
     expect(kitchenHtml).toContain('>> NOTA: Sin cebolla');
     expect(kitchenHtml).toContain('FIN DE COMANDA');
+
+    const kitchenWithTenantHtml = generateKitchenTicketHtml(
+      {
+        orderNumber: 'ORD-103',
+        deliveryType: 'TAKE_OUT',
+        items: [{ name: 'Baleada Especial', quantity: 1 }]
+      },
+      sampleTenant,
+      { prePrintLogo: false }
+    );
+    expect(kitchenWithTenantHtml).toContain(sampleTenant.name);
+    expect(kitchenWithTenantHtml).toContain('PARA LLEVAR #ORD-103');
+
+    // Verify item notes render in simple and fiscal sales (for services & food)
+    const saleWithNotes: Sale = {
+      ...sampleSimpleSale,
+      items: [
+        {
+          productId: 'serv-1',
+          sku: 'SERV-01',
+          name: 'Corte de Cabello VIP',
+          quantity: 1,
+          unitPrice: 150,
+          originalUnitPrice: 150,
+          discountAmount: 0,
+          taxClassification: 'EXENTO',
+          subtotal: 150,
+          taxAmount: 0,
+          total: 150,
+          notes: 'Atendido por: Andrea Hernandez'
+        }
+      ]
+    };
+    const simpleNotesHtml = generateSaleReceiptHtml(saleWithNotes, sampleTenant);
+    expect(simpleNotesHtml).toContain('Atendido por: Andrea Hernandez');
+
+    const fiscalNotesHtml = generateSaleReceiptHtml({ ...fiscalSale, items: saleWithNotes.items }, sampleTenant, 'ORIGINAL');
+    expect(fiscalNotesHtml).toContain('Atendido por: Andrea Hernandez');
   });
 
   it('should generate clean payment receipt HTML for credit abonos', () => {

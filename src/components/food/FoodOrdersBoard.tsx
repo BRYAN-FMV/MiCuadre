@@ -191,13 +191,15 @@ export const FoodOrdersBoard: React.FC = () => {
         tableNumber: order.tableNumber,
         deliveryType: order.deliveryType,
         customerName: order.customerName,
+        serverName: (order as any).serverName,
+        notes: order.notes,
         items: order.items.map(it => ({
           name: it.name,
           quantity: it.quantity,
           notes: it.notes,
           extras: (it.selectedExtras || []).map(e => ({ name: e.name, price: e.price }))
         }))
-      });
+      }, undefined, { tenant });
     } catch (err) {
       console.warn('Error al imprimir ticket de cocina:', err);
     }
@@ -1531,6 +1533,29 @@ export const FoodOrdersBoard: React.FC = () => {
                   <Printer size={14} />
                   <span>Imprimir Cocina</span>
                 </button>
+                {selectedOrderDetail.saleId && (
+                  <button
+                    type="button"
+                    onClick={() => handleReprintSaleReceipt(selectedOrderDetail)}
+                    style={{
+                      padding: '0.45rem 0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#2563eb',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem'
+                    }}
+                    title="Reimprimir comprobante de venta"
+                  >
+                    <Printer size={14} />
+                    <span>Imprimir Ticket</span>
+                  </button>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>

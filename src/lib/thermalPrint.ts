@@ -270,7 +270,10 @@ export function generateSaleReceiptHtml(
     const itemsRows = (sale.items || []).map(item => `
       <tr>
         <td style="width: 28px;">${item.quantity}x</td>
-        <td style="text-align: left;">${item.name}</td>
+        <td style="text-align: left;">
+          <div>${item.name}</div>
+          ${item.notes ? `<div style="font-size: 8.5px; color: #475569; font-style: italic; margin-top: 1px;">${item.notes}</div>` : ''}
+        </td>
         <td style="text-align: right; width: 48px;">${formatCurrency(item.total, '')}</td>
       </tr>
     `).join('');
@@ -360,9 +363,12 @@ export function generateSaleReceiptHtml(
 
   // MODO SIMPLE / TICKET DE VENTA (Mercadito / Comidas / Servicios)
   const itemsList = (sale.items || []).map(item => `
-    <div class="row" style="margin-bottom: 2px;">
-      <span style="flex: 1; text-align: left;">${item.quantity}x ${item.name}</span>
-      <span style="width: 52px; text-align: right;" class="bold">${formatCurrency(item.total, '')}</span>
+    <div style="margin-bottom: 3px;">
+      <div class="row">
+        <span style="flex: 1; text-align: left;">${item.quantity}x ${item.name}</span>
+        <span style="width: 52px; text-align: right;" class="bold">${formatCurrency(item.total, '')}</span>
+      </div>
+      ${item.notes ? `<div style="font-size: 8.5px; color: #475569; font-style: italic; padding-left: 12px; margin-top: 1px;">${item.notes}</div>` : ''}
     </div>
   `).join('');
 
@@ -419,7 +425,20 @@ export function generateSaleReceiptHtml(
 /**
  * Generates thermal receipt HTML for Kitchen orders.
  */
-export function generateKitchenTicketHtml(data: KitchenTicketData): string {
+export function generateKitchenTicketHtml(
+  data: KitchenTicketData,
+  tenant?: Tenant,
+  options?: { prePrintLogo?: boolean }
+): string {
+  const is80mm = tenant?.ticketPaperWidth === '80mm' || (tenant?.id ? getStoredTenantTicketPaperWidth(tenant.id) === '80mm' : false);
+  const logoUrl = tenant?.logoUrl || (tenant?.id ? getStoredTenantLogo(tenant.id) : undefined);
+  const isPrePrint = options?.prePrintLogo !== undefined
+    ? options.prePrintLogo
+    : (tenant ? shouldPrePrintLogo(tenant) : false);
+  const showTopLogo = Boolean(logoUrl && !isPrePrint);
+  const logoMaxHeight = is80mm ? '110px' : '75px';
+  const logoMaxWidth = is80mm ? '240px' : '160px';
+
   const now = data.createdAt ? new Date(data.createdAt) : new Date();
   const timeStr = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit' });
@@ -448,7 +467,13 @@ export function generateKitchenTicketHtml(data: KitchenTicketData): string {
 
   return `
     <div class="text-center">
-      <div class="title">*** ORDEN DE COCINA ***</div>
+      ${showTopLogo ? `
+        <div style="margin-bottom: 6px; text-align: center;">
+          <img src="${logoUrl}" alt="Logo" style="max-height: ${logoMaxHeight}; max-width: ${logoMaxWidth}; object-fit: contain; display: inline-block; filter: grayscale(100%) contrast(125%);" />
+        </div>
+      ` : ''}
+      ${tenant?.name ? `<div class="title" style="margin-bottom: 2px;">${tenant.name}</div>` : ''}
+      <div class="subtitle">*** ORDEN DE COCINA ***</div>
       <div class="divider"></div>
       <div class="bold" style="font-size: 14px; margin: 3px 0;">${destinationHeader}</div>
     </div>
@@ -923,10 +948,24 @@ export function printSaleInvoiceLetter(
  */
 export function printKitchenTicket(
   data: KitchenTicketData,
-  paperWidth: '58mm' | '80mm' = '58mm'
+  paperWidth?: PrintPaperFormat,
+  options?: { tenant?: Tenant; prePrintLogo?: boolean; logoUrl?: string }
 ): void {
-  const html = generateKitchenTicketHtml(data);
-  printHtmlThermal(html, paperWidth);
+  const effectiveTenant = options?.tenant;
+  const width: PrintPaperFormat =
+    paperWidth ||
+    effectiveTenant?.ticketPaperWidth ||
+    (effectiveTenant?.id ? getStoredTenantTicketPaperWidth(effectiveTenant.id) : undefined) ||
+    '58mm';
+
+  const prePrint = options?.prePrintLogo !== undefined
+    ? options.prePrintLogo
+    : (effectiveTenant ? shouldPrePrintLogo(effectiveTenant) : false);
+
+  const logoUrl = options?.logoUrl || effectiveTenant?.logoUrl || (effectiveTenant?.id ? getStoredTenantLogo(effectiveTenant.id) : undefined);
+
+  const html = generateKitchenTicketHtml(data, effectiveTenant, { prePrintLogo: prePrint });
+  printHtmlThermal(html, width, { prePrintLogo: prePrint, logoUrl });
 }
 
 /**

@@ -194,7 +194,7 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
           notes: it.notes,
           extras: (it.selectedExtras || []).map(e => ({ name: e.name, price: e.price }))
         }))
-      });
+      }, undefined, { tenant });
     } catch (err) {
       console.warn('Error al imprimir ticket de cocina:', err);
     }

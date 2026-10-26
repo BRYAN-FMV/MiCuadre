@@ -2348,7 +2348,8 @@ export const useAppStore = create<AppState>()(
         taxClassification: 'GRAVADO_15',
         subtotal: calculated.subtotal,
         taxAmount: calculated.taxAmount,
-        total: calculated.total
+        total: calculated.total,
+        notes: staffMember ? `Atendido por: ${staffMember.fullName || (staffMember as any).name}` : undefined
       });
 
       // Automatically deduct supplies consumed by service if configured
