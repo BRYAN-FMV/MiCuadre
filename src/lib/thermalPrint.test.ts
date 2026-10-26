@@ -121,11 +121,14 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
     });
 
     expect(kitchenHtml).toContain('*** ORDEN DE COCINA ***');
+    expect(kitchenHtml).toContain('CONSUMO EN MESA');
+    expect(kitchenHtml).toContain('Mario Bros');
     expect(kitchenHtml).toContain('MESA: Mesa 4');
+    expect(kitchenHtml).toContain('ORDEN #ORD-102');
     expect(kitchenHtml).toContain('[ 2 ] Hamburguesa Clasica');
     expect(kitchenHtml).toContain('+ EXTRA: Extra Queso');
     expect(kitchenHtml).toContain('>> NOTA: Sin cebolla');
-    expect(kitchenHtml).toContain('FIN DE COMANDA');
+    expect(kitchenHtml).toContain('FIN DE COMANDA #ORD-102');
 
     const kitchenWithTenantHtml = generateKitchenTicketHtml(
       {
@@ -137,7 +140,9 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
       { prePrintLogo: false }
     );
     expect(kitchenWithTenantHtml).toContain(sampleTenant.name);
-    expect(kitchenWithTenantHtml).toContain('PARA LLEVAR #ORD-103');
+    expect(kitchenWithTenantHtml).toContain('PEDIDO PARA LLEVAR');
+    expect(kitchenWithTenantHtml).toContain('PARA LLEVAR');
+    expect(kitchenWithTenantHtml).toContain('ORDEN #ORD-103');
 
     // Test comanda with item prices, extras, delivery fee and total
     const kitchenWithPricesHtml = generateKitchenTicketHtml(
@@ -161,7 +166,8 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
       sampleTenant
     );
     expect(kitchenWithPricesHtml).toContain('ORDEN A DOMICILIO');
-    expect(kitchenWithPricesHtml).toContain('DOMICILIO #ORD-104');
+    expect(kitchenWithPricesHtml).toContain('Luigi Bros');
+    expect(kitchenWithPricesHtml).toContain('ORDEN #ORD-104');
     expect(kitchenWithPricesHtml).toContain('[ 2 ] Pizza Personal Especial');
     expect(kitchenWithPricesHtml).toContain('+ EXTRA: Orilla de Queso');
     expect(kitchenWithPricesHtml).toContain('TOTAL DEL PEDIDO:');

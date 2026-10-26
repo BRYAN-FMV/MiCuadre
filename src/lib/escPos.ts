@@ -208,26 +208,29 @@ export function generateKitchenEscPosTicket(data: KitchenTicketData): Uint8Array
   buffer.push(0x1D, 0x21, 0x00);
   buffer.push(...encoder.encode('--------------------------------\n'));
 
-  // Order identifier & Type
+  // Order identifier & Customer
+  const rawOrderNum = String(data.orderNumber || '').trim();
+  const cleanOrderNumber = rawOrderNum.replace(/^#+/, '');
+  const clientDisplayName = (data.customerName && data.customerName.trim() && data.customerName !== 'Consumidor Final')
+    ? data.customerName.trim()
+    : (data.deliveryType === 'DINE_IN' && data.tableNumber
+        ? (data.tableNumber.toUpperCase().startsWith('MESA') ? data.tableNumber.toUpperCase() : `MESA ${data.tableNumber.toUpperCase()}`)
+        : (data.deliveryType === 'TAKE_OUT' ? 'PARA LLEVAR' : 'A DOMICILIO'));
+
   buffer.push(0x1D, 0x21, 0x11);
-  if (data.deliveryType === 'DINE_IN') {
-    buffer.push(...encoder.encode(`${data.tableNumber || 'MESA'}\n`));
-  } else if (data.deliveryType === 'TAKE_OUT') {
-    buffer.push(...encoder.encode(`PARA LLEVAR #${data.orderNumber}\n`));
-  } else {
-    buffer.push(...encoder.encode(`DOMICILIO #${data.orderNumber}\n`));
-  }
+  buffer.push(...encoder.encode(`${clientDisplayName.toUpperCase()}\n`));
 
   // Normal text size
   buffer.push(0x1D, 0x21, 0x00);
+  const tablePart = data.deliveryType === 'DINE_IN' && data.tableNumber ? ` - ${data.tableNumber}` : '';
+  buffer.push(...encoder.encode(`ORDEN #${cleanOrderNumber}${tablePart}\n`));
+
   const now = data.createdAt ? new Date(data.createdAt) : new Date();
-  const timeStr = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
+  const rawTime = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const timeStr = rawTime.replace(/\s*[aApP]\.?\s*[mM]\.?/, (match) => match.toLowerCase().includes('p') ? ' PM' : ' AM');
   const dateStr = now.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit' });
   buffer.push(...encoder.encode(`HORA: ${timeStr}  FECHA: ${dateStr}\n`));
 
-  if (data.customerName && data.customerName !== 'Consumidor Final') {
-    buffer.push(...encoder.encode(`CLIENTE: ${data.customerName}\n`));
-  }
   if (data.serverName) {
     buffer.push(...encoder.encode(`MESERO: ${data.serverName}\n`));
   }
@@ -283,7 +286,7 @@ export function generateKitchenEscPosTicket(data: KitchenTicketData): Uint8Array
 
   // Center align bottom
   buffer.push(0x1B, 0x61, 0x01);
-  buffer.push(...encoder.encode('FIN DE COMANDA\n\n\n\n\n'));
+  buffer.push(...encoder.encode(`FIN DE COMANDA #${cleanOrderNumber}\n\n\n\n\n`));
 
   // GS V 66 0 - Paper Cut
   buffer.push(0x1D, 0x56, 0x42, 0x00);

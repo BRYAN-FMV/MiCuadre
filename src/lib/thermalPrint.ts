@@ -442,20 +442,41 @@ export function generateKitchenTicketHtml(
   const showTopLogo = false;
 
   const now = data.createdAt ? new Date(data.createdAt) : new Date();
-  const timeStr = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit' });
+  const rawTime = now.toLocaleTimeString('es-HN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const timeStr = rawTime.replace(/\s*[aApP]\.?\s*[mM]\.?/, (match) => {
+    return match.toLowerCase().includes('p') ? ' PM' : ' AM';
+  });
   const dateStr = now.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-  let destinationHeader = '';
+  const rawOrderNum = String(data.orderNumber || '').trim();
+  const cleanOrderNumber = rawOrderNum.replace(/^#+/, '');
+
   let destinationTypeLabel = '';
   if (data.deliveryType === 'DINE_IN') {
     destinationTypeLabel = 'CONSUMO EN MESA';
-    destinationHeader = data.tableNumber ? `MESA: ${data.tableNumber}` : 'COMEDOR / MESA';
   } else if (data.deliveryType === 'TAKE_OUT') {
     destinationTypeLabel = 'PEDIDO PARA LLEVAR';
-    destinationHeader = `PARA LLEVAR #${data.orderNumber}`;
   } else {
     destinationTypeLabel = 'ORDEN A DOMICILIO';
-    destinationHeader = `DOMICILIO #${data.orderNumber}`;
+  }
+
+  // Format Table label
+  const formattedTable = data.tableNumber
+    ? (data.tableNumber.trim().toUpperCase().startsWith('MESA') ? data.tableNumber.trim().toUpperCase() : `MESA ${data.tableNumber.trim().toUpperCase()}`)
+    : '';
+
+  // Prominently display the customer name inside the box for all delivery types
+  let clientDisplayName = '';
+  if (data.customerName && data.customerName.trim() && data.customerName !== 'Consumidor Final') {
+    clientDisplayName = data.customerName.trim();
+  } else if (data.deliveryType === 'DINE_IN' && formattedTable) {
+    clientDisplayName = formattedTable;
+  } else if (data.deliveryType === 'TAKE_OUT') {
+    clientDisplayName = 'PARA LLEVAR';
+  } else if (data.deliveryType === 'DELIVERY') {
+    clientDisplayName = 'A DOMICILIO';
+  } else {
+    clientDisplayName = 'CONSUMIDOR FINAL';
   }
 
   const itemsHtml = data.items.map(it => {
@@ -517,10 +538,14 @@ export function generateKitchenTicketHtml(
       <div style="font-size: ${is80mm ? '11px' : '9.5px'}; font-weight: 800; margin-top: 1px;">${destinationTypeLabel}</div>
     </div>
 
-    <!-- Prominent Destination & Order Box -->
-    <div style="border: 2px solid #000000; padding: 5px 4px; margin: 5px 0; text-align: center; border-radius: 4px;">
-      <div class="bold" style="font-size: ${is80mm ? '19px' : '16px'}; letter-spacing: 0.5px; text-transform: uppercase;">${destinationHeader}</div>
-      <div class="bold" style="font-size: ${is80mm ? '13px' : '11px'}; margin-top: 2px;">ORDEN #${data.orderNumber}</div>
+    <!-- Prominent Customer & Order Box -->
+    <div style="border: 2px solid #000000; padding: 6px 4px; margin: 5px 0; text-align: center; border-radius: 4px;">
+      <div class="bold" style="font-size: ${is80mm ? '18px' : '15.5px'}; letter-spacing: 0.5px; text-transform: uppercase; word-break: break-word;">
+        ${clientDisplayName}
+      </div>
+      <div class="bold" style="font-size: ${is80mm ? '13px' : '11px'}; margin-top: 3px;">
+        ORDEN #${cleanOrderNumber}${data.tableNumber && data.deliveryType === 'DINE_IN' ? ` &bull; ${data.tableNumber.trim()}` : ''}
+      </div>
     </div>
 
     <div class="small" style="font-size: ${is80mm ? '11px' : '9.5px'}; margin-bottom: 5px;">
@@ -528,8 +553,8 @@ export function generateKitchenTicketHtml(
         <span>HORA: ${timeStr}</span>
         <span>FECHA: ${dateStr}</span>
       </div>
+      ${data.deliveryType === 'DINE_IN' && data.tableNumber ? `<div class="bold" style="margin-top: 1px;">MESA: ${data.tableNumber}</div>` : ''}
       ${data.serverName ? `<div class="bold" style="margin-top: 1px;">MESERO: ${data.serverName}</div>` : ''}
-      ${data.customerName && data.customerName !== 'Consumidor Final' ? `<div class="bold" style="margin-top: 1px;">CLIENTE: ${data.customerName}</div>` : ''}
     </div>
 
     <div class="double-divider"></div>
@@ -568,7 +593,7 @@ export function generateKitchenTicketHtml(
     ` : ''}
 
     <div class="text-center small bold" style="margin-top: 6px; font-size: ${is80mm ? '12px' : '10.5px'};">
-      FIN DE COMANDA #${data.orderNumber}
+      FIN DE COMANDA #${cleanOrderNumber}
     </div>
   `;
 }
