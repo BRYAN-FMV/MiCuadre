@@ -195,6 +195,9 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
     customerName?: string;
     items: FoodOrderItem[];
     notes?: string;
+    subtotal?: number;
+    deliveryFee?: number;
+    total?: number;
   }) => {
     try {
       printKitchenTicket({
@@ -203,9 +206,14 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
         deliveryType: orderData.deliveryType,
         customerName: orderData.customerName,
         notes: orderData.notes,
+        subtotal: orderData.subtotal,
+        deliveryFee: orderData.deliveryFee,
+        total: orderData.total,
         items: orderData.items.map(it => ({
           name: it.name,
           quantity: it.quantity,
+          price: it.unitPrice,
+          total: it.subtotal,
           notes: it.notes,
           extras: (it.selectedExtras || []).map(e => ({ name: e.name, price: e.price }))
         }))
@@ -251,7 +259,10 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
           deliveryType: updatedData.deliveryType || 'DINE_IN',
           customerName: updatedData.customerName,
           items: orderItems,
-          notes: generalNotes.trim() || undefined
+          notes: generalNotes.trim() || undefined,
+          subtotal: foodSubtotal,
+          deliveryFee: updatedData.deliveryFee,
+          total: orderTotal
         });
       }
 
@@ -291,7 +302,10 @@ export const NewFoodOrderModal: React.FC<NewFoodOrderModalProps> = ({
         deliveryType: newOrder.deliveryType,
         customerName: newOrder.customerName,
         items: newOrder.items,
-        notes: generalNotes.trim() || undefined
+        notes: generalNotes.trim() || undefined,
+        subtotal: newOrder.subtotal,
+        deliveryFee: newOrder.deliveryFee,
+        total: newOrder.total
       });
     }
 

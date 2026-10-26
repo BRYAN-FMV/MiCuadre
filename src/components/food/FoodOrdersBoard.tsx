@@ -193,9 +193,14 @@ export const FoodOrdersBoard: React.FC = () => {
         customerName: order.customerName,
         serverName: (order as any).serverName,
         notes: order.notes,
+        subtotal: order.subtotal,
+        deliveryFee: order.deliveryFee,
+        total: order.total,
         items: order.items.map(it => ({
           name: it.name,
           quantity: it.quantity,
+          price: it.unitPrice,
+          total: it.subtotal,
           notes: it.notes,
           extras: (it.selectedExtras || []).map(e => ({ name: e.name, price: e.price }))
         }))

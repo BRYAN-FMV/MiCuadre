@@ -428,13 +428,15 @@ export function generateSaleReceiptHtml(
 export function generateKitchenTicketHtml(
   data: KitchenTicketData,
   tenant?: Tenant,
-  options?: { prePrintLogo?: boolean }
+  options?: { prePrintLogo?: boolean; logoUrl?: string }
 ): string {
   const is80mm = tenant?.ticketPaperWidth === '80mm' || (tenant?.id ? getStoredTenantTicketPaperWidth(tenant.id) === '80mm' : false);
-  const logoUrl = tenant?.logoUrl || (tenant?.id ? getStoredTenantLogo(tenant.id) : undefined);
+  const logoUrl = options?.logoUrl || tenant?.logoUrl || (tenant?.id ? getStoredTenantLogo(tenant.id) : undefined) || getStoredTenantLogo();
   const isPrePrint = options?.prePrintLogo !== undefined
     ? options.prePrintLogo
-    : (tenant ? shouldPrePrintLogo(tenant) : Boolean(logoUrl));
+    : Boolean(logoUrl);
+
+  const currencySymbol = tenant?.currencySymbol || 'L.';
 
   // The logo is strictly printed at the bottom feed advance, avoiding top clutter in kitchen
   const showTopLogo = false;
@@ -456,17 +458,57 @@ export function generateKitchenTicketHtml(
     destinationHeader = `DOMICILIO #${data.orderNumber}`;
   }
 
-  const itemsHtml = data.items.map(it => `
-    <div style="margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px dashed #000000;">
-      <div class="bold" style="font-size: ${is80mm ? '15px' : '13.5px'}; line-height: 1.25; margin-bottom: 2px;">[ ${it.quantity} ] ${it.name}</div>
-      ${(it.extras || []).map(e => `
-        <div class="small bold" style="padding-left: 10px; font-size: ${is80mm ? '12px' : '10.5px'};">+ EXTRA: ${e.name}</div>
-      `).join('')}
-      ${it.notes ? `
-        <div class="small bold" style="padding: 2px 6px; margin: 2px 0 0 10px; border-left: 3px solid #000000; background: #f1f5f9; font-size: ${is80mm ? '12px' : '10.5px'}; font-style: italic;">>> NOTA: ${it.notes}</div>
-      ` : ''}
-    </div>
-  `).join('');
+  const itemsHtml = data.items.map(it => {
+    const itemTotal = it.total !== undefined
+      ? it.total
+      : (it.price !== undefined
+          ? (it.price * it.quantity + (it.extras || []).reduce((sum, e) => sum + (e.price || 0), 0))
+          : undefined);
+
+    const itemTotalStr = itemTotal !== undefined ? formatCurrency(itemTotal, currencySymbol) : '';
+    const unitPriceStr = (it.price !== undefined && it.quantity > 1)
+      ? `@ ${formatCurrency(it.price, currencySymbol)}`
+      : '';
+
+    return `
+      <div style="margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px dashed #000000;">
+        <div class="row" style="align-items: baseline; justify-content: space-between;">
+          <span class="bold" style="font-size: ${is80mm ? '15px' : '13.5px'}; line-height: 1.25; flex: 1;">
+            [ ${it.quantity} ] ${it.name}
+            ${unitPriceStr ? `<span style="font-size: ${is80mm ? '11px' : '9.5px'}; font-weight: normal; margin-left: 4px; color: #333;">(${unitPriceStr})</span>` : ''}
+          </span>
+          ${itemTotalStr ? `
+            <span class="bold" style="font-size: ${is80mm ? '13.5px' : '12px'}; white-space: nowrap; margin-left: 6px;">
+              ${itemTotalStr}
+            </span>
+          ` : ''}
+        </div>
+        ${(it.extras || []).map(e => `
+          <div class="row small bold" style="padding-left: 10px; font-size: ${is80mm ? '12px' : '10.5px'};">
+            <span>+ EXTRA: ${e.name}</span>
+            ${e.price ? `<span>${formatCurrency(e.price, currencySymbol)}</span>` : ''}
+          </div>
+        `).join('')}
+        ${it.notes ? `
+          <div class="small bold" style="padding: 2px 6px; margin: 2px 0 0 10px; border-left: 3px solid #000000; background: #f1f5f9; font-size: ${is80mm ? '12px' : '10.5px'}; font-style: italic;">>> NOTA: ${it.notes}</div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  // Calculate order total
+  const itemsCalculatedTotal = data.items.reduce((acc, it) => {
+    if (it.total !== undefined) return acc + it.total;
+    if (it.price !== undefined) {
+      const extrasSum = (it.extras || []).reduce((es, e) => es + (e.price || 0), 0);
+      return acc + (it.price * it.quantity) + extrasSum;
+    }
+    return acc;
+  }, 0);
+
+  const effectiveTotal = data.total !== undefined
+    ? data.total
+    : (itemsCalculatedTotal > 0 ? itemsCalculatedTotal + (data.deliveryFee || 0) : undefined);
 
   return `
     <div class="text-center">
@@ -497,11 +539,32 @@ export function generateKitchenTicketHtml(
       ${itemsHtml}
     </div>
 
+    <!-- Total Section -->
+    ${effectiveTotal !== undefined ? `
+      <div style="margin-top: 4px; padding-top: 2px;">
+        ${data.subtotal !== undefined && (data.deliveryFee || 0) > 0 ? `
+          <div class="row small" style="font-size: ${is80mm ? '12px' : '10.5px'};">
+            <span>SUBTOTAL:</span>
+            <span>${formatCurrency(data.subtotal, currencySymbol)}</span>
+          </div>
+        ` : ''}
+        ${(data.deliveryFee || 0) > 0 ? `
+          <div class="row small" style="font-size: ${is80mm ? '12px' : '10.5px'};">
+            <span>COSTO DE ENVIO:</span>
+            <span>${formatCurrency(data.deliveryFee!, currencySymbol)}</span>
+          </div>
+        ` : ''}
+        <div class="row bold" style="font-size: ${is80mm ? '16px' : '14px'}; padding: 4px 0; margin-top: 3px; border-top: 2px dashed #000000; border-bottom: 2px dashed #000000;">
+          <span>TOTAL DEL PEDIDO:</span>
+          <span>${formatCurrency(effectiveTotal, currencySymbol)}</span>
+        </div>
+      </div>
+    ` : ''}
+
     ${data.notes ? `
       <div class="bold" style="border: 2px solid #000000; padding: 5px 6px; margin: 6px 0; font-size: ${is80mm ? '13px' : '11.5px'};">
         NOTA GENERAL: ${data.notes}
       </div>
-      <div class="divider"></div>
     ` : ''}
 
     <div class="text-center small bold" style="margin-top: 6px; font-size: ${is80mm ? '12px' : '10.5px'};">
@@ -960,15 +1023,20 @@ export function printKitchenTicket(
     paperWidth ||
     effectiveTenant?.ticketPaperWidth ||
     (effectiveTenant?.id ? getStoredTenantTicketPaperWidth(effectiveTenant.id) : undefined) ||
+    getStoredTenantTicketPaperWidth() ||
     '58mm';
 
-  const logoUrl = options?.logoUrl || effectiveTenant?.logoUrl || (effectiveTenant?.id ? getStoredTenantLogo(effectiveTenant.id) : undefined);
+  const logoUrl =
+    options?.logoUrl ||
+    effectiveTenant?.logoUrl ||
+    (effectiveTenant?.id ? getStoredTenantLogo(effectiveTenant.id) : undefined) ||
+    getStoredTenantLogo();
 
   const prePrint = options?.prePrintLogo !== undefined
     ? options.prePrintLogo
-    : (effectiveTenant ? shouldPrePrintLogo(effectiveTenant) : Boolean(logoUrl));
+    : Boolean(logoUrl);
 
-  const html = generateKitchenTicketHtml(data, effectiveTenant, { prePrintLogo: prePrint });
+  const html = generateKitchenTicketHtml(data, effectiveTenant, { prePrintLogo: prePrint, logoUrl });
   printHtmlThermal(html, width, { prePrintLogo: prePrint, logoUrl });
 }
 

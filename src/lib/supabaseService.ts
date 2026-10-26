@@ -160,10 +160,12 @@ export function backupTenantLogo(tenantId: string, logoUrl?: string): void {
 }
 
 export function getStoredTenantLogo(tenantId?: string): string | undefined {
-  if (typeof localStorage === 'undefined' || !tenantId) return undefined;
+  if (typeof localStorage === 'undefined') return undefined;
   try {
-    const val = localStorage.getItem(`micuadre_logo_${tenantId}`);
-    if (val) return val;
+    if (tenantId) {
+      const val = localStorage.getItem(`micuadre_logo_${tenantId}`);
+      if (val) return val;
+    }
 
     // Redundant backup check in persisted zustand store state
     const rawState = localStorage.getItem('micuadre_app_state');
@@ -171,12 +173,16 @@ export function getStoredTenantLogo(tenantId?: string): string | undefined {
       const parsed = JSON.parse(rawState);
       const stateObj = parsed?.state;
       if (stateObj) {
-        if (stateObj.tenant && (stateObj.tenant.id === tenantId || normalizeSlug(stateObj.tenant.name) === normalizeSlug(tenantId))) {
-          if (stateObj.tenant.logoUrl) return stateObj.tenant.logoUrl;
-        }
-        if (Array.isArray(stateObj.tenants)) {
-          const found = stateObj.tenants.find((t: any) => t.id === tenantId || normalizeSlug(t.name) === normalizeSlug(tenantId));
-          if (found?.logoUrl) return found.logoUrl;
+        if (tenantId) {
+          if (stateObj.tenant && (stateObj.tenant.id === tenantId || normalizeSlug(stateObj.tenant.name) === normalizeSlug(tenantId))) {
+            if (stateObj.tenant.logoUrl) return stateObj.tenant.logoUrl;
+          }
+          if (Array.isArray(stateObj.tenants)) {
+            const found = stateObj.tenants.find((t: any) => t.id === tenantId || normalizeSlug(t.name) === normalizeSlug(tenantId));
+            if (found?.logoUrl) return found.logoUrl;
+          }
+        } else {
+          if (stateObj.tenant?.logoUrl) return stateObj.tenant.logoUrl;
         }
       }
     }

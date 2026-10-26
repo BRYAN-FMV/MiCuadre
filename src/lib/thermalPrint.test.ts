@@ -139,6 +139,34 @@ describe('Thermal Print Engine (thermalPrint.ts)', () => {
     expect(kitchenWithTenantHtml).toContain(sampleTenant.name);
     expect(kitchenWithTenantHtml).toContain('PARA LLEVAR #ORD-103');
 
+    // Test comanda with item prices, extras, delivery fee and total
+    const kitchenWithPricesHtml = generateKitchenTicketHtml(
+      {
+        orderNumber: 'ORD-104',
+        deliveryType: 'DELIVERY',
+        customerName: 'Luigi Bros',
+        deliveryFee: 35,
+        subtotal: 180,
+        total: 215,
+        items: [
+          {
+            name: 'Pizza Personal Especial',
+            quantity: 2,
+            price: 90,
+            total: 180,
+            extras: [{ name: 'Orilla de Queso', price: 25 }]
+          }
+        ]
+      },
+      sampleTenant
+    );
+    expect(kitchenWithPricesHtml).toContain('ORDEN A DOMICILIO');
+    expect(kitchenWithPricesHtml).toContain('DOMICILIO #ORD-104');
+    expect(kitchenWithPricesHtml).toContain('[ 2 ] Pizza Personal Especial');
+    expect(kitchenWithPricesHtml).toContain('+ EXTRA: Orilla de Queso');
+    expect(kitchenWithPricesHtml).toContain('TOTAL DEL PEDIDO:');
+    expect(kitchenWithPricesHtml).toContain('215.00');
+
     // Verify item notes render in simple and fiscal sales (for services & food)
     const saleWithNotes: Sale = {
       ...sampleSimpleSale,

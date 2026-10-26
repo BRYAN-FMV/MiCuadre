@@ -173,9 +173,14 @@ export interface KitchenTicketData {
   serverName?: string;
   createdAt?: string;
   notes?: string;
+  subtotal?: number;
+  deliveryFee?: number;
+  total?: number;
   items: Array<{
     name: string;
     quantity: number;
+    price?: number;
+    total?: number;
     notes?: string;
     extras?: Array<{ name: string; price?: number }>;
   }>;
@@ -183,7 +188,7 @@ export interface KitchenTicketData {
 
 /**
  * Encodes a Kitchen / Bar ticket into raw ESC/POS Uint8Array bytes for thermal printers (58mm / 80mm).
- * Strictly non-fiscal, without prices, highlighting dish quantities, extras and preparation notes.
+ * Highlights dish quantities, extras, preparation notes, item pricing and total order summary.
  */
 export function generateKitchenEscPosTicket(data: KitchenTicketData): Uint8Array {
   const encoder = new TextEncoder();
@@ -242,7 +247,8 @@ export function generateKitchenEscPosTicket(data: KitchenTicketData): Uint8Array
     if (item.extras && item.extras.length > 0) {
       buffer.push(0x1B, 0x45, 0x01); // Bold ON
       for (const extra of item.extras) {
-        buffer.push(...encoder.encode(`   + EXTRA: ${extra.name}\n`));
+        const extraPrice = extra.price ? ` (+${formatCurrency(extra.price, '')})` : '';
+        buffer.push(...encoder.encode(`   + EXTRA: ${extra.name}${extraPrice}\n`));
       }
       buffer.push(0x1B, 0x45, 0x00); // Bold OFF
     }
@@ -252,6 +258,21 @@ export function generateKitchenEscPosTicket(data: KitchenTicketData): Uint8Array
       buffer.push(...encoder.encode(`   >> NOTA: ${item.notes}\n`));
     }
 
+    if (item.total !== undefined || item.price !== undefined) {
+      const itTot = item.total !== undefined ? item.total : (item.price ?? 0) * item.quantity;
+      buffer.push(...encoder.encode(`   SUBTOTAL: ${formatCurrency(itTot, '')}\n`));
+    }
+
+    buffer.push(...encoder.encode('--------------------------------\n'));
+  }
+
+  if (data.total !== undefined) {
+    if (data.deliveryFee && data.deliveryFee > 0) {
+      buffer.push(...encoder.encode(`ENVIO: ${formatCurrency(data.deliveryFee, '')}\n`));
+    }
+    buffer.push(0x1B, 0x45, 0x01);
+    buffer.push(...encoder.encode(`TOTAL DEL PEDIDO: ${formatCurrency(data.total, '')}\n`));
+    buffer.push(0x1B, 0x45, 0x00);
     buffer.push(...encoder.encode('--------------------------------\n'));
   }
 
